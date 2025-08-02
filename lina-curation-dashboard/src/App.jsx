@@ -1,25 +1,22 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import { useAuth } from './context/AuthContext';
 
-// Crie placeholders para as páginas
-const Login = () => <div className="text-white">Página de Login</div>;
-const Dashboard = () => <div className="text-white">Dashboard</div>;
+// Importe a nova página de feed
+import CurationFeed from './pages/CurationFeed.jsx';
+import CurationPage from './components/CurationPage.jsx';
 
-function PrivateRoute({ children }) {
-  const { session, loading } = useAuth();
-  if (loading) return <div>Carregando...</div>;
-  return session ? children : <Navigate to="/login" />;
-}
+// Componentes placeholder
+const Dashboard = () => <div className="text-white">Dashboard Principal</div>;
 
 function App() {
   return (
     <Router>
       <main className="flex-grow">
         <Routes>
-          <Route path="/login" element={<Login />} />
-          <Route path="/" element={<PrivateRoute><Dashboard /></PrivateRoute>} />
-          <Route path="*" element={<Navigate to="/" />} />
+          <Route path="/feed" element={<CurationFeed />} /> {/* Rota para o feed */}
+          <Route path="/curation" element={<CurationPage />} /> {/* Rota para a página de curadoria */}
+          <Route path="/" element={<Dashboard />} />
+          <Route path="*" element={<Navigate to="/feed" />} /> {/* Redireciona para o feed como padrão */}
         </Routes>
       </main>
     </Router>
