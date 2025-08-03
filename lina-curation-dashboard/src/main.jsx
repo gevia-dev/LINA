@@ -4,7 +4,6 @@ console.log('Variáveis de ambiente carregadas pelo Vite:', import.meta.env); //
 
 import React from 'react';
 import ReactDOM from 'react-dom/client';
-// ... o resto do seu código
 import App from './App.jsx';
 import './index.css';
 

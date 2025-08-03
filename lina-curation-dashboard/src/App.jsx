@@ -1,7 +1,10 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { AuthProvider } from './context/AuthContext';
+import ProtectedRoute from './components/ProtectedRoute';
 
-// Importe a nova página de feed
+// Páginas
+import Login from './pages/Login';
 import CurationFeed from './pages/CurationFeed.jsx';
 import CurationPage from './components/CurationPage.jsx';
 
@@ -10,16 +13,36 @@ const Dashboard = () => <div className="text-white">Dashboard Principal</div>;
 
 function App() {
   return (
-    <Router>
-      <main className="flex-grow">
-        <Routes>
-          <Route path="/feed" element={<CurationFeed />} /> {/* Rota para o feed */}
-          <Route path="/curation" element={<CurationPage />} /> {/* Rota para a página de curadoria */}
-          <Route path="/" element={<Dashboard />} />
-          <Route path="*" element={<Navigate to="/feed" />} /> {/* Redireciona para o feed como padrão */}
-        </Routes>
-      </main>
-    </Router>
+    <AuthProvider>
+      <Router>
+        <main className="flex-grow">
+          <Routes>
+            <Route path="/login" element={<Login />} />
+            <Route path="/feed" element={
+              <ProtectedRoute>
+                <CurationFeed />
+              </ProtectedRoute>
+            } />
+            <Route path="/news/:id" element={
+              <ProtectedRoute>
+                <CurationPage />
+              </ProtectedRoute>
+            } />
+            <Route path="/curation" element={
+              <ProtectedRoute>
+                <CurationPage />
+              </ProtectedRoute>
+            } />
+            <Route path="/" element={
+              <ProtectedRoute>
+                <Dashboard />
+              </ProtectedRoute>
+            } />
+            <Route path="*" element={<Navigate to="/feed" />} />
+          </Routes>
+        </main>
+      </Router>
+    </AuthProvider>
   );
 }
 
