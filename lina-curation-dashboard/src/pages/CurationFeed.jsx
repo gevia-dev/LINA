@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { fetchNews } from '../services/contentApi';
+import MainSidebar from '../components/MainSidebar';
+import { NavLink } from 'react-router-dom';
 
 const CurationFeed = () => {
   const [newsItems, setNewsItems] = useState([]);
@@ -25,47 +27,72 @@ const CurationFeed = () => {
     loadInitialNews();
   }, []);
 
-  // Renderização de estado de carregamento
-  if (loading) {
-    return <div style={{ color: 'white', padding: '20px' }}>Carregando feed...</div>;
-  }
+  // Função para renderizar o conteúdo do feed
+  const renderFeedContent = () => {
+    if (loading) {
+      return <div className="text-[#A0A0A0] p-8">Carregando feed...</div>;
+    }
 
-  // Renderização de estado de erro
-  if (error) {
-    return <div style={{ color: 'red', padding: '20px' }}>{error}</div>;
-  }
+    if (error) {
+      return <div className="text-red-500 p-8">{error}</div>;
+    }
 
-  // Renderização da lista de notícias
+    return (
+      <div className="p-8 font-inter">
+        <h1
+          className="font-bold mb-6"
+          style={{ fontSize: '24px', color: '#E0E0E0' }}
+        >
+          Feed de Curadoria
+        </h1>
+        {newsItems.length === 0 ? (
+          <p style={{ color: '#A0A0A0' }}>Nenhuma notícia encontrada.</p>
+        ) : (
+          <ul className="space-y-4">
+            {newsItems.map((item) => (
+              <li
+                key={item.id}
+                className="p-4 rounded-lg transition-colors hover:bg-[#2BB24C33]"
+                style={{
+                  backgroundColor: '#1E1E1E',
+                  border: '1px solid #333333'
+                }}
+              >
+                <NavLink to={`/news/${item.id}`} className="block">
+                  <h3
+                    className="font-medium mb-2"
+                    style={{ fontSize: '16px', color: '#E0E0E0' }}
+                  >
+                    {item.title || 'Sem título'}
+                  </h3>
+                  <div className="flex items-center text-sm mb-2" style={{ color: '#A0A0A0' }}>
+                    <span className="px-2 py-1 text-xs rounded-full" style={{backgroundColor: '#333333', color: '#E0E0E0'}}>
+                      {item.status || 'N/A'}
+                    </span>
+                    {item.fonte && <span className="ml-4">Fonte: {item.fonte}</span>}
+                  </div>
+                  {(item.macro_categoria || item.step) && (
+                    <div className="text-xs" style={{ color: '#A0A0A0' }}>
+                      {item.macro_categoria}
+                      {item.sub_categoria && ` / ${item.sub_categoria}`}
+                      {item.step && ` • Step: ${item.step}`}
+                    </div>
+                  )}
+                </NavLink>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    );
+  };
+
   return (
-    <div style={{ color: 'white', fontFamily: 'sans-serif', padding: '20px', maxWidth: '800px', margin: 'auto' }}>
-      <h1 style={{ fontSize: '24px', marginBottom: '20px' }}>Feed de Curadoria</h1>
-      {newsItems.length === 0 ? (
-        <p>Nenhuma notícia encontrada.</p>
-      ) : (
-        <ul style={{ listStyle: 'none', padding: 0 }}>
-          {newsItems.map((item) => (
-            <li key={item.id} style={{ border: '1px solid #444', borderRadius: '8px', padding: '15px', marginBottom: '10px' }}>
-              <h3 style={{ fontSize: '18px', margin: '0 0 10px 0' }}>{item.title || 'Sem título'}</h3>
-              <div style={{ marginBottom: '8px' }}>
-                <span style={{ fontSize: '14px', color: '#ccc' }}>Status: {item.status || 'N/A'}</span>
-                {item.fonte && <span style={{ fontSize: '14px', color: '#ccc', marginLeft: '15px' }}>Fonte: {item.fonte}</span>}
-              </div>
-              {item.macro_categoria && (
-                <div style={{ fontSize: '13px', color: '#aaa', marginBottom: '5px' }}>
-                  Categoria: {item.macro_categoria}
-                  {item.sub_categoria && ` / ${item.sub_categoria}`}
-                </div>
-              )}
-              {item.step && (
-                <div style={{ fontSize: '13px', color: '#aaa', marginBottom: '5px' }}>
-                  Step: {item.step}
-                </div>
-              )}
-              <small style={{ color: '#888' }}>ID: {item.id}</small>
-            </li>
-          ))}
-        </ul>
-      )}
+    <div className="w-full h-screen flex overflow-hidden" style={{ backgroundColor: '#121212' }}>
+      <MainSidebar />
+      <main className="flex-1 overflow-y-auto">
+        {renderFeedContent()}
+      </main>
     </div>
   );
 };
