@@ -1,8 +1,95 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Search, FileText } from 'lucide-react';
 import LinaNode from '../components/LinaNode';
 import DetailsSidebar from '../components/DetailsSidebar';
 import { fetchLinaHierarchy, fetchNewsByLinaEventId, fetchLinaEventById } from '../services/contentApi';
+
+// 1. Primeira função: Filtra a árvore para manter apenas nós estáveis ou que contenham filhos estáveis.
+const getStableHierarchy = (nodes, threshold) => {
+  if (!nodes) return [];
+
+  const stableNodes = [];
+  for (const node of nodes) {
+    const stableChildren = getStableHierarchy(node.children, threshold);
+    
+    const nodeStability = node.lambda_persistence;
+    const hasStableChildren = stableChildren.length > 0;
+    
+    // Se o threshold é 0, mostra todos os nós (incluindo undefined)
+    // Se o threshold > 0, só mostra nós com lambda_persistence definido e >= threshold
+    const isNodeStable = threshold === 0 || (nodeStability !== null && nodeStability !== undefined && nodeStability >= threshold);
+
+    // Mantém um nó se ele próprio for estável OU se tiver filhos estáveis.
+    if (isNodeStable || hasStableChildren) {
+      stableNodes.push({ ...node, children: stableChildren });
+    }
+  }
+  
+  // Ordena os nós resultantes pela maior estabilidade
+  return stableNodes.sort((a, b) => {
+    const aStability = a.lambda_persistence ?? 0;
+    const bStability = b.lambda_persistence ?? 0;
+    return bStability - aStability;
+  });
+};
+
+// 2. Segunda função: Algoritmo de poda por limiar de relevância
+const pruneHierarchyByRelevance = (nodes, relevanceThreshold) => {
+  if (!nodes) return [];
+
+  const prunedNodes = [];
+  
+  for (const node of nodes) {
+    // Se o nó tem filhos, processa recursivamente (abordagem pós-ordem)
+    if (node.children && node.children.length > 0) {
+      const prunedChildren = pruneHierarchyByRelevance(node.children, relevanceThreshold);
+      
+      // Verifica se a pasta deve ser podada baseada no limiar de relevância
+      if (prunedChildren.length < relevanceThreshold) {
+        // Poda a pasta: promove todos os filhos para o nível atual
+        prunedNodes.push(...prunedChildren.map(child => ({
+          ...child,
+          // Marca como promovido para indicador visual
+          promotedFromParent: true,
+          // Preserva o ID do pai original para referência
+          originalParentId: node.id
+        })));
+      } else {
+        // Não é podada, mantém o nó original com filhos processados
+        prunedNodes.push({ ...node, children: prunedChildren });
+      }
+    } else {
+      // Nó folha, mantém como está
+      prunedNodes.push(node);
+    }
+  }
+  
+  return prunedNodes;
+};
+
+// 3. Terceira função: Realiza a busca textual na árvore já filtrada e podada.
+const searchInHierarchy = (nodes, term) => {
+  if (!term) {
+    return nodes; // Se a busca estiver vazia, retorna a árvore estável completa.
+  }
+  if (!nodes) {
+    return [];
+  }
+
+  const searchResults = [];
+  for (const node of nodes) {
+    const childrenResults = searchInHierarchy(node.children, term);
+
+    const titleMatch = node.llm_title?.toLowerCase().includes(term.toLowerCase());
+    const summaryMatch = node.llm_summary?.toLowerCase().includes(term.toLowerCase());
+
+    // Mantém um nó se o título/resumo corresponder à busca OU se tiver filhos que correspondam.
+    if (titleMatch || summaryMatch || childrenResults.length > 0) {
+      searchResults.push({ ...node, children: childrenResults });
+    }
+  }
+  return searchResults;
+};
 
 const LinaExplorerPage = () => {
   // Estados para a hierarquia
@@ -14,7 +101,10 @@ const LinaExplorerPage = () => {
   const [selectedEventNews, setSelectedEventNews] = useState([]);
   const [loadingNews, setLoadingNews] = useState(false);
   const [selectedNews, setSelectedNews] = useState(null);
-  const [stabilityThreshold, setStabilityThreshold] = useState(1.0);
+  const [stabilityThreshold, setStabilityThreshold] = useState(0.0);
+  
+  // Estado para controle do limiar de relevância da poda
+  const [relevanceThreshold, setRelevanceThreshold] = useState(2);
 
   // Estados para o evento selecionado
   const [selectedEvent, setSelectedEvent] = useState(null);
@@ -26,6 +116,21 @@ const LinaExplorerPage = () => {
       try {
         setLoadingHierarchy(true);
         const data = await fetchLinaHierarchy();
+        console.log('📥 Dados recebidos no componente:', data);
+        
+        if (data && data.length > 0) {
+          console.log('🔍 Estrutura do primeiro nó no componente:', data[0]);
+          console.log('📊 Campos disponíveis no componente:', Object.keys(data[0]));
+          
+          // Verificar lambda_persistence no componente
+          const lambdaValues = data
+            .filter(node => node.lambda_persistence !== null && node.lambda_persistence !== undefined)
+            .slice(0, 3)
+            .map(node => ({ title: node.llm_title?.substring(0, 30), lambda: node.lambda_persistence }));
+          
+          console.log('📈 lambda_persistence no componente:', lambdaValues);
+        }
+        
         setHierarchy(data || []);
       } catch (error) {
         console.error('Erro ao carregar hierarquia:', error);
@@ -38,35 +143,7 @@ const LinaExplorerPage = () => {
     loadHierarchy();
   }, []);
 
-  // Função para processar hierarquia: filtrar, ordenar e buscar
-  const processHierarchy = (nodes, term, threshold) => {
-    if (!nodes) return [];
 
-    return nodes.reduce((acc, node) => {
-      // 1. Processa os filhos recursivamente PRIMEIRO
-      const processedChildren = processHierarchy(node.children, term, threshold);
-
-      const isStable = (node.lambda_persistence ?? 1.0) >= threshold;
-      const titleMatch = term ? node.llm_title?.toLowerCase().includes(term.toLowerCase()) : true;
-      const summaryMatch = term ? node.llm_summary?.toLowerCase().includes(term.toLowerCase()) : true;
-
-      // 2. Condições para manter o nó:
-      // - Se não houver busca, manter se for estável ou tiver filhos estáveis.
-      // - Se houver busca, manter se corresponder ao termo E (for estável ou tiver filhos que correspondem).
-      const hasVisibleChildren = processedChildren.length > 0;
-      const matchesSearch = titleMatch || summaryMatch;
-
-      if (isStable && matchesSearch) {
-        acc.push({ ...node, children: processedChildren });
-      } else if (hasVisibleChildren) {
-        // Se o nó em si não corresponde mas tem filhos que correspondem (e são estáveis),
-        // mantém o nó pai para preservar a estrutura da árvore.
-        acc.push({ ...node, children: processedChildren });
-      }
-
-      return acc;
-    }, []).sort((a, b) => (b.lambda_persistence ?? 0) - (a.lambda_persistence ?? 0)); // Mantém a ordenação por estabilidade
-  };
 
   // Função para lidar com clique em um evento
   const handleEventClick = async (eventId) => {
@@ -144,8 +221,131 @@ const LinaExplorerPage = () => {
     setSelectedNews(news);
   };
 
-  // Processar hierarquia com filtros de estabilidade e busca
-  const filteredHierarchy = processHierarchy(hierarchy, searchTerm, stabilityThreshold);
+  // Função para gerar representação textual da árvore de hierarquia
+  const generateTreeText = (nodes, level = 0, prefix = '') => {
+    if (!nodes || nodes.length === 0) return '';
+    
+    let treeText = '';
+    const indent = '  '.repeat(level);
+    const connector = level === 0 ? '' : '├─ ';
+    const lastConnector = level === 0 ? '' : '└─ ';
+    
+    nodes.forEach((node, index) => {
+      const isLast = index === nodes.length - 1;
+      const currentPrefix = isLast ? lastConnector : connector;
+      const nextPrefix = isLast ? '   ' : '│  ';
+      
+      // Informações do nó
+      const title = node.llm_title || 'Sem título';
+      const stability = node.lambda_persistence !== null && node.lambda_persistence !== undefined 
+        ? `[λ: ${node.lambda_persistence.toFixed(2)}]` 
+        : '[λ: undefined]';
+      const hasChildren = node.children && node.children.length > 0;
+      const nodeType = hasChildren ? '📁' : '📄';
+      
+      // Indica se o nó foi promovido pela poda
+      const pruningInfo = node.promotedFromParent ? ' [PROMOVIDO]' : '';
+      
+      treeText += `${indent}${currentPrefix}${nodeType} ${title} ${stability}${pruningInfo}\n`;
+      
+      // Recursivamente processa filhos
+      if (hasChildren) {
+        treeText += generateTreeText(node.children, level + 1, prefix + nextPrefix);
+      }
+    });
+    
+    return treeText;
+  };
+
+  // Função para exportar a árvore como arquivo de texto
+  const exportTreeStructure = () => {
+    const treeText = generateTreeText(hierarchy);
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+    const filename = `lina-hierarchy-${timestamp}.txt`;
+    
+    const content = `Estrutura da Hierarquia Lina - Exportada em ${new Date().toLocaleString('pt-BR')}
+================================================================================
+
+CONFIGURAÇÕES APLICADAS:
+- Filtro de Estabilidade: ≥ ${stabilityThreshold.toFixed(1)}
+- Poda por Relevância: Limiar de ${relevanceThreshold} filhos mínimos
+- Nível de Detalhe: ${relevanceThreshold === 1 ? 'Completo' : relevanceThreshold === 2 ? 'Balanceado' : 'Simplificado'}
+- Busca Textual: ${searchTerm ? `"${searchTerm}"` : 'Inativa'}
+
+ESTATÍSTICAS:
+- Nós originais: ${countNodes(hierarchy)}
+- Nós após filtro de estabilidade: ${countNodes(stableHierarchy)}
+- Nós após poda estrutural: ${countNodes(prunedHierarchy)}
+- Nós finais (com busca): ${countNodes(filteredHierarchy)}
+- Nós com lambda_persistence definido: ${countNodesWithStability(hierarchy)}
+
+================================================================================
+
+${treeText}
+
+================================================================================
+
+LEGENDA:
+- 📁 = Pasta (nó com filhos)
+- 📄 = Evento (nó folha)
+- λ = lambda_persistence (estabilidade)
+- [PROMOVIDO] = Nó promovido pela poda por relevância
+- undefined = valor não definido
+
+SISTEMA DE CORES DE ESTABILIDADE:
+- Verde esmeralda (≥ 3.0): Muito estável
+- Verde (≥ 2.0): Estável
+- Roxo (≥ 1.5): Moderadamente estável
+- Amarelo (≥ 1.0): Média estabilidade
+- Laranja (≥ 0.5): Baixa estabilidade
+- Vermelho (< 0.5): Muito baixa estabilidade
+`;
+
+    const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
+  // Função auxiliar para contar nós
+  const countNodes = (nodes) => {
+    if (!nodes || nodes.length === 0) return 0;
+    return nodes.reduce((count, node) => {
+      return count + 1 + countNodes(node.children);
+    }, 0);
+  };
+
+  // Função auxiliar para contar nós com lambda_persistence definido
+  const countNodesWithStability = (nodes) => {
+    if (!nodes || nodes.length === 0) return 0;
+    return nodes.reduce((count, node) => {
+      const hasStability = node.lambda_persistence !== null && node.lambda_persistence !== undefined;
+      return count + (hasStability ? 1 : 0) + countNodesWithStability(node.children);
+    }, 0);
+  };
+
+  // Etapa 1: Filtro de Estabilidade - Gera a árvore com base na estabilidade
+  const stableHierarchy = useMemo(
+    () => getStableHierarchy(hierarchy, stabilityThreshold),
+    [hierarchy, stabilityThreshold]
+  );
+
+  // Etapa 2: Poda por Limiar de Relevância - Remove pastas com poucos filhos da árvore já estabilizada
+  const prunedHierarchy = useMemo(
+    () => pruneHierarchyByRelevance(stableHierarchy, relevanceThreshold),
+    [stableHierarchy, relevanceThreshold]
+  );
+
+  // Etapa 3: Funcionalidade de Busca - Aplica busca textual na árvore final
+  const filteredHierarchy = useMemo(
+    () => searchInHierarchy(prunedHierarchy, searchTerm),
+    [prunedHierarchy, searchTerm]
+  );
 
   return (
     <div 
@@ -258,6 +458,82 @@ const LinaExplorerPage = () => {
                   }}
                 />
               </div>
+
+              {/* Controle de Nível de Detalhe */}
+              <div className="mt-4 px-1">
+                <label 
+                  className="block text-sm font-medium mb-2"
+                  style={{ color: 'var(--text-secondary)' }}
+                >
+                  Nível de Detalhe: <span 
+                    className="font-bold"
+                    style={{ color: 'var(--text-primary)' }}
+                  >
+                    {relevanceThreshold === 1 ? 'Completo' : 
+                     relevanceThreshold === 2 ? 'Balanceado' : 'Simplificado'}
+                  </span>
+                </label>
+                <div className="flex gap-1">
+                  <button
+                    onClick={() => setRelevanceThreshold(1)}
+                    className={`flex-1 py-2 px-2 rounded-md text-xs font-medium transition-colors ${
+                      relevanceThreshold === 1 
+                        ? 'text-white' 
+                        : 'text-gray-400 hover:text-gray-300'
+                    }`}
+                    style={{
+                      backgroundColor: relevanceThreshold === 1 
+                        ? 'var(--primary-green)' 
+                        : 'var(--bg-tertiary)',
+                      borderRadius: '6px'
+                    }}
+                  >
+                    Completo
+                  </button>
+                  <button
+                    onClick={() => setRelevanceThreshold(2)}
+                    className={`flex-1 py-2 px-2 rounded-md text-xs font-medium transition-colors ${
+                      relevanceThreshold === 2 
+                        ? 'text-white' 
+                        : 'text-gray-400 hover:text-gray-300'
+                    }`}
+                    style={{
+                      backgroundColor: relevanceThreshold === 2 
+                        ? 'var(--primary-green)' 
+                        : 'var(--bg-tertiary)',
+                      borderRadius: '6px'
+                    }}
+                  >
+                    Balanceado
+                  </button>
+                  <button
+                    onClick={() => setRelevanceThreshold(3)}
+                    className={`flex-1 py-2 px-2 rounded-md text-xs font-medium transition-colors ${
+                      relevanceThreshold === 3 
+                        ? 'text-white' 
+                        : 'text-gray-400 hover:text-gray-300'
+                    }`}
+                    style={{
+                      backgroundColor: relevanceThreshold === 3 
+                        ? 'var(--primary-green)' 
+                        : 'var(--bg-tertiary)',
+                      borderRadius: '6px'
+                    }}
+                  >
+                    Simplificado
+                  </button>
+                </div>
+                <p 
+                  className="text-xs mt-1"
+                  style={{ color: 'var(--text-secondary)' }}
+                >
+                  {relevanceThreshold === 1 ? 'Mostra todas as pastas' :
+                   relevanceThreshold === 2 ? 'Remove pastas com menos de 2 filhos' :
+                   'Remove pastas com menos de 3 filhos'}
+                </p>
+              </div>
+
+
             </div>
 
             {/* Árvore de hierarquia */}
@@ -274,11 +550,14 @@ const LinaExplorerPage = () => {
                 </div>
               ) : filteredHierarchy.length > 0 ? (
                 <div className="space-y-1">
-                  {filteredHierarchy.map((node) => (
+                  {filteredHierarchy.map((node, index) => (
                     <LinaNode
                       key={node.id}
                       node={node}
                       onEventClick={handleEventClick}
+                      level={0}
+                      isLast={index === filteredHierarchy.length - 1}
+                      parentPath={[]}
                     />
                   ))}
                 </div>

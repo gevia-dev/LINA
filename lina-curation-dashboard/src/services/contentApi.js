@@ -152,14 +152,50 @@ export const fetchNewsFromLinaNews = async (page = 0, limit = 50) => {
  */
 export const fetchLinaHierarchy = async () => {
   try {
-    const { data, error } = await supabase.functions.invoke('get-lina-hierarchy');
-    if (error) {
-      console.error('Erro ao buscar hierarquia da Lina:', error);
-      throw error;
+    console.log('🔍 Buscando hierarquia diretamente do banco...');
+    
+    // Buscar todos os eventos da tabela lina_events com lambda_persistence
+    const { data: events, error: eventsError } = await supabase
+      .from('lina_events')
+      .select('id, parent_event_id, llm_title, llm_summary, is_event, lambda_persistence, created_at')
+      .order('created_at', { ascending: false });
+
+    if (eventsError) {
+      console.error('❌ Erro ao buscar eventos:', eventsError);
+      throw eventsError;
     }
-    return data;
+
+    console.log('📥 Eventos carregados:', events?.length || 0);
+    
+    // Verificar se lambda_persistence está presente
+    if (events && events.length > 0) {
+      const hasLambdaPersistence = events.some(event => 'lambda_persistence' in event);
+      console.log('✅ lambda_persistence presente nos eventos:', hasLambdaPersistence);
+      
+      // Mostrar alguns valores de lambda_persistence
+      const lambdaValues = events
+        .filter(event => event.lambda_persistence !== null && event.lambda_persistence !== undefined)
+        .slice(0, 5)
+        .map(event => ({ title: event.llm_title?.substring(0, 30), lambda: event.lambda_persistence }));
+      
+      console.log('📈 Valores de lambda_persistence encontrados:', lambdaValues);
+    }
+
+    // Construir a hierarquia
+    const buildHierarchy = (parentId = null) => {
+      const children = events?.filter(event => event.parent_event_id === parentId) || [];
+      return children.map(event => ({
+        ...event,
+        children: buildHierarchy(event.id)
+      }));
+    };
+
+    const hierarchy = buildHierarchy();
+    console.log('🌳 Hierarquia construída:', hierarchy.length, 'nós raiz');
+    
+    return hierarchy;
   } catch (error) {
-    console.error('Erro ao invocar a função da Lina:', error);
+    console.error('❌ Erro ao buscar hierarquia:', error);
     throw error;
   }
 };
