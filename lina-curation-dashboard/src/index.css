@@ -1,6 +1,16 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+:root {
+  --primary-green: #2BB24C;
+  --primary-green-hover: #25A043;
+  --primary-green-transparent: #2BB24C50;
+  --primary-green-light: #2BB24C10;
+  --primary-green-bg: #2BB24C33;
+}
 
 body {
   background-color: #000000;

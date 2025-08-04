@@ -1,16 +1,29 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams } from 'react-router-dom';
 import MainSidebar from './MainSidebar';
 import EditorPanel from './EditorPanel';
 import ContextSidebar from './ContextSidebar';
+import CardModal from './CardModal';
 import { supabase } from '../lib/supabaseClient.js';
 
 const CurationPage = () => {
   const { id } = useParams();
   const [newsData, setNewsData] = useState(null);
+  const [newsTitle, setNewsTitle] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [loadError, setLoadError] = useState(null);
   const [selectedBlock, setSelectedBlock] = useState(null);
+  
+  // Estados do modal
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [selectedCardData, setSelectedCardData] = useState(null);
+  const [allCards, setAllCards] = useState([]);
+  const [currentCardIndex, setCurrentCardIndex] = useState(0);
+  const [microData, setMicroData] = useState([]);
+  
+  // Refs para detectar posições dos painéis durante drop
+  const editorPanelRef = useRef(null);
+  const contextSidebarRef = useRef(null);
 
   // Função para buscar dados completos da notícia
   const fetchFullNewsData = useCallback(async (newsId) => {
@@ -25,29 +38,47 @@ const CurationPage = () => {
       console.log('📱 Status da sessão:', session ? 'Autenticado' : 'Anônimo');
       console.log('🔍 Buscando dados para ID:', newsId);
       
-      // Agora fazer a consulta específica - buscar pelo id correto
-      const { data, error } = await supabase
+      // Primeiro, buscar o news_id na tabela lina_news
+      const { data: linaNewsData, error: linaNewsError } = await supabase
         .from('lina_news')
-        .select('core_structure, variant_structure, core_quotes')
+        .select('news_id, core_structure, variant_structure, core_quotes')
         .eq('id', newsId);
 
-      if (error) {
-        console.error('❌ Erro na consulta Supabase específica:', error);
-        throw error;
+      if (linaNewsError) {
+        console.error('❌ Erro na consulta lina_news:', linaNewsError);
+        throw linaNewsError;
       }
 
-      console.log('🔍 Resultado da consulta específica:', data);
-
-      if (!data || data.length === 0) {
-        console.warn('⚠️ Nenhum dado encontrado para ID:', newsId);
+      if (!linaNewsData || linaNewsData.length === 0) {
+        console.warn('⚠️ Nenhum dado encontrado na tabela lina_news para ID:', newsId);
         setNewsData(null);
-        setLoadError(`Notícia com ID ${newsId} não encontrada`);
+        setLoadError(`Notícia com ID ${newsId} não encontrada na tabela lina_news`);
         return;
       }
 
-      const record = data[0];
-      console.log('✅ Dados carregados:', record);
-      setNewsData(record);
+      const linaRecord = linaNewsData[0];
+      console.log('✅ Dados encontrados na tabela lina_news:', linaRecord);
+
+      // Agora usar o news_id para buscar o título na tabela "Controle Geral"
+      if (linaRecord.news_id) {
+        const { data: controleGeralData, error: controleGeralError } = await supabase
+          .from('Controle Geral')
+          .select('title')
+          .eq('id', linaRecord.news_id);
+
+        if (controleGeralError) {
+          console.error('❌ Erro na consulta Controle Geral:', controleGeralError);
+          // Não vamos falhar aqui, apenas logar o erro
+        } else if (controleGeralData && controleGeralData.length > 0) {
+          setNewsTitle(controleGeralData[0].title);
+          console.log('✅ Título encontrado na tabela Controle Geral:', controleGeralData[0].title);
+        } else {
+          console.warn('⚠️ Título não encontrado na tabela Controle Geral para news_id:', linaRecord.news_id);
+        }
+      }
+
+      // Definir os dados da notícia com os dados da tabela lina_news
+      setNewsData(linaRecord);
       
     } catch (error) {
       console.error('Erro ao carregar dados da notícia:', error);
@@ -69,31 +100,247 @@ const CurationPage = () => {
     setSelectedBlock(blockId);
   }, []);
 
+  // Função para transferir bloco do editor para o context sidebar
+  const transferBlockToContext = useCallback((blockId, content) => {
+    if (!newsData) return;
+
+    try {
+      // Parse da estrutura atual
+      const coreStructure = newsData.core_structure ? JSON.parse(newsData.core_structure) : {};
+      const variantStructure = newsData.variant_structure ? JSON.parse(newsData.variant_structure) : {};
+
+      // Remover do core_structure baseado no blockId
+      if (blockId === 'summary' && coreStructure.Introduce) {
+        delete coreStructure.Introduce;
+      } else if (blockId === 'body' && coreStructure.corpos_de_analise) {
+        delete coreStructure.corpos_de_analise;
+      } else if (blockId === 'conclusion' && coreStructure.conclusoes) {
+        delete coreStructure.conclusoes;
+      }
+
+      // Adicionar ao variant_structure
+      const sectionKey = blockId === 'summary' ? 'introducoes' : 
+                        blockId === 'body' ? 'corpos_de_analise' : 'conclusoes';
+      
+      if (!variantStructure[sectionKey]) {
+        variantStructure[sectionKey] = [];
+      }
+      variantStructure[sectionKey].push(content);
+
+      // Atualizar o estado local
+      setNewsData(prevData => ({
+        ...prevData,
+        core_structure: JSON.stringify(coreStructure),
+        variant_structure: JSON.stringify(variantStructure)
+      }));
+
+      // Desselecionar o bloco que foi movido
+      setSelectedBlock(null);
+
+      console.log('✅ Bloco transferido com sucesso para variant_structure');
+      
+    } catch (error) {
+      console.error('❌ Erro ao transferir bloco:', error);
+    }
+  }, [newsData]);
+
+  // Função para transferir item do context sidebar para o editor
+  const transferContextItemToEditor = useCallback((itemId, content) => {
+    if (!newsData) return;
+
+    try {
+      // Parse da estrutura atual
+      const coreStructure = newsData.core_structure ? JSON.parse(newsData.core_structure) : {};
+      const variantStructure = newsData.variant_structure ? JSON.parse(newsData.variant_structure) : {};
+
+      // Determinar de qual seção vem o item baseado no ID
+      let sourceSection = null;
+      let targetCoreKey = null;
+
+      if (itemId.includes('introducoes') || itemId.includes('summary')) {
+        sourceSection = 'introducoes';
+        targetCoreKey = 'Introduce';
+      } else if (itemId.includes('corpos_de_analise') || itemId.includes('body')) {
+        sourceSection = 'corpos_de_analise';
+        targetCoreKey = 'corpos_de_analise';
+      } else if (itemId.includes('conclusoes') || itemId.includes('conclusion')) {
+        sourceSection = 'conclusoes';
+        targetCoreKey = 'conclusoes';
+      }
+
+      if (!sourceSection || !targetCoreKey) {
+        console.warn('❌ Não foi possível determinar a seção de origem');
+        return;
+      }
+
+      // PRESERVAR CONTEÚDO EXISTENTE: Se já existe conteúdo no editor, movê-lo para o variant_structure
+      if (coreStructure[targetCoreKey] && coreStructure[targetCoreKey].trim() !== '') {
+        const existingContent = coreStructure[targetCoreKey];
+        
+        // Verificar se não é um placeholder
+        const isPlaceholder = existingContent.includes('Clique para selecionar') || 
+                             existingContent.includes('Clique novamente para editar');
+        
+        if (!isPlaceholder) {
+          // Adicionar o conteúdo existente ao variant_structure
+          if (!variantStructure[sourceSection]) {
+            variantStructure[sourceSection] = [];
+          }
+          variantStructure[sourceSection].push(existingContent);
+          console.log(`✅ Conteúdo existente preservado em ${sourceSection}:`, existingContent);
+        }
+      }
+
+      // Remover do variant_structure
+      if (variantStructure[sourceSection] && Array.isArray(variantStructure[sourceSection])) {
+        const index = variantStructure[sourceSection].findIndex(item => item === content);
+        if (index !== -1) {
+          variantStructure[sourceSection].splice(index, 1);
+          
+          // Se o array ficou vazio, remover a chave
+          if (variantStructure[sourceSection].length === 0) {
+            delete variantStructure[sourceSection];
+          }
+        }
+      }
+
+      // Adicionar o novo conteúdo ao core_structure
+      coreStructure[targetCoreKey] = content;
+
+      // Atualizar o estado local
+      setNewsData(prevData => ({
+        ...prevData,
+        core_structure: JSON.stringify(coreStructure),
+        variant_structure: JSON.stringify(variantStructure)
+      }));
+
+      console.log('✅ Item transferido com sucesso para core_structure (conteúdo anterior preservado)');
+      
+    } catch (error) {
+      console.error('❌ Erro ao transferir item do contexto:', error);
+    }
+  }, [newsData]);
+
+  // Funções do modal
+  const handleOpenCardModal = useCallback((cardData, allCardsData = [], cardIndex = 0, microDataArray = []) => {
+    setSelectedCardData(cardData);
+    setAllCards(allCardsData);
+    setCurrentCardIndex(cardIndex);
+    setMicroData(microDataArray);
+    setIsModalOpen(true);
+  }, []);
+
+  const handleNavigateCard = useCallback((newIndex) => {
+    if (allCards[newIndex]) {
+      setSelectedCardData(allCards[newIndex]);
+      setCurrentCardIndex(newIndex);
+    }
+  }, [allCards]);
+
+  const handleCloseCardModal = useCallback(() => {
+    setIsModalOpen(false);
+    setSelectedCardData(null);
+  }, []);
+
+  const handleSaveCardContent = useCallback((cardData, newContent) => {
+    if (!newsData) return;
+
+    try {
+      // Parse da estrutura atual
+      let targetStructure = null;
+      let structureKey = null;
+
+      // Determinar qual estrutura atualizar baseado no tipo do card
+      if (cardData.type === 'complete') {
+        targetStructure = newsData.variant_structure ? JSON.parse(newsData.variant_structure) : {};
+        structureKey = 'variant_structure';
+      } else if (cardData.type === 'micro') {
+        targetStructure = newsData.core_quotes ? JSON.parse(newsData.core_quotes) : {};
+        structureKey = 'core_quotes';
+      }
+
+      if (!targetStructure || !structureKey) {
+        console.warn('❌ Não foi possível determinar a estrutura para atualização');
+        return;
+      }
+
+      // Atualizar o conteúdo baseado no cardData
+      if (cardData.type === 'complete') {
+        // Para dados completos, atualizar o item específico no array
+        if (targetStructure[cardData.section] && Array.isArray(targetStructure[cardData.section])) {
+          const itemIndex = targetStructure[cardData.section].findIndex(item => {
+            const itemText = typeof item === 'string' ? item : (item.text || item.content || '');
+            return itemText === cardData.content;
+          });
+          
+          if (itemIndex !== -1) {
+            targetStructure[cardData.section][itemIndex] = newContent;
+          }
+        }
+      } else if (cardData.type === 'micro') {
+        // Para micro dados, atualizar quote específica
+        if (targetStructure[cardData.category] && Array.isArray(targetStructure[cardData.category])) {
+          const quoteIndex = targetStructure[cardData.category].findIndex(quote => quote === cardData.content);
+          if (quoteIndex !== -1) {
+            targetStructure[cardData.category][quoteIndex] = newContent;
+          }
+        }
+      }
+
+      // Atualizar o estado local
+      setNewsData(prevData => ({
+        ...prevData,
+        [structureKey]: JSON.stringify(targetStructure)
+      }));
+
+      console.log('✅ Conteúdo do card atualizado com sucesso');
+      
+    } catch (error) {
+      console.error('❌ Erro ao salvar conteúdo do card:', error);
+    }
+  }, [newsData]);
+
   return (
-    <div className="w-full h-screen flex overflow-hidden" style={{ backgroundColor: '#121212' }}>
+    <div className="w-full h-screen flex" style={{ backgroundColor: '#121212', overflow: 'hidden' }}>
       {/* Coluna Esquerda - Navegação */}
-      <div className="w-64">
+      <div className="w-48 flex-shrink-0">
         <MainSidebar />
       </div>
       
       {/* Coluna Central - Editor */}
-      <div className="flex-1">
+      <div className="flex-1 min-w-0" ref={editorPanelRef}>
         <EditorPanel 
           newsId={id} 
           newsData={newsData}
+          newsTitle={newsTitle}
           isLoading={isLoading}
           loadError={loadError}
           onBlockSelected={handleBlockSelected}
+          onTransferBlock={transferBlockToContext}
         />
       </div>
       
-      {/* Coluna Direita - Contexto */}
-      <div className="w-80">
+      {/* Coluna Direita - Contexto (25% da tela) */}
+      <div className="w-1/4 flex-shrink-0" ref={contextSidebarRef} style={{ overflow: 'auto' }}>
         <ContextSidebar 
           newsData={newsData} 
           selectedBlock={selectedBlock}
+          onTransferItem={transferContextItemToEditor}
+          onOpenCardModal={handleOpenCardModal}
         />
       </div>
+      
+      {/* Modal */}
+      <CardModal
+        isOpen={isModalOpen}
+        onClose={handleCloseCardModal}
+        cardData={selectedCardData}
+        onSave={handleSaveCardContent}
+        allCards={allCards}
+        currentCardIndex={currentCardIndex}
+        onNavigate={handleNavigateCard}
+        microData={microData}
+      />
     </div>
   );
 };

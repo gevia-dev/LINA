@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { CheckSquare, Bold, Italic, Underline } from 'lucide-react';
+import { CheckSquare, Bold, Italic, Underline, ArrowLeft } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
 
-const EditorPanel = ({ newsId, newsData: externalNewsData, isLoading: externalIsLoading, loadError: externalLoadError, onBlockSelected }) => {
+const EditorPanel = ({ newsId, newsData: externalNewsData, newsTitle, isLoading: externalIsLoading, loadError: externalLoadError, onBlockSelected, onTransferBlock }) => {
   
   // Estados para o sistema de toolbar (removidos estados relacionados ao botão +)
   
@@ -19,9 +20,7 @@ const EditorPanel = ({ newsId, newsData: externalNewsData, isLoading: externalIs
   const isLoading = externalIsLoading;
   const loadError = externalLoadError;
   
-  const [isInitialized, setIsInitialized] = useState(false);
 
-  const editorRef = useRef(null);
 
   // Função para fazer parse dos dados da notícia
   const parseNewsData = useCallback((coreStructure) => {
@@ -39,8 +38,8 @@ const EditorPanel = ({ newsId, newsData: externalNewsData, isLoading: externalIs
     }
   }, []);
 
-  // Conteúdo inicial placeholder seguindo style guide
-  const getInitialContent = () => {
+  // Função para obter dados dos blocos
+  const getBlockData = () => {
     // Fazer parse dos dados se disponíveis
     const parsedData = newsData?.core_structure ? parseNewsData(newsData.core_structure) : null;
     
@@ -49,53 +48,206 @@ const EditorPanel = ({ newsId, newsData: externalNewsData, isLoading: externalIs
     const body = parsedData?.corpos_de_analise || 'Clique para selecionar, clique novamente para editar o corpo da notícia...';
     const conclusion = parsedData?.conclusoes || 'Clique para selecionar, clique novamente para editar a conclusão...';
 
-    return `
-    <div data-block-id="summary" class="block-wrapper p-4 rounded-lg cursor-pointer" style="background-color: #1E1E1E; border: 1px solid #333333; margin-bottom: 24px;">
-      <h3 class="text-base font-medium mb-3 pointer-events-none" style="color: #A0A0A0; font-family: 'Nunito Sans', 'Inter', sans-serif; margin: 0 0 12px 0;">Introdução</h3>
-      <div class="editable-content" contenteditable="false" style="font-size: 15px; color: #E0E0E0; font-family: 'Nunito Sans', 'Inter', sans-serif; line-height: 1.7; user-select: none; -webkit-user-select: none; min-height: 60px;">
-        ${introduce}
-      </div>
-      <div class="block-overlay" style="display: none;">
-        <button class="block-overlay-close" title="Desselecionar">×</button>
-        <div class="block-overlay-text">
-          Clique mais uma vez para editar 📝
-        </div>
-      </div>
-    </div>
-
-    <div data-block-id="body" class="block-wrapper mt-6 p-4 rounded-lg cursor-pointer" style="background-color: #1E1E1E; border: 1px solid #333333; margin-bottom: 24px;">
-      <h3 class="text-base font-medium mb-3 pointer-events-none" style="color: #A0A0A0; font-family: 'Nunito Sans', 'Inter', sans-serif; margin: 0 0 12px 0;">Corpo</h3>
-      <div class="editable-content" contenteditable="false" style="font-size: 15px; color: #E0E0E0; font-family: 'Nunito Sans', 'Inter', sans-serif; line-height: 1.7; user-select: none; -webkit-user-select: none; min-height: 80px;">
-        ${body}
-      </div>
-      <div class="block-overlay" style="display: none;">
-        <button class="block-overlay-close" title="Desselecionar">×</button>
-        <div class="block-overlay-text">
-          Clique mais uma vez para editar 📝
-        </div>
-      </div>
-    </div>
-
-    <div data-block-id="conclusion" class="block-wrapper mt-6 p-4 rounded-lg cursor-pointer" style="background-color: #1E1E1E; border: 1px solid #333333; margin-bottom: 24px;">
-      <h3 class="text-base font-medium mb-3 pointer-events-none" style="color: #A0A0A0; font-family: 'Nunito Sans', 'Inter', sans-serif; margin: 0 0 12px 0;">Conclusão</h3>
-      <div class="editable-content" contenteditable="false" style="font-size: 15px; color: #E0E0E0; font-family: 'Nunito Sans', 'Inter', sans-serif; line-height: 1.7; user-select: none; -webkit-user-select: none; min-height: 60px;">
-        ${conclusion}
-      </div>
-      <div class="block-overlay" style="display: none;">
-        <button class="block-overlay-close" title="Desselecionar">×</button>
-        <div class="block-overlay-text">
-          Clique mais uma vez para editar 📝
-        </div>
-      </div>
-    </div>
-  `;
+    return [
+      {
+        id: 'summary',
+        title: 'Introdução',
+        content: introduce,
+        minHeight: '60px'
+      },
+      {
+        id: 'body',
+        title: 'Corpo',
+        content: body,
+        minHeight: '80px'
+      },
+      {
+        id: 'conclusion',
+        title: 'Conclusão',
+        content: conclusion,
+        minHeight: '60px'
+      }
+    ];
   };
 
-  // Função removida - funcionalidade do botão + foi removida
+  // Função para transferir bloco para o contexto
+  const handleTransferBlock = (blockId, content) => {
+    if (onTransferBlock) {
+      onTransferBlock(blockId, content);
+    }
+  };
 
-  // Funções relacionadas ao botão + foram removidas
+  // Função para renderizar um bloco individual
+  const renderBlock = (blockData) => {
+    const { id, title, content, minHeight } = blockData;
+    const isSelected = selectedBlock === id;
+    const isEditing = editingBlock === id;
+    const hasContent = content && !content.includes('Clique para selecionar') && !content.includes('Clique novamente para editar');
 
-  // Funções relacionadas ao toolbar foram removidas
+    return (
+      <motion.div
+        key={id}
+        initial={{ opacity: 0, y: 30, scale: 0.95 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        exit={{ opacity: 0, y: -30, scale: 0.95 }}
+        transition={{ 
+          duration: 0.4, 
+          ease: "easeOut",
+          delay: id === 'summary' ? 0 : id === 'body' ? 0.1 : 0.2
+        }}
+        whileHover={{ 
+          scale: 1.01,
+          y: -2,
+          transition: { duration: 0.2 }
+        }}
+        data-block-id={id}
+        className={`block-wrapper p-4 rounded-lg cursor-pointer group ${isSelected ? 'selected' : ''} ${isEditing ? 'editing' : ''}`}
+        style={{
+          position: 'relative',
+          backgroundColor: '#1E1E1E',
+          border: isEditing ? '1px solid #2BB24C' : '1px solid #333333',
+          boxShadow: isEditing ? '0 0 0 2px #2BB24C' : isSelected ? '0 0 0 2px rgba(160, 160, 160, 0.3)' : 'none',
+          marginBottom: '24px',
+          marginTop: id === 'body' ? '24px' : '0px',
+          transition: 'all 0.2s ease',
+          overflow: 'hidden'
+        }}
+        onClick={(e) => {
+          // Verificar se clicou no botão de transferir
+          if (e.target.closest('.transfer-button')) {
+            e.stopPropagation();
+            return;
+          }
+          
+          // Se o bloco já está selecionado, ativar edição
+          if (id === selectedBlock && id !== editingBlock) {
+            setSelectedBlock(null);
+            setEditingBlock(id);
+          } 
+          // Se é um bloco diferente ou nenhum estava selecionado, selecionar
+          else if (id !== editingBlock) {
+            setSelectedBlock(id);
+            setEditingBlock(null);
+            if (onBlockSelected) {
+              onBlockSelected(id);
+            }
+          }
+        }}
+      >
+        {/* Efeito de brilho no hover */}
+        <motion.div
+          className="absolute inset-0 bg-gradient-to-r from-transparent via-[#2BB24C10] to-transparent"
+          initial={{ x: '-100%' }}
+          whileHover={{ x: '100%' }}
+          transition={{ duration: 0.6, ease: "easeInOut" }}
+        />
+
+        <h3 
+          className="text-base font-medium mb-3 pointer-events-none relative z-10"
+          style={{
+            color: '#A0A0A0',
+            fontFamily: "'Nunito Sans', 'Inter', sans-serif",
+            margin: '0 0 12px 0'
+          }}
+        >
+          {title}
+        </h3>
+        <div
+          className="editable-content relative z-10"
+          contentEditable={isEditing}
+          suppressContentEditableWarning={true}
+          style={{
+            fontSize: '15px',
+            color: '#E0E0E0',
+            fontFamily: "'Nunito Sans', 'Inter', sans-serif",
+            lineHeight: '1.7',
+            userSelect: isEditing ? 'text' : 'none',
+            WebkitUserSelect: isEditing ? 'text' : 'none',
+            minHeight: minHeight,
+            pointerEvents: isEditing ? 'auto' : 'none'
+          }}
+          onBlur={() => {
+            if (isEditing) {
+              setEditingBlock(null);
+            }
+          }}
+        >
+          {content}
+        </div>
+        
+        {/* Botão de transferência - aparece quando há conteúdo */}
+        {hasContent && (
+          <motion.button
+            onClick={() => handleTransferBlock(id, content)}
+            className="transfer-button absolute top-4 right-4 p-2 rounded-full border text-[#A0A0A0] opacity-0 group-hover:opacity-100 transition-all duration-300 hover:scale-110 z-20"
+            style={{
+              borderColor: 'var(--primary-green-transparent)',
+              backgroundColor: 'transparent'
+            }}
+            whileHover={{ 
+              scale: 1.1,
+              backgroundColor: 'var(--primary-green)',
+              color: 'white'
+            }}
+            whileTap={{ scale: 0.95 }}
+            initial={{ scale: 0.8 }}
+            animate={{ scale: 1 }}
+            transition={{ duration: 0.2 }}
+          >
+            <ArrowLeft size={14} />
+          </motion.button>
+        )}
+        
+        {isSelected && !isEditing && (
+          <motion.div 
+            className="block-overlay"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              background: 'rgba(0, 0, 0, 0.15)',
+              backdropFilter: 'blur(3px)',
+              WebkitBackdropFilter: 'blur(3px)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              zIndex: 50,
+              borderRadius: '8px',
+              cursor: 'pointer',
+              transition: 'all 0.3s ease',
+              pointerEvents: 'auto',
+              userSelect: 'none',
+              WebkitUserSelect: 'none'
+            }}
+          >
+            <div 
+              className="block-overlay-text"
+              style={{
+                color: '#E0E0E0',
+                fontSize: '18px',
+                fontWeight: '600',
+                textAlign: 'center',
+                fontFamily: "'Nunito Sans', 'Inter', sans-serif",
+                userSelect: 'none',
+                WebkitUserSelect: 'none',
+                textShadow: '0 2px 4px rgba(0, 0, 0, 0.8)',
+                letterSpacing: '0.5px',
+                pointerEvents: 'none'
+              }}
+            >
+          Clique mais uma vez para editar 📝
+        </div>
+      </motion.div>
+        )}
+      </motion.div>
+    );
+  };
 
   // Funções para o SelectionToolbar
   const handleTextSelection = useCallback(() => {
@@ -111,24 +263,24 @@ const EditorPanel = ({ newsId, newsData: externalNewsData, isLoading: externalIs
       const range = selection.getRangeAt(0);
       const rect = range.getBoundingClientRect();
       
-      // Verificar se a seleção está dentro do editor
-      const isInEditor = editorRef.current && editorRef.current.contains(range.commonAncestorContainer);
-      
       // Verificar se a seleção está dentro do bloco que está sendo editado
-      const editingBlockElement = editorRef.current?.querySelector(`[data-block-id="${editingBlock}"]`);
+      const editingBlockElement = document.querySelector(`[data-block-id="${editingBlock}"]`);
       const isInEditingBlock = editingBlockElement && editingBlockElement.contains(range.commonAncestorContainer);
       
       // Verificar se há texto selecionado
       const selectedText = range.toString().trim();
       
-      if (isInEditor && isInEditingBlock && selectedText.length > 0) {
-        const editorRect = editorRef.current.getBoundingClientRect();
+      if (isInEditingBlock && selectedText.length > 0) {
+        const editorContainer = document.querySelector('.p-6.flex-1.overflow-y-auto');
+        const editorRect = editorContainer?.getBoundingClientRect();
         
+        if (editorRect) {
         setSelectionToolbarPosition({
           top: rect.top - editorRect.top - 50, // 50px acima da seleção
           left: rect.left - editorRect.left + (rect.width / 2) - 80 // Centralizado (assumindo toolbar de ~160px)
         });
         setShowSelectionToolbar(true);
+        }
       } else {
         setShowSelectionToolbar(false);
       }
@@ -160,8 +312,6 @@ const EditorPanel = ({ newsId, newsData: externalNewsData, isLoading: externalIs
     setIsHoveringSelectionToolbar(false);
   }, []);
 
-  // Função setBlockType foi removida
-
   // Função para aplicar formatação na seleção
   const applyTextFormat = useCallback((format) => {
     const selection = window.getSelection();
@@ -179,7 +329,7 @@ const EditorPanel = ({ newsId, newsData: externalNewsData, isLoading: externalIs
       
       // Restaurar foco no elemento editável atual se estiver em edição
       if (editingBlock) {
-        const blockWrapper = editorRef.current?.querySelector(`[data-block-id="${editingBlock}"]`);
+        const blockWrapper = document.querySelector(`[data-block-id="${editingBlock}"]`);
         const editableContent = blockWrapper?.querySelector('.editable-content');
         if (editableContent) {
           editableContent.focus();
@@ -217,7 +367,8 @@ const EditorPanel = ({ newsId, newsData: externalNewsData, isLoading: externalIs
     // Prevenir seleção em elementos protegidos
     const handleSelectStart = (e) => {
       const target = e.target;
-      if (target.closest('.block-wrapper.selected') || target.hasAttribute('data-protected')) {
+      // Verifica se target é um elemento antes de chamar closest
+      if (target instanceof Element && (target.closest('.block-wrapper.selected') || target.hasAttribute('data-protected'))) {
         e.preventDefault();
         return false;
       }
@@ -228,216 +379,38 @@ const EditorPanel = ({ newsId, newsData: externalNewsData, isLoading: externalIs
     document.addEventListener('selectstart', handleSelectStart);
     
     // Adicionar listener específico para elementos editáveis
-    const editor = editorRef.current;
-    if (editor) {
-      editor.addEventListener('mouseup', handleMouseUpInEditor);
-    }
+    document.addEventListener('mouseup', handleMouseUpInEditor);
     
     return () => {
       document.removeEventListener('mouseup', handleMouseUp);
       document.removeEventListener('keyup', handleKeyUp);
       document.removeEventListener('selectstart', handleSelectStart);
-      if (editor) {
-        editor.removeEventListener('mouseup', handleMouseUpInEditor);
-      }
+      document.removeEventListener('mouseup', handleMouseUpInEditor);
     };
   }, [handleTextSelection]);
 
-  // Reinicializar conteúdo quando os dados mudarem
-  useEffect(() => {
-    if (editorRef.current && (newsData || !newsId)) {
-      editorRef.current.innerHTML = getInitialContent();
-      setIsInitialized(true);
-    }
-  }, [newsData, newsId, parseNewsData]);
-
-  // Inicializar conteúdo apenas uma vez (para editor vazio)
-  useEffect(() => {
-    if (editorRef.current && !isInitialized && !newsId) {
-      editorRef.current.innerHTML = getInitialContent();
-      setIsInitialized(true);
-    }
-  }, [isInitialized, newsId]);
-
   // Event listeners para blocos interativos (apenas click)
   useEffect(() => {
-    const editor = editorRef.current;
-    if (!editor) return;
-
-    const handleClick = (e) => {
-      // Verificar se clicou no botão de fechar
-      if (e.target.classList.contains('block-overlay-close')) {
-        e.stopPropagation();
+    const handleClickOutside = (e) => {
+      // Se clicou fora de qualquer bloco, desselecionar
+      if (!e.target.closest('.block-wrapper')) {
         setSelectedBlock(null);
-        setEditingBlock(null);
-        // Comunicar que nenhum bloco está selecionado
-        if (onBlockSelected) {
-          onBlockSelected(null);
-        }
-        return;
-      }
-      
-      const blockWrapper = e.target.closest('.block-wrapper');
-      
-      if (blockWrapper) {
-        const blockId = blockWrapper.getAttribute('data-block-id');
-        
-        // Se o bloco já está selecionado, ativar edição
-        if (blockId === selectedBlock && blockId !== editingBlock) {
-          setSelectedBlock(null);
-          setEditingBlock(blockId);
-        } 
-        // Se é um bloco diferente ou nenhum estava selecionado, selecionar
-        else if (blockId !== editingBlock) {
-          setSelectedBlock(blockId);
-          setEditingBlock(null);
-          // Comunicar seleção para componente pai
-          if (onBlockSelected) {
-            onBlockSelected(blockId);
-          }
-        }
-      } else {
-        // Clicou fora de qualquer bloco
-        setSelectedBlock(null);
-        // Comunicar que nenhum bloco está selecionado
         if (onBlockSelected) {
           onBlockSelected(null);
         }
       }
     };
 
-    editor.addEventListener('click', handleClick);
+    document.addEventListener('click', handleClickOutside);
 
     return () => {
-      editor.removeEventListener('click', handleClick);
+      document.removeEventListener('click', handleClickOutside);
     };
-  }, [editingBlock, selectedBlock, onBlockSelected]);
+  }, [onBlockSelected]);
 
-  // Gerenciar contentEditable dinamicamente
-  useEffect(() => {
-    const editor = editorRef.current;
-    if (!editor) return;
 
-    // Encontrar todos os divs editáveis
-    const editableContents = editor.querySelectorAll('.editable-content');
-    
-    // Colocar todos em contentEditable="false" primeiro
-    editableContents.forEach(content => {
-      content.contentEditable = 'false';
-    });
 
-    // Se há um bloco sendo editado, torná-lo editável e focar
-    if (editingBlock) {
-      const blockWrapper = editor.querySelector(`[data-block-id="${editingBlock}"]`);
-      if (blockWrapper) {
-        const editableContent = blockWrapper.querySelector('.editable-content');
-        if (editableContent) {
-          editableContent.contentEditable = 'true';
-          
-          // Focar no elemento editável
-          editableContent.focus();
-          
-          // Posicionar o cursor no final do texto se não houver seleção
-          const selection = window.getSelection();
-          if (selection.rangeCount === 0 || selection.isCollapsed) {
-            const range = document.createRange();
-            
-            // Verificar se o conteúdo é apenas o placeholder
-            const textContent = editableContent.textContent.trim();
-            const isPlaceholder = textContent.includes('Clique para selecionar') || 
-                                 textContent.includes('Clique duas vezes para editar');
-            
-            if (isPlaceholder) {
-              // Se for placeholder, posicionar no início e limpar o conteúdo
-              range.setStart(editableContent, 0);
-              range.collapse(true);
-              editableContent.textContent = '';
-            } else {
-              // Se já tem conteúdo, posicionar no final
-              range.selectNodeContents(editableContent);
-              range.collapse(false); // false = colapsar no final
-            }
-            
-            selection.removeAllRanges();
-            selection.addRange(range);
-          }
-        }
-      }
-    }
-  }, [editingBlock]);
 
-  // Aplicar estilos de estado dinâmicos
-  useEffect(() => {
-    const editor = editorRef.current;
-    if (!editor) return;
-
-    const blockWrappers = editor.querySelectorAll('.block-wrapper');
-    
-    blockWrappers.forEach(wrapper => {
-      const blockId = wrapper.getAttribute('data-block-id');
-      const editableContent = wrapper.querySelector('.editable-content');
-      const overlay = wrapper.querySelector('.block-overlay');
-      
-      // Remover todas as classes de estado primeiro
-      wrapper.classList.remove('ring-2', 'ring-border-hover', 'ring-accent', 'selected');
-      
-      // Esconder todos os overlays primeiro
-      if (overlay) {
-        overlay.style.display = 'none';
-      }
-      
-      // Aplicar classes baseadas no estado
-      if (blockId === editingBlock) {
-        wrapper.classList.add('ring-2');
-        wrapper.style.borderColor = '#2BB24C';
-        wrapper.style.boxShadow = '0 0 0 2px #2BB24C';
-        // Permitir seleção de texto apenas no modo de edição
-        if (editableContent) {
-          editableContent.style.userSelect = 'text';
-          editableContent.style.webkitUserSelect = 'text';
-          editableContent.style.mozUserSelect = 'text';
-          editableContent.style.msUserSelect = 'text';
-          editableContent.style.pointerEvents = 'auto';
-          editableContent.contentEditable = 'true';
-          // Remover proteção
-          editableContent.removeAttribute('data-protected');
-        }
-      } else if (blockId === selectedBlock) {
-        wrapper.classList.add('ring-2', 'selected');
-        wrapper.style.borderColor = '#333333';
-        wrapper.style.boxShadow = '0 0 0 2px rgba(160, 160, 160, 0.3)';
-        // Mostrar overlay quando bloco está selecionado (mas não editando)
-        if (overlay) {
-          overlay.style.display = 'flex';
-        }
-        // Completamente desabilitar interação com o conteúdo no modo selecionado
-        if (editableContent) {
-          editableContent.style.userSelect = 'none';
-          editableContent.style.webkitUserSelect = 'none';
-          editableContent.style.mozUserSelect = 'none';
-          editableContent.style.msUserSelect = 'none';
-          editableContent.style.pointerEvents = 'none';
-          editableContent.contentEditable = 'false';
-          // Forçar proteção adicional
-          editableContent.setAttribute('data-protected', 'true');
-        }
-      } else {
-        // Estado padrão - não permitir seleção de texto
-        wrapper.style.borderColor = '#333333';
-        wrapper.style.boxShadow = 'none';
-        if (editableContent) {
-          editableContent.style.userSelect = 'none';
-          editableContent.style.webkitUserSelect = 'none';
-          editableContent.style.mozUserSelect = 'none';
-          editableContent.style.msUserSelect = 'none';
-          editableContent.style.pointerEvents = 'none';
-          editableContent.contentEditable = 'false';
-          // Remover proteção
-          editableContent.removeAttribute('data-protected');
-        }
-      }
-    });
-  }, [selectedBlock, editingBlock]);
 
   return (
     <div 
@@ -578,31 +551,7 @@ const EditorPanel = ({ newsId, newsData: externalNewsData, isLoading: externalIs
           pointer-events: none;
         }
         
-        .block-overlay-close {
-          position: absolute;
-          top: 8px;
-          right: 8px;
-          width: 24px;
-          height: 24px;
-          background: rgba(255, 255, 255, 0.9);
-          border: none;
-          border-radius: 50%;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          cursor: pointer;
-          font-size: 14px;
-          font-weight: bold;
-          color: #333;
-          transition: all 0.2s ease;
-          pointer-events: auto;
-          z-index: 20;
-        }
-        
-        .block-overlay-close:hover {
-          background: rgba(255, 255, 255, 1);
-          transform: scale(1.1);
-        }
+
         
         @keyframes fadeInUp {
           from {
@@ -628,17 +577,31 @@ const EditorPanel = ({ newsId, newsData: externalNewsData, isLoading: externalIs
           style={{ color: '#2BB24C' }}
         />
         <div className="flex-1">
-          <h1 
-            className="font-bold"
-            style={{ 
-              fontSize: '24px',
-              fontWeight: '600',
-              color: '#E0E0E0',
-              fontFamily: '"Nunito Sans", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif'
-            }}
-          >
-            {newsId ? `Editando Notícia #${newsId}` : 'Nova Notícia'}
-          </h1>
+          <div className="flex items-center">
+            <h1 
+              className="font-bold"
+              style={{ 
+                fontSize: '24px',
+                fontWeight: '600',
+                color: '#E0E0E0',
+                fontFamily: '"Nunito Sans", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif'
+              }}
+            >
+              {newsId ? 'Editando Notícia' : 'Nova Notícia'}
+            </h1>
+          </div>
+          {newsTitle && (
+            <p style={{ 
+              color: '#A0A0A0', 
+              fontSize: '16px', 
+              fontFamily: '"Nunito Sans", "Inter", sans-serif', 
+              marginTop: '8px',
+              fontWeight: '500',
+              lineHeight: '1.4'
+            }}>
+              {newsTitle}
+            </p>
+          )}
           {isLoading && (
             <p style={{ color: '#A0A0A0', fontSize: '14px', fontFamily: '"Nunito Sans", "Inter", sans-serif', marginTop: '4px' }}>
               Carregando dados da notícia...
@@ -655,21 +618,9 @@ const EditorPanel = ({ newsId, newsData: externalNewsData, isLoading: externalIs
       {/* Área de Conteúdo */}
       <div className="p-6 flex-1 overflow-y-auto custom-scrollbar">
         <div className="relative">
-          {/* Editor contentEditable */}
+          {/* Editor com blocos renderizados dinamicamente */}
           <div
-            ref={editorRef}
-            contentEditable={true}
-            suppressContentEditableWarning={true}
             className="prose prose-invert max-w-none w-full text-lg leading-relaxed relative z-10 focus:outline-none"
-            onBlur={(e) => {
-              // Só sair do modo de edição se o foco não foi para a toolbar
-              const relatedTarget = e.relatedTarget;
-              if (!relatedTarget || 
-                  (!relatedTarget.closest('.selection-toolbar') && 
-                   !relatedTarget.closest('.markdown-toolbar'))) {
-                setEditingBlock(null);
-              }
-            }}
             style={{ 
               fontFamily: '"Nunito Sans", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
               '--tw-prose-headings': '#E0E0E0',
@@ -677,13 +628,17 @@ const EditorPanel = ({ newsId, newsData: externalNewsData, isLoading: externalIs
               '--tw-prose-bold': '#E0E0E0',
               '--tw-prose-links': '#2BB24C',
             }}
-          />
+          >
+            <AnimatePresence>
+              {getBlockData().map(renderBlock)}
+            </AnimatePresence>
+          </div>
           
 
 
           {/* Toolbar de Seleção de Texto */}
           {showSelectionToolbar && (
-            <div
+            <motion.div
               onMouseEnter={handleSelectionToolbarMouseEnter}
               onMouseLeave={handleSelectionToolbarMouseLeave}
               className="selection-toolbar absolute z-30 flex gap-1 p-2 rounded-lg border shadow-lg"
@@ -694,6 +649,10 @@ const EditorPanel = ({ newsId, newsData: externalNewsData, isLoading: externalIs
                 borderColor: '#333333',
                 boxShadow: 'rgba(0,0,0,0.3) 0px 4px 12px'
               }}
+              initial={{ opacity: 0, y: 10, scale: 0.95 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 10, scale: 0.95 }}
+              transition={{ duration: 0.2 }}
             >
               <button
                 onClick={() => applyTextFormat('bold')}
@@ -758,7 +717,7 @@ const EditorPanel = ({ newsId, newsData: externalNewsData, isLoading: externalIs
               >
                 ×
               </button>
-            </div>
+            </motion.div>
           )}
         </div>
       </div>

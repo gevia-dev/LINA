@@ -1,15 +1,25 @@
 import React, { useState } from 'react';
 import { Home, Plus, Upload, FileText } from 'lucide-react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import LogoutButton from './LogoutButton';
 
 const MainSidebar = () => {
-  const [activeItem, setActiveItem] = useState('Create');
+  const navigate = useNavigate();
+  const location = useLocation();
+  
+  // Determinar item ativo baseado na rota atual
+  const getActiveItem = () => {
+    if (location.pathname === '/feed') return 'Feed';
+    if (location.pathname === '/curation') return 'Create';
+    if (location.pathname === '/') return 'Home';
+    return 'Home';
+  };
 
   const navigationItems = [
-    { name: 'Home', icon: Home },
-    { name: 'Create', icon: Plus },
-    { name: 'Upload', icon: Upload },
-    { name: 'My content', icon: FileText }
+    { name: 'Home', icon: Home, path: '/' },
+    { name: 'Feed', icon: FileText, path: '/feed' },
+    { name: 'Create', icon: Plus, path: '/curation' },
+    { name: 'Upload', icon: Upload, path: '/upload' }
   ];
 
   return (
@@ -40,12 +50,12 @@ const MainSidebar = () => {
         <div className="space-y-2">
           {navigationItems.map((item) => {
             const IconComponent = item.icon;
-            const isActive = activeItem === item.name;
+            const isActive = getActiveItem() === item.name;
             
             return (
               <button
                 key={item.name}
-                onClick={() => setActiveItem(item.name)}
+                onClick={() => navigate(item.path)}
                 className="w-full flex items-center p-3 rounded-lg transition-colors duration-200 hover:bg-opacity-20"
                 style={{ 
                   backgroundColor: isActive ? '#2BB24C33' : 'transparent',

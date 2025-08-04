@@ -15,6 +15,13 @@ export default {
         'text-primary': '#F3F3F3',
         'text-secondary': '#A3A3A3',
         'accent': 'rgb(0, 153, 255)',
+        'green': {
+          '50010': 'rgba(43, 178, 76, 0.1)',
+        },
+        'gray': {
+          '80020': 'rgba(31, 41, 55, 0.2)',
+          '80030': 'rgba(31, 41, 55, 0.3)',
+        }
       },
       fontFamily: {
         'inter': ['Inter', 'sans-serif'],
@@ -22,5 +29,17 @@ export default {
       },
     },
   },
-  plugins: [],
+  plugins: [
+    function({ addUtilities }) {
+      const newUtilities = {
+        '.line-clamp-2': {
+          'display': '-webkit-box',
+          '-webkit-line-clamp': '2',
+          '-webkit-box-orient': 'vertical',
+          'overflow': 'hidden',
+        },
+      }
+      addUtilities(newUtilities)
+    }
+  ],
 };

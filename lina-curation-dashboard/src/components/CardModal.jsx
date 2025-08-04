@@ -1,0 +1,388 @@
+import React, { useState, useEffect } from 'react';
+import { X, Save, RotateCcw, ChevronLeft, ChevronRight } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+
+const CardModal = ({ isOpen, onClose, cardData, onSave, allCards = [], currentCardIndex = 0, onNavigate, microData = [] }) => {
+  const [editedContent, setEditedContent] = useState('');
+  const [hasChanges, setHasChanges] = useState(false);
+  const [activeTab, setActiveTab] = useState('edit');
+  const [currentMicroIndex, setCurrentMicroIndex] = useState(0);
+
+  // Sincronizar o conteúdo editado quando o modal abrir
+  useEffect(() => {
+    if (isOpen && cardData?.content) {
+      setEditedContent(cardData.content);
+      setHasChanges(false);
+    }
+  }, [isOpen, cardData]);
+
+  // Detectar mudanças no conteúdo
+  useEffect(() => {
+    if (cardData?.content && editedContent !== cardData.content) {
+      setHasChanges(true);
+    } else {
+      setHasChanges(false);
+    }
+  }, [editedContent, cardData?.content]);
+
+  const handleSave = () => {
+    if (onSave && hasChanges) {
+      onSave(cardData, editedContent);
+    }
+    onClose();
+  };
+
+  const handleReset = () => {
+    setEditedContent(cardData?.content || '');
+    setHasChanges(false);
+  };
+
+  const handleClose = () => {
+    setEditedContent('');
+    setHasChanges(false);
+    onClose();
+  };
+
+  // Funções de navegação
+  const handlePreviousCard = () => {
+    if (hasChanges) {
+      // Salvar alterações antes de navegar
+      if (onSave) {
+        onSave(cardData, editedContent);
+      }
+    }
+    
+    if (onNavigate && currentCardIndex > 0) {
+      onNavigate(currentCardIndex - 1);
+    }
+  };
+
+  const handleNextCard = () => {
+    if (hasChanges) {
+      // Salvar alterações antes de navegar
+      if (onSave) {
+        onSave(cardData, editedContent);
+      }
+    }
+    
+    if (onNavigate && currentCardIndex < allCards.length - 1) {
+      onNavigate(currentCardIndex + 1);
+    }
+  };
+
+  // Fechar modal ao pressionar ESC e navegação com setas
+  useEffect(() => {
+    const handleKeyDown = (event) => {
+      if (event.key === 'Escape' && isOpen) {
+        handleClose();
+      } else if (event.key === 'ArrowLeft' && isOpen) {
+        handlePreviousCard();
+      } else if (event.key === 'ArrowRight' && isOpen) {
+        handleNextCard();
+      }
+    };
+
+    if (isOpen) {
+      document.addEventListener('keydown', handleKeyDown);
+      document.body.style.overflow = 'hidden'; // Prevenir scroll do body
+    }
+
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+      document.body.style.overflow = 'unset';
+    };
+  }, [isOpen, hasChanges, editedContent]);
+
+
+
+  if (!isOpen || !cardData) return null;
+
+  return (
+    <AnimatePresence>
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        transition={{ duration: 0.2 }}
+        className="fixed inset-0 z-50 flex items-center justify-center"
+      >
+        {/* Overlay */}
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          className="absolute inset-0 bg-black bg-opacity-60 backdrop-blur-sm"
+          onClick={handleClose}
+        />
+
+                         {/* Navegação lateral */}
+        {allCards.length > 1 && (
+          <>
+            {/* Seta Esquerda */}
+            {currentCardIndex > 0 && (
+              <motion.button
+                initial={{ opacity: 0, x: -20 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -20 }}
+                onClick={handlePreviousCard}
+                className="absolute left-4 top-1/2 transform -translate-y-1/2 z-50 p-3 rounded-full border text-[#A0A0A0] transition-all duration-300 hover:scale-110"
+                style={{
+                  borderColor: 'var(--primary-green-transparent)',
+                  backgroundColor: 'transparent'
+                }}
+                whileHover={{ 
+                  scale: 1.1,
+                  backgroundColor: 'var(--primary-green)',
+                  color: 'white'
+                }}
+                whileTap={{ scale: 0.95 }}
+              >
+                <ChevronLeft size={24} />
+              </motion.button>
+            )}
+
+            {/* Seta Direita */}
+            {currentCardIndex < allCards.length - 1 && (
+              <motion.button
+                initial={{ opacity: 0, x: 20 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: 20 }}
+                onClick={handleNextCard}
+                className="absolute right-4 top-1/2 transform -translate-y-1/2 z-50 p-3 rounded-full border text-[#A0A0A0] transition-all duration-300 hover:scale-110"
+                style={{
+                  borderColor: 'var(--primary-green-transparent)',
+                  backgroundColor: 'transparent'
+                }}
+                whileHover={{ 
+                  scale: 1.1,
+                  backgroundColor: 'var(--primary-green)',
+                  color: 'white'
+                }}
+                whileTap={{ scale: 0.95 }}
+              >
+                <ChevronRight size={24} />
+              </motion.button>
+            )}
+          </>
+        )}
+
+        {/* Modal */}
+        <motion.div
+          initial={{ opacity: 0, scale: 0.9, y: 20 }}
+          animate={{ opacity: 1, scale: 1, y: 0 }}
+          exit={{ opacity: 0, scale: 0.9, y: 20 }}
+          transition={{ duration: 0.3, ease: "easeOut" }}
+          className="relative w-full max-w-4xl mx-4 max-h-[90vh] overflow-hidden"
+        >
+          <div className="bg-[#1E1E1E] border border-[#333333] rounded-lg shadow-2xl flex flex-col">
+            {/* Header */}
+            <div className="flex items-center justify-between p-6 border-b border-[#333333]">
+              <div>
+                                 <h2 className="text-[#E0E0E0] text-xl font-semibold">
+                   Editar Conteúdo
+                 </h2>
+                 <p className="text-[#A0A0A0] text-sm mt-1">
+                   {cardData.category || 'Dados Completos'}
+                   {cardData.section && ` - ${cardData.section}`}
+                   {allCards.length > 1 && ` (${currentCardIndex + 1} de ${allCards.length})`}
+                 </p>
+              </div>
+              
+              <div className="flex items-center gap-2">
+                {hasChanges && (
+                  <motion.button
+                    initial={{ opacity: 0, scale: 0.8 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    onClick={handleReset}
+                    className="p-2 rounded-lg bg-[#2A2A2A] text-[#A0A0A0] hover:text-[#E0E0E0] hover:bg-[#333333] transition-all duration-200"
+                    title="Resetar alterações"
+                  >
+                    <RotateCcw size={18} />
+                  </motion.button>
+                )}
+                
+                <button
+                  onClick={handleClose}
+                  className="p-2 rounded-lg bg-[#2A2A2A] text-[#A0A0A0] hover:text-[#E0E0E0] hover:bg-[#333333] transition-all duration-200"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+            </div>
+
+                                     {/* Content */}
+            <div className="flex-1 flex flex-col overflow-hidden">
+              {/* Tabs */}
+              <div className="px-6 pt-4 border-b border-[#333333]">
+                <div className="flex gap-1">
+                  <button
+                    onClick={() => setActiveTab('edit')}
+                    className={`px-4 py-2 rounded-t-lg text-sm font-medium transition-colors ${
+                      activeTab === 'edit'
+                        ? 'bg-[#1E1E1E] text-[#E0E0E0] border-b-2 border-[#2BB24C]'
+                        : 'bg-[#2A2A2A] text-[#A0A0A0] hover:text-[#E0E0E0]'
+                    }`}
+                  >
+                    Edição
+                  </button>
+                  <button
+                    onClick={() => setActiveTab('micro')}
+                    className={`px-4 py-2 rounded-t-lg text-sm font-medium transition-colors ${
+                      activeTab === 'micro'
+                        ? 'bg-[#1E1E1E] text-[#E0E0E0] border-b-2 border-[#2BB24C]'
+                        : 'bg-[#2A2A2A] text-[#A0A0A0] hover:text-[#E0E0E0]'
+                    }`}
+                  >
+                    Micro Dados
+                  </button>
+                </div>
+              </div>
+
+              {/* Tab Content */}
+              <div className="flex-1 p-6 min-h-0">
+                {activeTab === 'edit' ? (
+                  /* Edit Area */
+                  <div className="h-full flex flex-col">
+                    <h3 className="text-[#A0A0A0] text-sm font-semibold mb-3 uppercase tracking-wider">
+                      Área de Edição
+                    </h3>
+                    <div className="flex-1 flex flex-col">
+                      <textarea
+                        value={editedContent}
+                        onChange={(e) => setEditedContent(e.target.value)}
+                        className="flex-1 w-full bg-[#1A1A1A] border border-[#333333] rounded-lg p-4 text-[#E0E0E0] text-sm leading-relaxed resize-none focus:outline-none focus:border-[#2BB24C] transition-colors duration-200 custom-scrollbar"
+                        placeholder="Digite seu conteúdo aqui..."
+                        style={{ minHeight: '200px' }}
+                      />
+                      
+                      {/* Character count and status */}
+                      <div className="flex items-center justify-between mt-3 text-xs text-[#A0A0A0]">
+                        <span>{editedContent.length} caracteres</span>
+                        {hasChanges && (
+                          <motion.span
+                            initial={{ opacity: 0, x: 10 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            className="text-[#2BB24C]"
+                          >
+                            ● Alterações não salvas
+                          </motion.span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  /* Micro Data Carousel */
+                  <div className="h-full flex flex-col">
+                    <h3 className="text-[#A0A0A0] text-sm font-semibold mb-3 uppercase tracking-wider">
+                      Micro Dados
+                    </h3>
+                    <div className="flex-1 overflow-hidden">
+                      {microData.length > 0 ? (
+                        <div className="h-full flex flex-col">
+                          {/* Carousel Navigation */}
+                          <div className="flex items-center justify-between mb-4">
+                            <button
+                              onClick={() => setCurrentMicroIndex(prev => prev > 0 ? prev - 1 : microData.length - 1)}
+                              className="p-2 rounded-full border text-[#A0A0A0] transition-all duration-300 hover:scale-110"
+                              style={{
+                                borderColor: 'var(--primary-green-transparent)',
+                                backgroundColor: 'transparent'
+                              }}
+                            >
+                              <ChevronLeft size={16} />
+                            </button>
+                            
+                            <span className="text-[#A0A0A0] text-sm">
+                              {currentMicroIndex + 1} de {microData.length}
+                            </span>
+                            
+                            <button
+                              onClick={() => setCurrentMicroIndex(prev => prev < microData.length - 1 ? prev + 1 : 0)}
+                              className="p-2 rounded-full border text-[#A0A0A0] transition-all duration-300 hover:scale-110"
+                              style={{
+                                borderColor: 'var(--primary-green-transparent)',
+                                backgroundColor: 'transparent'
+                              }}
+                            >
+                              <ChevronRight size={16} />
+                            </button>
+                          </div>
+                          
+                          {/* Carousel Content */}
+                          <div className="flex-1 bg-[#1A1A1A] border border-[#333333] rounded-lg p-4 overflow-y-auto custom-scrollbar">
+                            <div className="text-[#E0E0E0] text-sm leading-relaxed whitespace-pre-wrap">
+                              {microData[currentMicroIndex]?.content || 'Nenhum micro dado disponível'}
+                            </div>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="h-full flex items-center justify-center">
+                          <p className="text-[#A0A0A0] text-sm">
+                            Nenhum micro dado disponível
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="flex items-center justify-end gap-3 p-6 border-t border-[#333333] bg-[#1A1A1A]">
+              <button
+                onClick={handleClose}
+                className="px-4 py-2 rounded-lg bg-[#2A2A2A] text-[#A0A0A0] hover:text-[#E0E0E0] hover:bg-[#333333] transition-all duration-200 text-sm font-medium"
+              >
+                Cancelar
+              </button>
+              
+              <motion.button
+                onClick={handleSave}
+                disabled={!hasChanges}
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 flex items-center gap-2 ${
+                  hasChanges
+                    ? 'bg-[#2BB24C] text-white hover:bg-[#25A043]'
+                    : 'bg-[#2A2A2A] text-[#666666] cursor-not-allowed'
+                }`}
+                whileHover={hasChanges ? { scale: 1.02 } : {}}
+                whileTap={hasChanges ? { scale: 0.98 } : {}}
+              >
+                <Save size={16} />
+                {hasChanges ? 'Salvar Alterações' : 'Sem Alterações'}
+              </motion.button>
+            </div>
+          </div>
+        </motion.div>
+
+        {/* Estilos para scrollbar customizada e CSS variables */}
+        <style jsx>{`
+          :root {
+            --primary-green: #2BB24C;
+            --primary-green-transparent: rgba(43, 178, 76, 0.3);
+          }
+          .custom-scrollbar {
+            scrollbar-width: thin;
+            scrollbar-color: #333333 #1A1A1A;
+          }
+          .custom-scrollbar::-webkit-scrollbar {
+            width: 6px;
+          }
+          .custom-scrollbar::-webkit-scrollbar-track {
+            background: #1A1A1A;
+            border-radius: 3px;
+          }
+          .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: #333333;
+            border-radius: 3px;
+          }
+          .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+            background: #444444;
+          }
+        `}</style>
+      </motion.div>
+    </AnimatePresence>
+  );
+};
+
+export default CardModal;
