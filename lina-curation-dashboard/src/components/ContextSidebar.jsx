@@ -113,16 +113,7 @@ const ContextSidebar = ({ newsData, selectedBlock, onTransferItem, onOpenCardMod
 
   return (
     <div className="h-screen bg-[#1E1E1E] border-l border-[#333333] font-inter flex flex-col" style={{ overflow: 'visible' }}>
-      {/* Estilos para esconder scrollbars */}
-      <style>{`
-        .custom-scrollbar {
-          scrollbar-width: none; /* Firefox */
-          -ms-overflow-style: none; /* Internet Explorer e Edge */
-        }
-        .custom-scrollbar::-webkit-scrollbar {
-          display: none; /* Chrome, Safari e Opera */
-        }
-      `}</style>
+
       {/* Título H2 */}
       <div className="p-6 pb-0 flex-shrink-0">
         <h2 className="text-[#E0E0E0] text-lg font-semibold mb-6">
@@ -171,7 +162,7 @@ const ContextSidebar = ({ newsData, selectedBlock, onTransferItem, onOpenCardMod
       {/* Conteúdo das Abas */}
       <div 
         ref={scrollContainerRef}
-        className="px-6 flex-1 overflow-y-auto custom-scrollbar"
+        className="px-6 flex-1 overflow-y-auto"
       >
         {/* Aba Dados Completos */}
         {activeTab === 'complete' && (
@@ -268,7 +259,10 @@ const ContextSidebar = ({ newsData, selectedBlock, onTransferItem, onOpenCardMod
                                 
                                 {/* Botão de transferência */}
                                 <motion.button
-                                  onClick={() => handleTransferItem(itemId, text)}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleTransferItem(itemId, text);
+                                  }}
                                   className="absolute bottom-2 right-2 p-2 rounded-full border text-[#A0A0A0] opacity-0 group-hover:opacity-100 transition-all duration-300 hover:scale-110 z-10"
                                   style={{
                                     borderColor: 'var(--primary-green-transparent)',
@@ -434,7 +428,10 @@ const ContextSidebar = ({ newsData, selectedBlock, onTransferItem, onOpenCardMod
                                 
                                 {/* Botão de transferência */}
                                 <motion.button
-                                  onClick={() => handleTransferItem(itemId, quote)}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleTransferItem(itemId, quote);
+                                  }}
                                   className="absolute bottom-2 right-2 p-2 rounded-full border text-[#A0A0A0] opacity-0 group-hover:opacity-100 transition-all duration-300 hover:scale-110 z-10"
                                   style={{
                                     borderColor: 'var(--primary-green-transparent)',
@@ -517,7 +514,10 @@ const ContextSidebar = ({ newsData, selectedBlock, onTransferItem, onOpenCardMod
                                 
                                 {/* Botão de transferência */}
                                 <motion.button
-                                  onClick={() => handleTransferItem(itemId, quotes)}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleTransferItem(itemId, quotes);
+                                  }}
                                   className="absolute bottom-2 right-2 p-2 rounded-full border text-[#A0A0A0] opacity-0 group-hover:opacity-100 transition-all duration-300 hover:scale-110 z-10"
                                   style={{
                                     borderColor: 'var(--primary-green-transparent)',

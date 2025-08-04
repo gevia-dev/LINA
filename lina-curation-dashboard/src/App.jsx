@@ -41,22 +41,30 @@ function App() {
             } />
             <Route path="/news/:id" element={
               <ProtectedRoute>
-                <CurationPage />
+                <LayoutWithSidebar>
+                  <CurationPage />
+                </LayoutWithSidebar>
               </ProtectedRoute>
             } />
             <Route path="/curation" element={
               <ProtectedRoute>
-                <CurationPage />
+                <LayoutWithSidebar>
+                  <CurationPage />
+                </LayoutWithSidebar>
               </ProtectedRoute>
             } />
             <Route path="/upload" element={
               <ProtectedRoute>
-                <UploadPage />
+                <LayoutWithSidebar>
+                  <UploadPage />
+                </LayoutWithSidebar>
               </ProtectedRoute>
             } />
             <Route path="/" element={
               <ProtectedRoute>
-                <Dashboard />
+                <LayoutWithSidebar>
+                  <Dashboard />
+                </LayoutWithSidebar>
               </ProtectedRoute>
             } />
             <Route path="*" element={<Navigate to="/feed" />} />

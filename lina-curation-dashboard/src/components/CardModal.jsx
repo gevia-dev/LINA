@@ -1,12 +1,26 @@
 import React, { useState, useEffect } from 'react';
-import { X, Save, RotateCcw, ChevronLeft, ChevronRight } from 'lucide-react';
+import { X, Save, RotateCcw, ChevronLeft, ChevronRight, ChevronDown } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 const CardModal = ({ isOpen, onClose, cardData, onSave, allCards = [], currentCardIndex = 0, onNavigate, microData = [] }) => {
   const [editedContent, setEditedContent] = useState('');
   const [hasChanges, setHasChanges] = useState(false);
-  const [activeTab, setActiveTab] = useState('edit');
-  const [currentMicroIndex, setCurrentMicroIndex] = useState(0);
+  const [currentCategoryIndex, setCurrentCategoryIndex] = useState(0);
+
+  // Organizar micro dados por categoria
+  const microDataByCategory = microData.reduce((acc, item) => {
+    const category = item.category || 'Sem Categoria';
+    if (!acc[category]) {
+      acc[category] = [];
+    }
+    acc[category].push(item);
+    return acc;
+  }, {});
+
+  // Lista de categorias ordenadas
+  const categoryKeys = Object.keys(microDataByCategory);
+  const currentCategory = categoryKeys[currentCategoryIndex] || '';
+  const currentCategoryData = microDataByCategory[currentCategory] || [];
 
   // Sincronizar o conteúdo editado quando o modal abrir
   useEffect(() => {
@@ -210,123 +224,117 @@ const CardModal = ({ isOpen, onClose, cardData, onSave, allCards = [], currentCa
               </div>
             </div>
 
-                                     {/* Content */}
-            <div className="flex-1 flex flex-col overflow-hidden">
-              {/* Tabs */}
-              <div className="px-6 pt-4 border-b border-[#333333]">
-                <div className="flex gap-1">
-                  <button
-                    onClick={() => setActiveTab('edit')}
-                    className={`px-4 py-2 rounded-t-lg text-sm font-medium transition-colors ${
-                      activeTab === 'edit'
-                        ? 'bg-[#1E1E1E] text-[#E0E0E0] border-b-2 border-[#2BB24C]'
-                        : 'bg-[#2A2A2A] text-[#A0A0A0] hover:text-[#E0E0E0]'
-                    }`}
-                  >
-                    Edição
-                  </button>
-                  <button
-                    onClick={() => setActiveTab('micro')}
-                    className={`px-4 py-2 rounded-t-lg text-sm font-medium transition-colors ${
-                      activeTab === 'micro'
-                        ? 'bg-[#1E1E1E] text-[#E0E0E0] border-b-2 border-[#2BB24C]'
-                        : 'bg-[#2A2A2A] text-[#A0A0A0] hover:text-[#E0E0E0]'
-                    }`}
-                  >
-                    Micro Dados
-                  </button>
-                </div>
-              </div>
+                                                  {/* Content */}
+             <div className="flex-1 flex flex-col overflow-hidden">
+               <div className="flex-1 p-6 overflow-y-auto" style={{ overflowY: 'hidden' }}>
+                 {/* Edit Area */}
+                 <div className="mb-6">
+                   <h3 className="text-[#A0A0A0] text-sm font-semibold mb-3 uppercase tracking-wider">
+                     Área de Edição
+                   </h3>
+                   <div className="flex flex-col">
+                     <textarea
+                       value={editedContent}
+                       onChange={(e) => setEditedContent(e.target.value)}
+                       className="w-full bg-[#1A1A1A] border border-[#333333] rounded-lg p-4 text-[#E0E0E0] text-sm leading-relaxed resize-none focus:outline-none focus:border-[#2BB24C] transition-colors duration-200"
+                       placeholder="Digite seu conteúdo aqui..."
+                       style={{ minHeight: '200px' }}
+                     />
+                     
+                     {/* Character count and status */}
+                     <div className="flex items-center justify-between mt-3 text-xs text-[#A0A0A0]">
+                       <span>{editedContent.length} caracteres</span>
+                       {hasChanges && (
+                         <motion.span
+                           initial={{ opacity: 0, x: 10 }}
+                           animate={{ opacity: 1, x: 0 }}
+                           className="text-[#2BB24C]"
+                         >
+                           ● Alterações não salvas
+                         </motion.span>
+                       )}
+                     </div>
+                   </div>
+                 </div>
 
-              {/* Tab Content */}
-              <div className="flex-1 p-6 min-h-0">
-                {activeTab === 'edit' ? (
-                  /* Edit Area */
-                  <div className="h-full flex flex-col">
-                    <h3 className="text-[#A0A0A0] text-sm font-semibold mb-3 uppercase tracking-wider">
-                      Área de Edição
-                    </h3>
-                    <div className="flex-1 flex flex-col">
-                      <textarea
-                        value={editedContent}
-                        onChange={(e) => setEditedContent(e.target.value)}
-                        className="flex-1 w-full bg-[#1A1A1A] border border-[#333333] rounded-lg p-4 text-[#E0E0E0] text-sm leading-relaxed resize-none focus:outline-none focus:border-[#2BB24C] transition-colors duration-200 custom-scrollbar"
-                        placeholder="Digite seu conteúdo aqui..."
-                        style={{ minHeight: '200px' }}
-                      />
-                      
-                      {/* Character count and status */}
-                      <div className="flex items-center justify-between mt-3 text-xs text-[#A0A0A0]">
-                        <span>{editedContent.length} caracteres</span>
-                        {hasChanges && (
-                          <motion.span
-                            initial={{ opacity: 0, x: 10 }}
-                            animate={{ opacity: 1, x: 0 }}
-                            className="text-[#2BB24C]"
-                          >
-                            ● Alterações não salvas
-                          </motion.span>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                ) : (
-                  /* Micro Data Carousel */
-                  <div className="h-full flex flex-col">
+                                   {/* Micro Data Carousel */}
+                  <div>
                     <h3 className="text-[#A0A0A0] text-sm font-semibold mb-3 uppercase tracking-wider">
                       Micro Dados
                     </h3>
-                    <div className="flex-1 overflow-hidden">
-                      {microData.length > 0 ? (
-                        <div className="h-full flex flex-col">
-                          {/* Carousel Navigation */}
-                          <div className="flex items-center justify-between mb-4">
-                            <button
-                              onClick={() => setCurrentMicroIndex(prev => prev > 0 ? prev - 1 : microData.length - 1)}
-                              className="p-2 rounded-full border text-[#A0A0A0] transition-all duration-300 hover:scale-110"
-                              style={{
-                                borderColor: 'var(--primary-green-transparent)',
-                                backgroundColor: 'transparent'
-                              }}
-                            >
-                              <ChevronLeft size={16} />
-                            </button>
-                            
-                            <span className="text-[#A0A0A0] text-sm">
-                              {currentMicroIndex + 1} de {microData.length}
-                            </span>
-                            
-                            <button
-                              onClick={() => setCurrentMicroIndex(prev => prev < microData.length - 1 ? prev + 1 : 0)}
-                              className="p-2 rounded-full border text-[#A0A0A0] transition-all duration-300 hover:scale-110"
-                              style={{
-                                borderColor: 'var(--primary-green-transparent)',
-                                backgroundColor: 'transparent'
-                              }}
-                            >
-                              <ChevronRight size={16} />
-                            </button>
-                          </div>
-                          
-                          {/* Carousel Content */}
-                          <div className="flex-1 bg-[#1A1A1A] border border-[#333333] rounded-lg p-4 overflow-y-auto custom-scrollbar">
-                            <div className="text-[#E0E0E0] text-sm leading-relaxed whitespace-pre-wrap">
-                              {microData[currentMicroIndex]?.content || 'Nenhum micro dado disponível'}
+                    {microData.length > 0 ? (
+                      <div className="flex flex-col">
+                                                                          {/* Category Navigation */}
+                         <div className="flex items-center justify-between mb-4">
+                           <button
+                             onClick={() => setCurrentCategoryIndex(prev => Math.max(0, prev - 1))}
+                             disabled={currentCategoryIndex === 0}
+                             className={`p-2 rounded-full border text-[#A0A0A0] transition-all duration-300 hover:scale-110 ${
+                               currentCategoryIndex === 0 ? 'opacity-50 cursor-not-allowed' : ''
+                             }`}
+                             style={{
+                               borderColor: 'var(--primary-green-transparent)',
+                               backgroundColor: 'transparent'
+                             }}
+                           >
+                             <ChevronLeft size={16} />
+                           </button>
+                           
+                                                       <div className="text-center">
+                              <div className="text-[#E0E0E0] text-sm font-medium">
+                                {currentCategory.replace(/_/g, ' ')}
+                              </div>
+                              <div className="text-[#A0A0A0] text-xs">
+                                Categoria {currentCategoryIndex + 1} de {categoryKeys.length} • {currentCategoryData.length} micro dados
+                              </div>
                             </div>
+                           
+                           <button
+                             onClick={() => setCurrentCategoryIndex(prev => Math.min(categoryKeys.length - 1, prev + 1))}
+                             disabled={currentCategoryIndex >= categoryKeys.length - 1}
+                             className={`p-2 rounded-full border text-[#A0A0A0] transition-all duration-300 hover:scale-110 ${
+                               currentCategoryIndex >= categoryKeys.length - 1 ? 'opacity-50 cursor-not-allowed' : ''
+                             }`}
+                             style={{
+                               borderColor: 'var(--primary-green-transparent)',
+                               backgroundColor: 'transparent'
+                             }}
+                           >
+                             <ChevronRight size={16} />
+                           </button>
+                         </div>
+                         
+                                                   {/* Category Content - Grid flexível */}
+                          <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 max-h-64 overflow-y-auto">
+                            {currentCategoryData.map((item, index) => (
+                              <div 
+                                key={item.itemId || index} 
+                                className="bg-[#1A1A1A] border border-[#333333] rounded-lg p-3 min-h-[80px] flex flex-col"
+                              >
+                                <div className="text-[#E0E0E0] text-xs leading-relaxed flex-1 overflow-hidden">
+                                  <div className="line-clamp-4 break-words">
+                                    {item.content}
+                                  </div>
+                                </div>
+                                {item.category && (
+                                  <div className="mt-2 text-[#A0A0A0] text-xs font-medium flex-shrink-0">
+                                    {item.category.replace(/_/g, ' ')}
+                                  </div>
+                                )}
+                              </div>
+                            ))}
                           </div>
-                        </div>
-                      ) : (
-                        <div className="h-full flex items-center justify-center">
-                          <p className="text-[#A0A0A0] text-sm">
-                            Nenhum micro dado disponível
-                          </p>
-                        </div>
-                      )}
-                    </div>
+                      </div>
+                    ) : (
+                      <div className="flex items-center justify-center py-8">
+                        <p className="text-[#A0A0A0] text-sm">
+                          Nenhum micro dado disponível
+                        </p>
+                      </div>
+                    )}
                   </div>
-                )}
-              </div>
-            </div>
+               </div>
+             </div>
 
             {/* Footer */}
             <div className="flex items-center justify-end gap-3 p-6 border-t border-[#333333] bg-[#1A1A1A]">
@@ -355,29 +363,11 @@ const CardModal = ({ isOpen, onClose, cardData, onSave, allCards = [], currentCa
           </div>
         </motion.div>
 
-        {/* Estilos para scrollbar customizada e CSS variables */}
+        {/* Estilos para CSS variables */}
         <style jsx>{`
           :root {
             --primary-green: #2BB24C;
             --primary-green-transparent: rgba(43, 178, 76, 0.3);
-          }
-          .custom-scrollbar {
-            scrollbar-width: thin;
-            scrollbar-color: #333333 #1A1A1A;
-          }
-          .custom-scrollbar::-webkit-scrollbar {
-            width: 6px;
-          }
-          .custom-scrollbar::-webkit-scrollbar-track {
-            background: #1A1A1A;
-            border-radius: 3px;
-          }
-          .custom-scrollbar::-webkit-scrollbar-thumb {
-            background: #333333;
-            border-radius: 3px;
-          }
-          .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-            background: #444444;
           }
         `}</style>
       </motion.div>

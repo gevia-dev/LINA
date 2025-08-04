@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { fetchNews } from '../services/contentApi';
+import { fetchNews, fetchNewsFromLinaNews } from '../services/contentApi';
 import FeedItem from '../components/FeedItem';
 import DetailsSidebar from '../components/DetailsSidebar';
 
@@ -10,27 +10,39 @@ const CurationFeed = () => {
   const [selectedNews, setSelectedNews] = useState(null);
   const [filterStatus, setFilterStatus] = useState('all');
   const [filterCategory, setFilterCategory] = useState('all');
+  const [filterLinaNews, setFilterLinaNews] = useState(false);
+
+  // Função para carregar notícias baseado no filtro
+  const loadNews = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      let result;
+      if (filterLinaNews) {
+        // Carrega apenas notícias que existem na lina_news
+        result = await fetchNewsFromLinaNews(0, 100);
+      } else {
+        // Carrega todas as notícias normalmente
+        result = await fetchNews(0, 100);
+      }
+      
+      if (result.data) {
+        setNewsItems(result.data);
+      }
+    } catch (err) {
+      setError('Não foi possível carregar as notícias.');
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    const loadInitialNews = async () => {
-      try {
-        setLoading(true);
-        const { data } = await fetchNews(0, 100); // Carrega os 100 primeiros itens
-        if (data) {
-          setNewsItems(data);
-        }
-      } catch (err) {
-        setError('Não foi possível carregar as notícias.');
-        console.error(err);
-      } finally {
-        setLoading(false);
-      }
-    };
+    loadNews();
+  }, [filterLinaNews]); // Recarrega quando o filtro muda
 
-    loadInitialNews();
-  }, []);
-
-  // Filtrar notícias baseado nos filtros selecionados
+  // Filtrar notícias baseado nos filtros selecionados (exceto lina_news que já é filtrado no carregamento)
   const filteredNews = newsItems.filter(item => {
     const statusMatch = filterStatus === 'all' || item.status === filterStatus;
     const categoryMatch = filterCategory === 'all' || item.macro_categoria === filterCategory;
@@ -105,11 +117,12 @@ const CurationFeed = () => {
                 }}
               >
                 {filteredNews.length} de {newsItems.length} notícias
+                {filterLinaNews && ' (apenas da lina_news)'}
               </p>
             </div>
             
             {/* Filtros */}
-            <div style={{ display: 'flex', gap: '12px' }}>
+            <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
               <select
                 value={filterStatus}
                 onChange={(e) => setFilterStatus(e.target.value)}
@@ -149,6 +162,35 @@ const CurationFeed = () => {
                   <option key={category} value={category}>{category}</option>
                 ))}
               </select>
+
+              {/* Filtro temporário para lina_news */}
+              <label 
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  color: '#E0E0E0',
+                  fontFamily: 'Inter',
+                  fontSize: '14px',
+                  fontWeight: '400',
+                  cursor: 'pointer',
+                  padding: '12px',
+                  backgroundColor: '#1E1E1E',
+                  border: '1px solid #333333',
+                  borderRadius: '6px'
+                }}
+              >
+                <input
+                  type="checkbox"
+                  checked={filterLinaNews}
+                  onChange={(e) => setFilterLinaNews(e.target.checked)}
+                  style={{
+                    accentColor: '#2BB24C',
+                    cursor: 'pointer'
+                  }}
+                />
+                Apenas notícias na lina_news
+              </label>
             </div>
           </div>
         </div>

@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams } from 'react-router-dom';
-import MainSidebar from './MainSidebar';
 import EditorPanel from './EditorPanel';
 import ContextSidebar from './ContextSidebar';
 import CardModal from './CardModal';
@@ -216,6 +215,9 @@ const CurationPage = () => {
 
       console.log('✅ Item transferido com sucesso para core_structure (conteúdo anterior preservado)');
       
+      // Desselecionar o bloco para remover o blur e permitir visualização do conteúdo
+      setSelectedBlock(null);
+      
     } catch (error) {
       console.error('❌ Erro ao transferir item do contexto:', error);
     }
@@ -301,12 +303,7 @@ const CurationPage = () => {
   }, [newsData]);
 
   return (
-    <div className="w-full h-screen flex" style={{ backgroundColor: '#121212', overflow: 'hidden' }}>
-      {/* Coluna Esquerda - Navegação */}
-      <div className="w-48 flex-shrink-0">
-        <MainSidebar />
-      </div>
-      
+    <div className="w-full h-screen flex" style={{ backgroundColor: 'var(--bg-primary)', overflow: 'hidden' }}>
       {/* Coluna Central - Editor */}
       <div className="flex-1 min-w-0" ref={editorPanelRef}>
         <EditorPanel 
@@ -315,6 +312,7 @@ const CurationPage = () => {
           newsTitle={newsTitle}
           isLoading={isLoading}
           loadError={loadError}
+          selectedBlock={selectedBlock}
           onBlockSelected={handleBlockSelected}
           onTransferBlock={transferBlockToContext}
         />

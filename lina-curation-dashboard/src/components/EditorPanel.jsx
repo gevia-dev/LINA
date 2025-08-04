@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { CheckSquare, Bold, Italic, Underline, ArrowLeft } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
-const EditorPanel = ({ newsId, newsData: externalNewsData, newsTitle, isLoading: externalIsLoading, loadError: externalLoadError, onBlockSelected, onTransferBlock }) => {
+const EditorPanel = ({ newsId, newsData: externalNewsData, newsTitle, isLoading: externalIsLoading, loadError: externalLoadError, selectedBlock: externalSelectedBlock, onBlockSelected, onTransferBlock }) => {
   
   // Estados para o sistema de toolbar (removidos estados relacionados ao botão +)
   
@@ -13,7 +13,9 @@ const EditorPanel = ({ newsId, newsData: externalNewsData, newsTitle, isLoading:
   
   // Estados para blocos interativos
   const [editingBlock, setEditingBlock] = useState(null); // 'summary', 'body', ou 'conclusion'
-  const [selectedBlock, setSelectedBlock] = useState(null);
+  
+  // Usar selectedBlock vindo das props (controlado pela CurationPage)
+  const selectedBlock = externalSelectedBlock;
   
   // Estados para dados da notícia (agora usando props)
   const newsData = externalNewsData;
@@ -104,9 +106,9 @@ const EditorPanel = ({ newsId, newsData: externalNewsData, newsTitle, isLoading:
         className={`block-wrapper p-4 rounded-lg cursor-pointer group ${isSelected ? 'selected' : ''} ${isEditing ? 'editing' : ''}`}
         style={{
           position: 'relative',
-          backgroundColor: '#1E1E1E',
-          border: isEditing ? '1px solid #2BB24C' : '1px solid #333333',
-          boxShadow: isEditing ? '0 0 0 2px #2BB24C' : isSelected ? '0 0 0 2px rgba(160, 160, 160, 0.3)' : 'none',
+          backgroundColor: 'var(--bg-secondary)',
+          border: isEditing ? '1px solid var(--primary-green)' : '1px solid var(--border-primary)',
+          boxShadow: isEditing ? '0 0 0 2px var(--primary-green)' : isSelected ? '0 0 0 2px rgba(160, 160, 160, 0.3)' : 'none',
           marginBottom: '24px',
           marginTop: id === 'body' ? '24px' : '0px',
           transition: 'all 0.2s ease',
@@ -121,12 +123,13 @@ const EditorPanel = ({ newsId, newsData: externalNewsData, newsTitle, isLoading:
           
           // Se o bloco já está selecionado, ativar edição
           if (id === selectedBlock && id !== editingBlock) {
-            setSelectedBlock(null);
+            if (onBlockSelected) {
+              onBlockSelected(null);
+            }
             setEditingBlock(id);
           } 
           // Se é um bloco diferente ou nenhum estava selecionado, selecionar
           else if (id !== editingBlock) {
-            setSelectedBlock(id);
             setEditingBlock(null);
             if (onBlockSelected) {
               onBlockSelected(id);
@@ -145,7 +148,7 @@ const EditorPanel = ({ newsId, newsData: externalNewsData, newsTitle, isLoading:
         <h3 
           className="text-base font-medium mb-3 pointer-events-none relative z-10"
           style={{
-            color: '#A0A0A0',
+            color: 'var(--text-secondary)',
             fontFamily: "'Nunito Sans', 'Inter', sans-serif",
             margin: '0 0 12px 0'
           }}
@@ -158,7 +161,7 @@ const EditorPanel = ({ newsId, newsData: externalNewsData, newsTitle, isLoading:
           suppressContentEditableWarning={true}
           style={{
             fontSize: '15px',
-            color: '#E0E0E0',
+            color: 'var(--text-primary)',
             fontFamily: "'Nunito Sans', 'Inter', sans-serif",
             lineHeight: '1.7',
             userSelect: isEditing ? 'text' : 'none',
@@ -394,7 +397,6 @@ const EditorPanel = ({ newsId, newsData: externalNewsData, newsTitle, isLoading:
     const handleClickOutside = (e) => {
       // Se clicou fora de qualquer bloco, desselecionar
       if (!e.target.closest('.block-wrapper')) {
-        setSelectedBlock(null);
         if (onBlockSelected) {
           onBlockSelected(null);
         }
@@ -414,21 +416,13 @@ const EditorPanel = ({ newsId, newsData: externalNewsData, newsTitle, isLoading:
 
   return (
     <div 
-      className="h-screen flex flex-col"
+      className="h-screen flex flex-col mx-20"
       style={{ 
-        backgroundColor: '#121212'
+        backgroundColor: 'var(--bg-primary)'
       }}
     >
       {/* Estilos CSS similares ao NewsEditorPage */}
       <style>{`
-        /* Esconder scrollbars */
-        .custom-scrollbar {
-          scrollbar-width: none; /* Firefox */
-          -ms-overflow-style: none; /* Internet Explorer e Edge */
-        }
-        .custom-scrollbar::-webkit-scrollbar {
-          display: none; /* Chrome, Safari e Opera */
-        }
         .prose h1 { 
           font-size: 2.25rem; 
           font-weight: 600; 
@@ -569,12 +563,12 @@ const EditorPanel = ({ newsId, newsData: externalNewsData, newsTitle, isLoading:
       <div 
         className="p-6 border-b flex items-center gap-3 flex-shrink-0"
         style={{ 
-          borderColor: '#333333'
+          borderColor: 'var(--border-primary)'
         }}
       >
         <CheckSquare 
           size={24} 
-          style={{ color: '#2BB24C' }}
+          style={{ color: 'var(--primary-green)' }}
         />
         <div className="flex-1">
           <div className="flex items-center">
@@ -583,7 +577,7 @@ const EditorPanel = ({ newsId, newsData: externalNewsData, newsTitle, isLoading:
               style={{ 
                 fontSize: '24px',
                 fontWeight: '600',
-                color: '#E0E0E0',
+                color: 'var(--text-primary)',
                 fontFamily: '"Nunito Sans", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif'
               }}
             >
@@ -592,7 +586,7 @@ const EditorPanel = ({ newsId, newsData: externalNewsData, newsTitle, isLoading:
           </div>
           {newsTitle && (
             <p style={{ 
-              color: '#A0A0A0', 
+              color: 'var(--text-secondary)', 
               fontSize: '16px', 
               fontFamily: '"Nunito Sans", "Inter", sans-serif', 
               marginTop: '8px',
@@ -603,12 +597,12 @@ const EditorPanel = ({ newsId, newsData: externalNewsData, newsTitle, isLoading:
             </p>
           )}
           {isLoading && (
-            <p style={{ color: '#A0A0A0', fontSize: '14px', fontFamily: '"Nunito Sans", "Inter", sans-serif', marginTop: '4px' }}>
+            <p style={{ color: 'var(--text-secondary)', fontSize: '14px', fontFamily: '"Nunito Sans", "Inter", sans-serif', marginTop: '4px' }}>
               Carregando dados da notícia...
             </p>
           )}
           {loadError && (
-            <p style={{ color: '#ff6b6b', fontSize: '14px', fontFamily: '"Nunito Sans", "Inter", sans-serif', marginTop: '4px' }}>
+            <p style={{ color: 'var(--status-error-light)', fontSize: '14px', fontFamily: '"Nunito Sans", "Inter", sans-serif', marginTop: '4px' }}>
               Erro ao carregar: {loadError}
             </p>
           )}
@@ -616,7 +610,7 @@ const EditorPanel = ({ newsId, newsData: externalNewsData, newsTitle, isLoading:
       </div>
       
       {/* Área de Conteúdo */}
-      <div className="p-6 flex-1 overflow-y-auto custom-scrollbar">
+      <div className="p-6 flex-1 overflow-y-auto">
         <div className="relative">
           {/* Editor com blocos renderizados dinamicamente */}
           <div

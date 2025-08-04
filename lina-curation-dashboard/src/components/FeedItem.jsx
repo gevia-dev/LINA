@@ -1,6 +1,5 @@
 import React from 'react';
-import { Hash, Tag, Layers } from 'lucide-react';
-import StatusBadge from './StatusBadge';
+import { Tag } from 'lucide-react';
 
 const FeedItem = ({ item, isSelected, onClick }) => {
   return (
@@ -11,13 +10,13 @@ const FeedItem = ({ item, isSelected, onClick }) => {
         fontFamily: 'Inter',
         padding: '12px', // Style guide: Cards e Inputs: 12px
         borderRadius: '8px', // Style guide: 8px para cards
-        backgroundColor: isSelected ? '#2BB24C10' : '#1E1E1E', // Secondary background
-        border: isSelected ? '2px solid #2BB24C' : '1px solid #333333', // Borders/Dividers
-        boxShadow: isSelected ? '0 0 0 2px #2BB24C33' : 'none'
+        backgroundColor: isSelected ? '#2BB24C08' : '#1E1E1E', // Secondary background mais transparente quando selecionado
+        border: '1px solid #333333', // Sempre a mesma borda
+        boxShadow: 'none'
       }}
       onMouseEnter={(e) => {
         if (!isSelected) {
-          e.target.style.borderColor = '#2BB24C'; // Borda verde no hover
+          e.target.style.borderColor = 'var(--primary-green-transparent)'; // Usando a variável CSS
         }
       }}
       onMouseLeave={(e) => {
@@ -39,47 +38,61 @@ const FeedItem = ({ item, isSelected, onClick }) => {
         >
           {item.title || 'Sem título'}
         </h3>
-        <StatusBadge status={item.status} />
       </div>
       
-      <div 
-        className="flex items-center gap-4" 
-        style={{ 
-          color: '#A0A0A0', // Text Secondary do style guide
-          fontFamily: 'Inter',
-          fontSize: '12px', // Subtítulo/Metadado do style guide
-          fontWeight: '400', // Regular (400) do style guide
-          marginTop: '8px'
-        }}
-      >
-        <span className="flex items-center gap-1.5">
-          <Hash 
+      {/* Preview do texto */}
+      {(() => {
+        try {
+          const structuredSummary = item.structured_summary ? JSON.parse(item.structured_summary) : null;
+          const preview = structuredSummary?.motivo_ou_consequencia;
+          
+          if (preview && preview.trim()) {
+            return (
+              <div 
+                style={{ 
+                  color: '#A0A0A0', // Text Secondary do style guide
+                  fontFamily: 'Inter',
+                  fontSize: '14px', // Corpo do Texto do style guide
+                  fontWeight: '400', // Regular (400) do style guide
+                  marginTop: '8px',
+                  marginBottom: '8px',
+                  lineHeight: '1.5',
+                  display: '-webkit-box',
+                  WebkitLineClamp: 2,
+                  WebkitBoxOrient: 'vertical',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis'
+                }}
+              >
+                {preview}
+              </div>
+            );
+          }
+          return null;
+        } catch (error) {
+          console.error('Erro ao fazer parse do structured_summary:', error);
+          return null;
+        }
+      })()}
+      
+      {item.macro_categoria && (
+        <div 
+          className="flex items-center gap-1.5" 
+          style={{ 
+            color: '#A0A0A0', // Text Secondary do style guide
+            fontFamily: 'Inter',
+            fontSize: '12px', // Subtítulo/Metadado do style guide
+            fontWeight: '400', // Regular (400) do style guide
+            marginTop: '8px'
+          }}
+        >
+          <Tag 
             size={18} // Tamanho Padrão do style guide
             color="#FFFFFF" // Icons do style guide
           />
-          {item.id}
-        </span>
-        
-        {item.macro_categoria && (
-          <span className="flex items-center gap-1.5">
-            <Tag 
-              size={18} // Tamanho Padrão do style guide
-              color="#FFFFFF" // Icons do style guide
-            />
-            {item.macro_categoria}
-          </span>
-        )}
-        
-        {item.step && (
-          <span className="flex items-center gap-1.5">
-            <Layers 
-              size={18} // Tamanho Padrão do style guide
-              color="#FFFFFF" // Icons do style guide
-            />
-            Step: {item.step}
-          </span>
-        )}
-      </div>
+          {item.macro_categoria}
+        </div>
+      )}
     </div>
   );
 };
