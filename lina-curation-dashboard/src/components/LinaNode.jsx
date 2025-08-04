@@ -21,9 +21,11 @@ const LinaNode = ({ node, onEventClick, level = 0 }) => {
   };
 
   const handleClick = () => {
-    if (node.type === 'event') {
+    // Se não tem filhos, é um evento (nó folha)
+    // Se tem filhos, é uma pasta/tópico
+    if (!hasChildren && node.id) {
       onEventClick?.(node.id);
-    } else {
+    } else if (hasChildren) {
       handleToggle();
     }
   };

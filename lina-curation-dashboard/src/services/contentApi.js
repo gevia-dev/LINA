@@ -187,3 +187,27 @@ export const fetchNewsByLinaEventId = async (eventId) => {
     throw error;
   }
 };
+
+/**
+ * Busca dados de um evento específico da tabela lina_events.
+ * @param {number} eventId - ID do evento
+ */
+export const fetchLinaEventById = async (eventId) => {
+  try {
+    const { data, error } = await supabase
+      .from('lina_events')
+      .select('id, llm_title, llm_summary, lambda_persistence, created_at')
+      .eq('id', eventId)
+      .single();
+
+    if (error) {
+      console.error('Erro ao buscar evento da Lina:', error);
+      throw error;
+    }
+
+    return data;
+  } catch (error) {
+    console.error('Erro inesperado ao buscar evento:', error);
+    throw error;
+  }
+};
