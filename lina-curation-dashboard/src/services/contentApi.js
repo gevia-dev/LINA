@@ -1,4 +1,4 @@
-import { supabase } from '../lib/supabaseClient';
+import supabase from '../lib/supabaseClient.js';
 
 /**
  * Busca as notícias não arquivadas do banco de dados, com paginação.
@@ -149,53 +149,19 @@ export const fetchNewsFromLinaNews = async (page = 0, limit = 50) => {
 
 /**
  * Busca a hierarquia dos tópicos e eventos da Lina.
- * Por enquanto, retorna dados mockados até implementarmos as tabelas reais.
  */
 export const fetchLinaHierarchy = async () => {
-  // Mock data - substituir por consulta real quando as tabelas existirem
-  const mockData = [
-    {
-      id: 1,
-      llm_title: "Política Brasileira",
-      llm_summary: "Eventos políticos importantes do Brasil",
-      type: "topic",
-      children: [
-        {
-          id: 2,
-          llm_title: "Eleições 2024",
-          llm_summary: "Cobertura das eleições municipais",
-          type: "event",
-          children: []
-        },
-        {
-          id: 3,
-          llm_title: "Decisões do STF",
-          llm_summary: "Principais julgamentos do Supremo",
-          type: "event",
-          children: []
-        }
-      ]
-    },
-    {
-      id: 4,
-      llm_title: "Economia",
-      llm_summary: "Notícias econômicas e mercado financeiro",
-      type: "topic",
-      children: [
-        {
-          id: 5,
-          llm_title: "Taxa de Juros",
-          llm_summary: "Decisões do Banco Central sobre SELIC",
-          type: "event",
-          children: []
-        }
-      ]
+  try {
+    const { data, error } = await supabase.functions.invoke('get-lina-hierarchy');
+    if (error) {
+      console.error('Erro ao buscar hierarquia da Lina:', error);
+      throw error;
     }
-  ];
-
-  // Simular um delay de rede
-  await new Promise(resolve => setTimeout(resolve, 500));
-  return mockData;
+    return data;
+  } catch (error) {
+    console.error('Erro ao invocar a função da Lina:', error);
+    throw error;
+  }
 };
 
 /**
@@ -203,45 +169,21 @@ export const fetchLinaHierarchy = async () => {
  * @param {number} eventId - ID do evento
  */
 export const fetchNewsByLinaEventId = async (eventId) => {
-  // Mock data - substituir por consulta real
-  const mockNews = {
-    2: [ // Eleições 2024
-      {
-        id: 1,
-        title: "Candidatos apresentam propostas para educação",
-        link: "https://example.com/news1",
-        texto_final: "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.",
-        created_at: new Date().toISOString()
-      },
-      {
-        id: 2,
-        title: "Pesquisa eleitoral mostra empate técnico",
-        link: "https://example.com/news2",
-        texto_final: "Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.",
-        created_at: new Date(Date.now() - 86400000).toISOString()
-      }
-    ],
-    3: [ // Decisões STF
-      {
-        id: 3,
-        title: "STF julga caso sobre marco temporal",
-        link: "https://example.com/news3",
-        texto_final: "Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur.",
-        created_at: new Date(Date.now() - 172800000).toISOString()
-      }
-    ],
-    5: [ // Taxa de Juros
-      {
-        id: 4,
-        title: "Banco Central mantém taxa de juros em 10,75%",
-        link: "https://example.com/news4",
-        texto_final: "Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.",
-        created_at: new Date(Date.now() - 259200000).toISOString()
-      }
-    ]
-  };
+  try {
+    const { data, error } = await supabase
+      .from('Controle Geral')
+      .select('id, title, link, texto_final, created_at')
+      .eq('lina_event_id', eventId)
+      .order('created_at', { ascending: false });
 
-  // Simular delay de rede
-  await new Promise(resolve => setTimeout(resolve, 300));
-  return mockNews[eventId] || [];
+    if (error) {
+      console.error('Erro ao buscar notícias por evento da Lina:', error);
+      throw error;
+    }
+
+    return data;
+  } catch (error) {
+    console.error('Erro inesperado ao buscar notícias por evento:', error);
+    throw error;
+  }
 };

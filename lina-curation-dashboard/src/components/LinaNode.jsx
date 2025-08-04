@@ -1,9 +1,18 @@
 import React, { useState } from 'react';
-import { ChevronRight, ChevronDown, Folder, Calendar } from 'lucide-react';
+import { ChevronRight, ChevronDown, Folder, FileText } from 'lucide-react';
 
 const LinaNode = ({ node, onEventClick, level = 0 }) => {
   const [isExpanded, setIsExpanded] = useState(false);
   const hasChildren = node.children && node.children.length > 0;
+
+  // Função auxiliar para determinar estilos baseados na estabilidade
+  const getStabilityStyle = (lambda) => {
+    const value = lambda ?? 1.0; // Valor padrão caso seja nulo
+    if (value >= 2.5) return { color: '#34D399', fontWeight: 600 }; // Verde forte (muito estável)
+    if (value >= 1.5) return { color: '#A78BFA' }; // Roxo (estável)
+    if (value >= 0.7) return { color: '#FBBF24', opacity: 0.9 }; // Amarelo (média estabilidade)
+    return { color: '#F87171', opacity: 0.7 }; // Vermelho (baixa estabilidade)
+  };
   
   const handleToggle = () => {
     if (hasChildren) {
@@ -51,20 +60,20 @@ const LinaNode = ({ node, onEventClick, level = 0 }) => {
           )}
         </div>
 
-        {/* Ícone do tipo */}
+        {/* Ícone baseado em se tem filhos ou não */}
         <div className="mr-2 flex-shrink-0">
-          {node.type === 'topic' ? (
+          {hasChildren ? (
             <Folder size={16} style={{ color: 'var(--primary-green)' }} />
           ) : (
-            <Calendar size={16} style={{ color: 'var(--status-info)' }} />
+            <FileText size={16} style={{ color: 'var(--status-info)' }} />
           )}
         </div>
 
         {/* Conteúdo */}
         <div className="flex-1 min-w-0">
           <div 
-            className="font-medium text-sm truncate"
-            style={{ color: 'var(--text-primary)' }}
+            className="text-sm transition-all duration-200 truncate"
+            style={getStabilityStyle(node.lambda_persistence)}
           >
             {node.llm_title}
           </div>

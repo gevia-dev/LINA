@@ -11,4 +11,5 @@ if (!supabaseUrl || !supabaseAnonKey) {
   console.error("Key:", supabaseAnonKey ? 'Definida' : 'Não encontrada');
 }
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+const supabase = createClient(supabaseUrl, supabaseAnonKey);
+export default supabase;

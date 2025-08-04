@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Search, FileText } from 'lucide-react';
 import LinaNode from '../components/LinaNode';
+import DetailsSidebar from '../components/DetailsSidebar';
 import { fetchLinaHierarchy, fetchNewsByLinaEventId } from '../services/contentApi';
 
 const LinaExplorerPage = () => {
@@ -12,6 +13,8 @@ const LinaExplorerPage = () => {
   // Estados para as notícias do evento selecionado
   const [selectedEventNews, setSelectedEventNews] = useState([]);
   const [loadingNews, setLoadingNews] = useState(false);
+  const [selectedNews, setSelectedNews] = useState(null);
+  const [stabilityThreshold, setStabilityThreshold] = useState(1.0);
 
   // Carregar hierarquia quando o componente for montado
   useEffect(() => {
@@ -31,31 +34,38 @@ const LinaExplorerPage = () => {
     loadHierarchy();
   }, []);
 
-  // Função para filtrar a hierarquia com base no termo de busca
-  const filterHierarchy = (nodes, term) => {
-    if (!term) return nodes;
+  // Função para processar hierarquia: filtrar, ordenar e buscar
+  const processHierarchy = (nodes, term, threshold) => {
+    if (!nodes) return [];
 
-    const filteredNodes = [];
-    
-    for (const node of nodes) {
+    // 1. Filtra os nós com base no threshold de estabilidade
+    const stableNodes = nodes.filter(node => (node.lambda_persistence ?? 1.0) >= threshold);
+
+    // 2. Ordena os nós estáveis (maior estabilidade primeiro)
+    stableNodes.sort((a, b) => (b.lambda_persistence ?? 0) - (a.lambda_persistence ?? 0));
+
+    // 3. Aplica a busca textual de forma recursiva
+    if (!term) {
+      return stableNodes.map(node => ({
+        ...node,
+        children: processHierarchy(node.children, term, threshold)
+      }));
+    }
+
+    const searchResults = [];
+    for (const node of stableNodes) {
       const titleMatch = node.llm_title?.toLowerCase().includes(term.toLowerCase());
       const summaryMatch = node.llm_summary?.toLowerCase().includes(term.toLowerCase());
-      
-      let filteredChildren = [];
-      if (node.children) {
-        filteredChildren = filterHierarchy(node.children, term);
-      }
-      
-      // Incluir o nó se ele mesmo corresponde ou se tem filhos que correspondem
-      if (titleMatch || summaryMatch || filteredChildren.length > 0) {
-        filteredNodes.push({
+      const processedChildren = processHierarchy(node.children, term, threshold);
+
+      if (titleMatch || summaryMatch || processedChildren.length > 0) {
+        searchResults.push({
           ...node,
-          children: filteredChildren
+          children: processedChildren
         });
       }
     }
-    
-    return filteredNodes;
+    return searchResults;
   };
 
   // Função para lidar com clique em um evento
@@ -64,6 +74,7 @@ const LinaExplorerPage = () => {
       setLoadingNews(true);
       const news = await fetchNewsByLinaEventId(eventId);
       setSelectedEventNews(news || []);
+      setSelectedNews(null); // Limpar notícia selecionada ao trocar de evento
     } catch (error) {
       console.error('Erro ao carregar notícias do evento:', error);
       setSelectedEventNews([]);
@@ -72,8 +83,13 @@ const LinaExplorerPage = () => {
     }
   };
 
-  // Filtrar hierarquia com base no termo de busca
-  const filteredHierarchy = filterHierarchy(hierarchy, searchTerm);
+  // Função para lidar com clique em uma notícia
+  const handleNewsClick = (news) => {
+    setSelectedNews(news);
+  };
+
+  // Processar hierarquia com filtros de estabilidade e busca
+  const filteredHierarchy = processHierarchy(hierarchy, searchTerm, stabilityThreshold);
 
   return (
     <div 
@@ -105,8 +121,8 @@ const LinaExplorerPage = () => {
           </p>
         </header>
 
-        {/* Layout de duas colunas */}
-        <div className="grid grid-cols-3 gap-6 h-[calc(100vh-200px)]">
+        {/* Layout de três colunas */}
+        <div className="grid grid-cols-4 gap-6 h-[calc(100vh-200px)]">
           {/* Coluna da Esquerda - Hierarquia */}
           <div 
             className="col-span-1 rounded-lg p-6 overflow-hidden flex flex-col"
@@ -156,6 +172,36 @@ const LinaExplorerPage = () => {
                   }}
                 />
               </div>
+              
+              {/* Controle de Estabilidade */}
+              <div className="mt-4 px-1">
+                <label 
+                  htmlFor="stability-slider" 
+                  className="block text-sm font-medium mb-2"
+                  style={{ color: 'var(--text-secondary)' }}
+                >
+                  Estabilidade Mínima: <span 
+                    className="font-bold"
+                    style={{ color: 'var(--text-primary)' }}
+                  >
+                    {stabilityThreshold.toFixed(1)}
+                  </span>
+                </label>
+                <input
+                  id="stability-slider"
+                  type="range"
+                  min="0"
+                  max="5.0"
+                  step="0.1"
+                  value={stabilityThreshold}
+                  onChange={(e) => setStabilityThreshold(parseFloat(e.target.value))}
+                  className="w-full h-2 rounded-lg appearance-none cursor-pointer"
+                  style={{
+                    backgroundColor: 'var(--bg-tertiary)',
+                    accentColor: 'var(--primary-green)'
+                  }}
+                />
+              </div>
             </div>
 
             {/* Árvore de hierarquia */}
@@ -194,7 +240,7 @@ const LinaExplorerPage = () => {
             </div>
           </div>
 
-          {/* Coluna da Direita - Notícias do Evento */}
+          {/* Coluna do Meio - Notícias do Evento */}
           <div 
             className="col-span-2 rounded-lg p-6 overflow-hidden flex flex-col"
             style={{ 
@@ -239,15 +285,20 @@ const LinaExplorerPage = () => {
                       key={news.id}
                       className="rounded-lg p-4 border transition-colors cursor-pointer"
                       style={{
-                        backgroundColor: 'var(--bg-tertiary)',
-                        borderColor: 'var(--border-primary)',
+                        backgroundColor: selectedNews?.id === news.id ? 'var(--primary-green-light)' : 'var(--bg-tertiary)',
+                        borderColor: selectedNews?.id === news.id ? 'var(--primary-green)' : 'var(--border-primary)',
                         borderRadius: '8px'
                       }}
+                      onClick={() => handleNewsClick(news)}
                       onMouseEnter={(e) => {
-                        e.currentTarget.style.borderColor = 'var(--border-secondary)';
+                        if (selectedNews?.id !== news.id) {
+                          e.currentTarget.style.borderColor = 'var(--border-secondary)';
+                        }
                       }}
                       onMouseLeave={(e) => {
-                        e.currentTarget.style.borderColor = 'var(--border-primary)';
+                        if (selectedNews?.id !== news.id) {
+                          e.currentTarget.style.borderColor = 'var(--border-primary)';
+                        }
                       }}
                     >
                       <div className="flex items-start justify-between mb-3">
@@ -290,6 +341,7 @@ const LinaExplorerPage = () => {
                           onMouseLeave={(e) => {
                             e.target.style.color = 'var(--primary-green)';
                           }}
+                          onClick={(e) => e.stopPropagation()} // Evitar que o clique no link selecione a notícia
                         >
                           Ver link original →
                         </a>
@@ -340,6 +392,17 @@ const LinaExplorerPage = () => {
                 </div>
               )}
             </div>
+          </div>
+
+          {/* Coluna da Direita - Detalhes da Notícia Selecionada */}
+          <div 
+            className="col-span-1 rounded-lg overflow-hidden flex flex-col"
+            style={{ 
+              backgroundColor: 'var(--bg-secondary)', 
+              borderRadius: '8px'
+            }}
+          >
+            <DetailsSidebar selectedItem={selectedNews} />
           </div>
         </div>
       </div>

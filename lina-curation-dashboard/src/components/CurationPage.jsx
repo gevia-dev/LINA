@@ -3,7 +3,7 @@ import { useParams } from 'react-router-dom';
 import EditorPanel from './EditorPanel';
 import ContextSidebar from './ContextSidebar';
 import CardModal from './CardModal';
-import { supabase } from '../lib/supabaseClient.js';
+import supabase from '../lib/supabaseClient.js';
 
 const CurationPage = () => {
   const { id } = useParams();
