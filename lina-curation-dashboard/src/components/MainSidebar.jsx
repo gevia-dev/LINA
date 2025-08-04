@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Plus, FileText } from 'lucide-react';
+import { Plus, FileText, Network } from 'lucide-react';
 import { useNavigate, useLocation, NavLink } from 'react-router-dom';
 import LogoutButton from './LogoutButton';
 
@@ -11,12 +11,14 @@ const MainSidebar = () => {
   const getActiveItem = () => {
     if (location.pathname === '/feed') return 'Feed';
     if (location.pathname === '/curation') return 'Create';
+    if (location.pathname === '/explorer') return 'Explorer';
     return 'Feed';
   };
 
   const navigationItems = [
     { name: 'Feed', icon: FileText, path: '/feed' },
-    { name: 'Create', icon: Plus, path: '/curation' }
+    { name: 'Create', icon: Plus, path: '/curation' },
+    { name: 'Explorer', icon: Network, path: '/explorer' }
   ];
 
   return (

@@ -31,16 +31,16 @@
 
 :root {
   /* === CORES PRINCIPAIS === */
-  --primary-green: #38a753  ;
-  --primary-green-hover: none;
-  --primary-green-transparent: #38a75448;
+  --primary-green: #2BB24C;
+  --primary-green-hover: #25A043;
+  --primary-green-transparent: #2BB24C50;
   --primary-green-light: #2BB24C10;
   --primary-green-bg: #2BB24C33;
   --primary-green-selection: #2BB24C08;
 
   /* === BACKGROUNDS === */
   --bg-primary: #121212;        /* Background principal - preto escuro */
-  --bg-secondary: none;      /* Background secundário - cards, painéis */
+  --bg-secondary: #1E1E1E;      /* Background secundário - cards, painéis */
   --bg-tertiary: #2A2A2A;       /* Background terciário - elementos destacados */
   --bg-overlay: rgba(0, 0, 0, 0.15); /* Overlay translúcido */
 

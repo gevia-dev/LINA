@@ -8,6 +8,7 @@ import MainSidebar from './components/MainSidebar';
 import Login from './pages/Login';
 import CurationFeed from './pages/CurationFeed.jsx';
 import CurationPage from './components/CurationPage.jsx';
+import LinaExplorerPage from './components/LinaExplorerPage.jsx';
 
 // Componentes placeholder
 const Dashboard = () => <div className="text-white">Dashboard Principal</div>;
@@ -50,6 +51,13 @@ function App() {
               <ProtectedRoute>
                 <LayoutWithSidebar>
                   <CurationPage />
+                </LayoutWithSidebar>
+              </ProtectedRoute>
+            } />
+            <Route path="/explorer" element={
+              <ProtectedRoute>
+                <LayoutWithSidebar>
+                  <LinaExplorerPage />
                 </LayoutWithSidebar>
               </ProtectedRoute>
             } />
