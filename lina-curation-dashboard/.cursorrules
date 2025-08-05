@@ -1,0 +1,144 @@
+# Lina Curation Dashboard - Cursor Rules
+
+## Contexto do Projeto
+Este é um dashboard de curadoria de notícias com design inspirado no Feedly.
+Stack: React, Tailwind CSS, Framer Motion, Lucide Icons, Supabase
+
+## Padrões de Código
+- Componentes funcionais com TypeScript quando possível
+- Props validation com PropTypes em JS
+- Hooks customizados em src/hooks/
+- Utils em src/utils/
+- Sempre use o design system existente (cores via CSS vars)
+
+## Componentes
+- Um componente por arquivo
+- Nome do arquivo = Nome do componente
+- Mantenha componentes < 150 linhas
+- Extraia lógica complexa para hooks
+
+## Estado e Performance
+- useState para estado local simples
+- useCallback para funções passadas como props
+- useMemo para cálculos pesados
+- React.memo para componentes puros
+
+## Estilo
+- Use style objects inline para valores dinâmicos
+- Classes Tailwind para utilidades
+- CSS vars para cores do tema
+- Sempre respeite o design system
+
+## Design System - Cores
+```css
+:root {
+  --bg-primary: #121212;
+  --bg-secondary: #1E1E1E;
+  --text-primary: #E0E0E0;
+  --text-secondary: #A0A0A0;
+  --accent-green: #2BB24C;
+  --border-color: #333333;
+}
+```
+
+## Tipografia
+- Família: 'Inter'
+- H1: 24px, weight: 700
+- H2: 18px, weight: 600
+- H3: 16px, weight: 500
+- Corpo: 14px, weight: 400
+- Metadados: 12px, weight: 400
+
+## Espaçamentos
+- Cards/Inputs: 12px padding
+- Seções: 24px padding
+- Gaps pequenos: 8px
+- Gaps médios: 16px
+- Gaps grandes: 24px
+
+## Animações (Framer Motion)
+- Duração padrão: 200ms
+- Easing: easeOut
+- Stagger: index * 0.05s
+- Hover: scale(1.01-1.05)
+- Tap: scale(0.95-0.98)
+
+## Melhores Práticas
+- Loading states para todas operações async
+- Error boundaries para erros de runtime
+- Acessibilidade: aria-labels, roles, keyboard nav
+- Mobile-first responsive design
+- Lazy loading para imagens
+- Virtualização para listas grandes
+
+## Estrutura de Arquivos
+```
+src/
+├── components/         # Componentes reutilizáveis
+├── pages/             # Páginas principais
+├── hooks/             # Hooks customizados
+├── utils/             # Funções utilitárias
+├── services/          # APIs e serviços
+├── context/           # Contextos React
+└── lib/               # Configurações externas
+```
+
+## Convenções de Nomenclatura
+- Componentes: PascalCase
+- Hooks: camelCase com prefixo 'use'
+- Utils: camelCase
+- Constantes: UPPER_SNAKE_CASE
+- Variáveis: camelCase
+
+## Git Commits
+- feat: nova funcionalidade
+- fix: correção de bug
+- style: mudanças visuais
+- refactor: refatoração de código
+- perf: melhorias de performance
+- docs: documentação
+- test: testes
+
+## Performance Guidelines
+- Use React.memo para componentes puros
+- Implemente lazy loading para imagens
+- Use virtualização para listas > 50 itens
+- Minimize re-renders com useCallback/useMemo
+- Prefira CSS para animações simples
+
+## Acessibilidade
+- Sempre inclua alt text em imagens
+- Use semantic HTML (article, section, nav)
+- Implemente keyboard navigation
+- Teste com screen readers
+- Contraste mínimo 4.5:1
+
+## Responsividade
+- Mobile-first approach
+- Breakpoints: 640px, 768px, 1024px, 1280px
+- Use grid/flexbox para layouts
+- Teste em dispositivos reais
+
+## Estado Global
+- Context para autenticação
+- localStorage para preferências
+- sessionStorage para dados temporários
+- Minimize prop drilling
+
+## APIs e Dados
+- Use async/await
+- Implemente loading e error states
+- Cache dados quando apropriado
+- Valide dados de entrada
+
+## Testes
+- Teste componentes críticos
+- Mock APIs externas
+- Teste acessibilidade
+- Teste responsividade
+
+## Deploy e Build
+- Otimize imagens antes do build
+- Minimize CSS/JS
+- Use CDN para assets estáticos
+- Configure HTTPS

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { ChevronRight } from 'lucide-react';
 import BubbleChart from '../components/BubbleChart';
+import ArticleDetailsSidebar from '../components/ArticleDetailsSidebar';
 import { fetchLinaHierarchy } from '../services/contentApi';
 
 // Funções de processamento da árvore
@@ -112,10 +113,29 @@ const LinaBubbleExplorerPage = () => {
         setNavigationStack([]);
     }, [processedHierarchy]);
 
-    const handleBubbleClick = (node) => {
-        setNavigationStack([...navigationStack, currentView]);
-        setCurrentView(node);
-    };
+    // Event listeners para comunicação com BubbleChart
+    useEffect(() => {
+        const handleClusterClick = (event) => {
+            const { node } = event.detail;
+            console.log('LinaBubbleExplorerPage: Navegando para cluster', node);
+            
+            setNavigationStack([...navigationStack, currentView]);
+            setCurrentView(node);
+        };
+
+        const handleNavigationComplete = (event) => {
+            const { node } = event.detail;
+            console.log('LinaBubbleExplorerPage: Navegação completa para', node.data);
+        };
+
+        window.addEventListener('bubbleChart:clusterClick', handleClusterClick);
+        window.addEventListener('bubbleChart:navigationComplete', handleNavigationComplete);
+
+        return () => {
+            window.removeEventListener('bubbleChart:clusterClick', handleClusterClick);
+            window.removeEventListener('bubbleChart:navigationComplete', handleNavigationComplete);
+        };
+    }, [navigationStack, currentView]);
 
     const handleBreadcrumbNavigate = (index) => {
         if (index === -1) {
@@ -146,11 +166,14 @@ const LinaBubbleExplorerPage = () => {
                                 childrenLength: currentView.children?.length,
                                 children: currentView.children 
                             })}
-                            <BubbleChart data={currentView.children || []} onBubbleClick={handleBubbleClick} />
+                            <BubbleChart data={currentView.children || []} />
                         </>
                     )}
                 </div>
             </div>
+            
+            {/* Sidebar de detalhes do artigo */}
+            <ArticleDetailsSidebar />
         </div>
     );
 };

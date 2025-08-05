@@ -1,0 +1,20 @@
+# Regras do Projeto - Visualização D3.js
+
+## Princípios de Design
+- Priorize experiência do usuário com transições suaves
+- Use atributos visuais para codificar dados (tamanho, cor, opacidade)
+- Mantenha arquitetura desacoplada com eventos customizados
+- Siga padrões de visualização de dados hierárquicos
+
+## Padrões de Código
+- Use D3.js v7+ para todas as visualizações
+- Implemente transições com d3.transition() para mudanças de estado
+- Use React hooks (useState, useEffect, useRef) para gerenciar estado
+- Emita eventos customizados para comunicação entre componentes
+- Adicione comentários explicando decisões de design visual
+
+## Estrutura de Componentes
+- BubbleChart deve ser um componente puro de visualização
+- Não manipule diretamente outros componentes da UI
+- Use eventos para comunicar interações
+- Mantenha lógica de negócio separada da lógica de visualização 

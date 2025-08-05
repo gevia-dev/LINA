@@ -116,6 +116,8 @@ body {
   border-bottom: 1px solid var(--border-primary);
   flex-shrink: 0;
   width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
 }
 
 /* Header para sidebar (sem padding extra) */
@@ -128,4 +130,37 @@ body {
   border-bottom: 1px solid var(--border-primary);
   flex-shrink: 0;
   width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+/* Garantir que o layout principal se adapte à sidebar */
+.layout-with-sidebar {
+  display: flex;
+  width: 100%;
+  height: 100vh;
+  overflow: hidden;
+}
+
+.layout-content {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+}
+
+/* Garantir que o header se adapte corretamente */
+.header-standard {
+  display: flex;
+  align-items: center;
+  height: 80px;
+  padding: 24px;
+  background-color: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-primary);
+  flex-shrink: 0;
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  position: relative;
 }

@@ -8,21 +8,19 @@ import MainSidebar from './components/MainSidebar';
 
 // Páginas
 import Login from './pages/Login';
-import CurationFeed from './pages/CurationFeed.jsx';
-import CurationPage from './components/CurationPage.jsx';
-import LinaExplorerPage from './components/LinaExplorerPage.jsx';
-import LinaBubbleExplorerPage from './pages/LinaBubbleExplorerPage.jsx'; // Importe a nova página
+import CurationFeed from './pages/CurationFeed';
+import CurationPage from './components/CurationPage';
+import LinaExplorerPage from './components/LinaExplorerPage';
+import LinaBubbleExplorerPage from './pages/LinaBubbleExplorerPage'; // Importe a nova página
 
 // Componentes placeholder
 const UploadPage = () => <div className="text-white">Página de Upload</div>;
 
 // Layout com sidebar
 const LayoutWithSidebar = ({ children }) => (
-  <div className="w-full h-screen flex" style={{ backgroundColor: '#121212' }}>
-    <div className="w-48 flex-shrink-0">
-      <MainSidebar />
-    </div>
-    <div className="flex-1">
+  <div className="layout-with-sidebar" style={{ backgroundColor: '#121212' }}>
+    <MainSidebar />
+    <div className="layout-content">
       {children}
     </div>
   </div>
