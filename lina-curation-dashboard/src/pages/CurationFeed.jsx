@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion';
 import { Toaster } from 'react-hot-toast';
 import { Grid3X3, List, Loader2, X } from 'lucide-react';
-import { fetchNews, fetchNewsFromLinaNews } from '../services/contentApi';
+import { fetchNews, fetchNewsFromLinaNews, fetchCompletedNews, fetchCompletedNewsFromLinaNews } from '../services/contentApi';
 import FeedItem from '../components/FeedItem';
 import FeedItemSkeleton from '../components/FeedItemSkeleton';
 import DetailsSidebar from '../components/DetailsSidebar';
@@ -17,25 +17,34 @@ const CurationFeed = () => {
   const [sidebarVisible, setSidebarVisible] = useState(false);
   const [filterCategory, setFilterCategory] = useState('all');
   const [filterLinaNews, setFilterLinaNews] = useState(false);
+  const [activeTab, setActiveTab] = useState('pending'); // 'pending' ou 'completed'
   const [readItems, setReadItems] = useState(new Set());
   const [visibleItemsCount, setVisibleItemsCount] = useState(20);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const feedContainerRef = useRef(null);
   const { isCompact, toggleViewMode } = useViewMode();
 
-  // Função para carregar notícias baseado no filtro
+  // Função para carregar notícias baseado no filtro e aba ativa
   const loadNews = async () => {
     try {
       setLoading(true);
       setError(null);
       
       let result;
-      if (filterLinaNews) {
-        // Carrega apenas notícias que existem na lina_news
-        result = await fetchNewsFromLinaNews(0, 100);
+      if (activeTab === 'completed') {
+        // Carrega notícias concluídas (isDone == true)
+        if (filterLinaNews) {
+          result = await fetchCompletedNewsFromLinaNews(0, 100);
+        } else {
+          result = await fetchCompletedNews(0, 100);
+        }
       } else {
-        // Carrega todas as notícias normalmente
-        result = await fetchNews(0, 100);
+        // Carrega notícias pendentes (isDone == false) - comportamento original
+        if (filterLinaNews) {
+          result = await fetchNewsFromLinaNews(0, 100);
+        } else {
+          result = await fetchNews(0, 100);
+        }
       }
       
       if (result.data) {
@@ -51,7 +60,7 @@ const CurationFeed = () => {
 
   useEffect(() => {
     loadNews();
-  }, [filterLinaNews]); // Recarrega quando o filtro muda
+  }, [filterLinaNews, activeTab]); // Recarrega quando o filtro ou aba ativa muda
 
   // Filtrar notícias baseado nos filtros selecionados (exceto lina_news que já é filtrado no carregamento)
   const filteredNews = newsItems.filter(item => {
@@ -113,7 +122,7 @@ const CurationFeed = () => {
   // Reset visible items when filters change
   useEffect(() => {
     setVisibleItemsCount(20);
-  }, [filterCategory, filterLinaNews]);
+  }, [filterCategory, filterLinaNews, activeTab]);
 
   // Listener para ESC key
   useEffect(() => {
@@ -223,7 +232,6 @@ const CurationFeed = () => {
         flexShrink: 0
       }}>
         <div className="flex flex-col gap-3">
-          
           {/* Filtros em linha horizontal compacta */}
           <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap', justifyContent: 'space-between', width: '100%' }}>
             {/* Toggle de modo de visualização */}
@@ -332,6 +340,64 @@ const CurationFeed = () => {
         </div>
       </div>
 
+      {/* Sistema de Abas - fora do header */}
+      <div style={{ 
+        width: '100%',
+        backgroundColor: 'var(--bg-primary)',
+        paddingLeft: '0px',
+        paddingRight: '24px',
+        paddingTop: '0px',
+        paddingBottom: '12px',
+        flexShrink: 0
+      }}>
+        <div style={{ display: 'flex', gap: '0px', alignItems: 'end' }}>
+          <motion.button
+            onClick={() => setActiveTab('pending')}
+            whileHover={{ scale: 1.01 }}
+            whileTap={{ scale: 0.99 }}
+            style={{
+              backgroundColor: 'var(--bg-secondary)',
+              color: activeTab === 'pending' ? 'var(--primary-green)' : 'var(--text-secondary)',
+              border: '1px solid var(--border-primary)',
+              borderTop: '1px solid var(--bg-primary)',
+              borderBottom: activeTab === 'pending' ? '1px solid var(--primary-green)' : '1px solid var(--border-primary)',
+              borderRadius: '0 0 0 0',
+              padding: '12px 24px 12px 24px',
+              fontFamily: 'Inter',
+              fontSize: '14px',
+              fontWeight: activeTab === 'pending' ? '600' : '500',
+              cursor: 'pointer',
+              transition: 'all 0.2s'
+            }}
+          >
+            Notícias Pendentes
+          </motion.button>
+          
+          <motion.button
+            onClick={() => setActiveTab('completed')}
+            whileHover={{ scale: 1.01 }}
+            whileTap={{ scale: 0.99 }}
+            style={{
+              backgroundColor: 'var(--bg-secondary)',
+              color: activeTab === 'completed' ? 'var(--primary-green)' : 'var(--text-secondary)',
+              border: '1px solid var(--border-primary)',
+              borderTop: '1px solid var(--bg-primary)',
+              borderBottom: activeTab === 'completed' ? '1px solid var(--primary-green)' : '1px solid var(--border-primary)',
+              borderRadius: '0 0 12px 0',
+              padding: '12px 24px 12px 24px',
+              fontFamily: 'Inter',
+              fontSize: '14px',
+              fontWeight: activeTab === 'completed' ? '600' : '500',
+              cursor: 'pointer',
+              transition: 'all 0.2s',
+              marginLeft: '-1px'
+            }}
+          >
+            Notícias Concluídas
+          </motion.button>
+        </div>
+      </div>
+
       {/* Container Principal com Lista de Notícias */}
       <div className="flex-1 flex" style={{ overflow: 'hidden', minWidth: '0', width: '100%' }}>
         {/* Coluna Central - Lista de Notícias */}
@@ -351,16 +417,21 @@ const CurationFeed = () => {
           <div style={{ maxWidth: '900px', margin: '0 auto', padding: '24px 0', width: '100%' }}>
             {limitedGroupedNews.length === 0 ? (
               <div style={{ textAlign: 'center', padding: '96px 0' }}>
-                              <div style={{ fontSize: '48px', marginBottom: '16px', color: 'var(--text-secondary)' }}>📰</div>
-              <p 
-                style={{ 
-                  color: 'var(--text-secondary)', // Text Secondary do style guide
+                <div style={{ fontSize: '48px', marginBottom: '16px', color: 'var(--text-secondary)' }}>
+                  {activeTab === 'completed' ? '✅' : '📰'}
+                </div>
+                <p 
+                  style={{ 
+                    color: 'var(--text-secondary)', // Text Secondary do style guide
                     fontFamily: 'Inter',
                     fontSize: '18px', // Título de Seção (H2) do style guide
                     fontWeight: '600' // SemiBold (600) do style guide
                   }}
                 >
-                  Nenhuma notícia encontrada.
+                  {activeTab === 'completed' 
+                    ? 'Nenhuma notícia concluída encontrada.'
+                    : 'Nenhuma notícia pendente encontrada.'
+                  }
                 </p>
               </div>
             ) : (
@@ -586,4 +657,5 @@ const CurationFeed = () => {
   );
 };
 
+// Exportação padrão do componente
 export default CurationFeed;

@@ -1,20 +1,44 @@
-# Regras do Projeto - Visualização D3.js
+# Diretrizes do Projeto LINA
 
-## Princípios de Design
-- Priorize experiência do usuário com transições suaves
-- Use atributos visuais para codificar dados (tamanho, cor, opacidade)
-- Mantenha arquitetura desacoplada com eventos customizados
-- Siga padrões de visualização de dados hierárquicos
+## Bibliotecas Principais
+- Usar React Flow (@xyflow/react) como biblioteca principal para canvas interativo
+- Manter sistema Supabase existente para persistência de dados
+- Usar Framer Motion para animações suaves
+- Manter integração com componentes existentes (newsData, ContextSidebar)
 
 ## Padrões de Código
-- Use D3.js v7+ para todas as visualizações
-- Implemente transições com d3.transition() para mudanças de estado
-- Use React hooks (useState, useEffect, useRef) para gerenciar estado
-- Emita eventos customizados para comunicação entre componentes
-- Adicione comentários explicando decisões de design visual
+- Manter componentes pequenos e testáveis
+- Seguir functional programming, evitar classes
+- Usar TypeScript rigoroso para melhor tipagem
+- Implementar early returns para tratamento de erros
+- Usar React hooks (useState, useEffect, useRef, useCallback)
 
-## Estrutura de Componentes
-- BubbleChart deve ser um componente puro de visualização
-- Não manipule diretamente outros componentes da UI
-- Use eventos para comunicar interações
-- Mantenha lógica de negócio separada da lógica de visualização 
+## Gerenciamento de Estado
+- NUNCA usar localStorage - apenas React state em memória
+- Manter estado controlado via props quando possível
+- Usar eventos customizados para comunicação entre componentes
+- Preservar funcionalidades de edição inline existentes
+
+## Compatibilidade
+- Manter compatibilidade total com newsData e sistema Supabase existente
+- Preservar todas as funcionalidades de transferência de blocos
+- Manter integração com ContextSidebar e CardModal
+- Preservar formatação de texto e toolbar de seleção
+
+## Componentes Canvas
+- Usar ReactFlow com Background (grid), Controls e MiniMap habilitados por padrão
+- Implementar nodes customizados para blocos de conteúdo
+- Manter funcionalidades de drag & drop entre painéis
+- Preservar animações e transições suaves
+
+## Estrutura de Arquivos
+- Manter separação clara entre lógica de visualização e negócio
+- Usar arquitetura desacoplada com eventos customizados
+- Adicionar comentários explicando decisões de design
+- Seguir padrões de nomenclatura existentes
+
+## Experiência do Usuário
+- Priorizar transições suaves e feedback visual
+- Manter consistência visual com design system existente
+- Preservar atalhos de teclado e interações intuitivas
+- Garantir responsividade e performance adequada

@@ -1,11 +1,15 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams } from 'react-router-dom';
-import AdvancedCanvasEditor from './AdvancedCanvasEditor';
+import CanvasEditorV2 from './CanvasEditorV2';
 import ContextSidebar from './ContextSidebar';
 import CardModal from './CardModal';
 import supabase from '../lib/supabaseClient.js';
 
-const CurationPage = () => {
+/**
+ * CurationPage com Canvas - Versão que usa CanvasEditorV2
+ * Demonstra como integrar o novo sistema de canvas com ReactFlow
+ */
+const CurationPageWithCanvas = () => {
   const { id } = useParams();
   const [newsData, setNewsData] = useState(null);
   const [newsTitle, setNewsTitle] = useState(null);
@@ -293,9 +297,9 @@ const CurationPage = () => {
 
   return (
     <div className="w-full h-screen flex" style={{ backgroundColor: 'var(--bg-primary)', overflow: 'hidden' }}>
-      {/* Coluna Central - Editor */}
+      {/* Coluna Central - Canvas Editor */}
       <div className="flex-1 min-w-0" ref={editorPanelRef}>
-        <AdvancedCanvasEditor 
+        <CanvasEditorV2 
           newsId={id} 
           newsData={newsData}
           newsTitle={newsTitle}
@@ -332,4 +336,4 @@ const CurationPage = () => {
   );
 };
 
-export default CurationPage;
+export default CurationPageWithCanvas; 

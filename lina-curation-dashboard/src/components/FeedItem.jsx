@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
-import { Bookmark, Share2, Clock, Sparkles, BookmarkCheck } from 'lucide-react';
+import { Bookmark, Share2, Clock, Sparkles, BookmarkCheck, ChevronDown, ChevronUp } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import SourceAvatar from './SourceAvatar';
 import LazyImage from './LazyImage';
@@ -13,7 +13,17 @@ import linaPfp from '../assets/imgs/lina_pfp.png';
 const FeedItem = ({ item, isSelected, onClick, onMarkAsRead, index = 0, isCompact = false }) => {
   const [isRead, setIsRead] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(false);
+  const [isTextTruncated, setIsTextTruncated] = useState(false);
   const elementRef = useRef(null);
+  const previewRef = useRef(null);
+
+  // Calcular propriedades da notícia
+  const isNew = isNewsNew(item.created_at || item.published_at);
+  const preview = extractPreview(item.structured_summary, '');
+  const readTime = calculateReadTime(item.title + ' ' + preview);
+  const relativeTime = getRelativeTime(item.created_at || item.published_at);
+  const { Icon: ContextIcon, color: iconColor, tooltip } = getContextualIcon(item);
 
   // Inicializar estados
   useEffect(() => {
@@ -22,6 +32,14 @@ const FeedItem = ({ item, isSelected, onClick, onMarkAsRead, index = 0, isCompac
     setIsRead(readItems.includes(item.id));
     setIsSaved(savedItems.includes(item.id));
   }, [item.id]);
+
+  // Verificar se o texto está sendo truncado (apenas quando não está expandido)
+  useEffect(() => {
+    if (previewRef.current && preview && !isExpanded) {
+      const element = previewRef.current;
+      setIsTextTruncated(element.scrollHeight > element.clientHeight);
+    }
+  }, [preview, isExpanded]);
 
   // Intersection Observer para marcar como lido
   useEffect(() => {
@@ -65,13 +83,6 @@ const FeedItem = ({ item, isSelected, onClick, onMarkAsRead, index = 0, isCompac
     return () => observer.disconnect();
   }, [item.id, isRead, onMarkAsRead]);
 
-  // Calcular propriedades da notícia
-  const isNew = isNewsNew(item.created_at || item.published_at);
-  const preview = extractPreview(item.structured_summary, '');
-  const readTime = calculateReadTime(item.title + ' ' + preview);
-  const relativeTime = getRelativeTime(item.created_at || item.published_at);
-  const { Icon: ContextIcon, color: iconColor, tooltip } = getContextualIcon(item);
-
   // Ações
   const handleSave = (e) => {
     e.stopPropagation();
@@ -110,6 +121,11 @@ const FeedItem = ({ item, isSelected, onClick, onMarkAsRead, index = 0, isCompac
         }
       });
     }
+  };
+
+  const handleExpand = (e) => {
+    e.stopPropagation();
+    setIsExpanded(!isExpanded);
   };
 
   // Animações do Framer Motion
@@ -306,21 +322,84 @@ const FeedItem = ({ item, isSelected, onClick, onMarkAsRead, index = 0, isCompac
           
           {/* Preview (apenas no modo normal) */}
           {!isCompact && preview && (
-            <div style={{
-              color: 'var(--text-secondary)',
-                  fontFamily: 'Inter',
-              fontSize: '13px',
-              fontWeight: '400',
-                  marginBottom: '8px',
-              lineHeight: '1.4',
-                  display: '-webkit-box',
-                  WebkitLineClamp: 2,
-                  WebkitBoxOrient: 'vertical',
-                  overflow: 'hidden',
-              textOverflow: 'ellipsis'
-            }}>
+            <motion.div 
+              ref={previewRef}
+              style={{
+                color: 'var(--text-secondary)',
+                fontFamily: 'Inter',
+                fontSize: '13px',
+                fontWeight: '400',
+                marginBottom: '8px',
+                lineHeight: '1.4',
+                display: isExpanded ? 'block' : '-webkit-box',
+                WebkitLineClamp: isExpanded ? 'unset' : 2,
+                WebkitBoxOrient: isExpanded ? 'unset' : 'vertical',
+                overflow: isExpanded ? 'visible' : 'hidden',
+                textOverflow: isExpanded ? 'unset' : 'ellipsis'
+              }}
+              animate={{
+                opacity: 1
+              }}
+              transition={{ duration: 0.3, ease: 'easeInOut' }}
+            >
               {preview}
-            </div>
+            </motion.div>
+          )}
+          
+          {/* Botão expandir (apenas quando o texto está sendo truncado e não expandido) */}
+          {!isCompact && preview && isTextTruncated && !isExpanded && (
+            <motion.button
+              onClick={handleExpand}
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              style={{
+                background: 'none',
+                border: 'none',
+                color: 'var(--primary-green)',
+                cursor: 'pointer',
+                padding: '4px 8px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px',
+                borderRadius: '4px',
+                fontSize: '12px',
+                fontWeight: '500',
+                marginBottom: '8px',
+                alignSelf: 'flex-start',
+                transition: 'all 0.2s ease'
+              }}
+            >
+              <ChevronDown size={12} />
+              Ler mais
+            </motion.button>
+          )}
+
+          {/* Botão recolher (apenas quando expandido) */}
+          {!isCompact && preview && isExpanded && (
+            <motion.button
+              onClick={handleExpand}
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              style={{
+                background: 'none',
+                border: 'none',
+                color: 'var(--primary-green)',
+                cursor: 'pointer',
+                padding: '4px 8px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px',
+                borderRadius: '4px',
+                fontSize: '12px',
+                fontWeight: '500',
+                marginBottom: '8px',
+                alignSelf: 'flex-start',
+                transition: 'all 0.2s ease'
+              }}
+            >
+              <ChevronUp size={12} />
+              Recolher
+            </motion.button>
           )}
           
           {/* Footer (apenas no modo normal) */}

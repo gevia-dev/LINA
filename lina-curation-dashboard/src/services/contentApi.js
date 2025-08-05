@@ -14,6 +14,7 @@ export const fetchNews = async (page = 0, limit = 50) => {
     .from('Controle Geral') // Tabela "Controle Geral"
     .select('*', { count: 'exact' })
     .eq('is_archive', false) // Apenas notícias não arquivadas
+    .eq('isDone', false) // Apenas notícias que não estão concluídas
     .not('created_at', 'is', null) // Excluir registros com created_at nulo
     .order('created_at', { ascending: false }) // Ordem decrescente por created_at
     .range(from, to);
@@ -39,6 +40,7 @@ export const fetchPendingNews = async (page = 0, limit = 20) => {
     .from('Controle Geral') // Tabela "Controle Geral"
     .select('*')
     .eq('status', 'pending')
+    .eq('isDone', false) // Apenas notícias que não estão concluídas
     .not('created_at', 'is', null) // Excluir registros com created_at nulo
     .order('created_at', { ascending: false }) // Ordem decrescente por created_at
     .range(from, to);
@@ -130,6 +132,7 @@ export const fetchNewsFromLinaNews = async (page = 0, limit = 50) => {
     .select('*', { count: 'exact' })
     .in('id', newsIds)
     .eq('is_archive', false)
+    .eq('isDone', false) // Apenas notícias que não estão concluídas
     .not('created_at', 'is', null)
     .order('created_at', { ascending: false });
 
@@ -202,6 +205,7 @@ export const fetchNewsByLinaEventId = async (eventId) => {
       .from('Controle Geral')
       .select('id, title, link, texto_final, created_at')
       .eq('lina_event_id', eventId)
+      .eq('isDone', false) // Apenas notícias que não estão concluídas
       .order('created_at', { ascending: false });
 
     if (error) {
@@ -238,4 +242,141 @@ export const fetchLinaEventById = async (eventId) => {
     console.error('Erro inesperado ao buscar evento:', error);
     throw error;
   }
+};
+
+/**
+ * Busca uma notícia específica por ID da tabela "Controle Geral".
+ * @param {string} newsId - O ID da notícia.
+ */
+export const fetchNewsById = async (newsId) => {
+  try {
+    const { data, error } = await supabase
+      .from('Controle Geral')
+      .select('*')
+      .eq('id', newsId)
+      .single();
+
+    if (error) {
+      console.error('Erro ao buscar notícia por ID:', error);
+      throw error;
+    }
+
+    return data;
+  } catch (error) {
+    console.error('Erro inesperado ao buscar notícia por ID:', error);
+    throw error;
+  }
+};
+
+/**
+ * Atualiza o texto de uma notícia na tabela "Controle Geral".
+ * @param {string} newsId - O ID da notícia.
+ * @param {string} textoFinal - O novo texto da notícia.
+ */
+export const updateNewsText = async (newsId, textoFinal) => {
+  try {
+    const { data, error } = await supabase
+      .from('Controle Geral')
+      .update({ 
+        texto_final: textoFinal,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', newsId)
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Erro ao atualizar texto da notícia:', error);
+      throw error;
+    }
+
+    return data;
+  } catch (error) {
+    console.error('Erro inesperado ao atualizar texto da notícia:', error);
+    throw error;
+  }
+};
+
+/**
+ * Busca as notícias concluídas do banco de dados, com paginação.
+ * @param {number} page - A página de resultados.
+ * @param {number} limit - O número de itens por página.
+ */
+export const fetchCompletedNews = async (page = 0, limit = 50) => {
+  const from = page * limit;
+  const to = from + limit - 1;
+
+  // Busca notícias que estão marcadas como concluídas (isDone == true)
+  const { data, error, count } = await supabase
+    .from('Controle Geral') // Tabela "Controle Geral"
+    .select('*', { count: 'exact' })
+    .eq('is_archive', false) // Apenas notícias não arquivadas
+    .eq('isDone', true) // Apenas notícias que estão concluídas
+    .not('created_at', 'is', null) // Excluir registros com created_at nulo
+    .order('created_at', { ascending: false }) // Ordem decrescente por created_at
+    .range(from, to);
+
+  if (error) {
+    console.error('Error fetching completed news:', error);
+    throw new Error(error.message);
+  }
+
+  return { data, error, count };
+};
+
+/**
+ * Busca notícias concluídas que existem na tabela lina_news fazendo join com Controle Geral.
+ * @param {number} page - A página de resultados.
+ * @param {number} limit - O número de itens por página.
+ */
+export const fetchCompletedNewsFromLinaNews = async (page = 0, limit = 50) => {
+  const from = page * limit;
+  const to = from + limit - 1;
+
+  // Busca primeiro os news_ids e ids da lina_news
+  const { data: linaNewsData, error: linaError } = await supabase
+    .from('lina_news')
+    .select('id, news_id')
+    .range(from, to);
+
+  if (linaError) {
+    console.error('Error fetching lina_news:', linaError);
+    throw new Error(linaError.message);
+  }
+
+  if (!linaNewsData || linaNewsData.length === 0) {
+    return { data: [], error: null, count: 0 };
+  }
+
+  // Cria um mapa para relacionar news_id com lina_news_id
+  const linaNewsMap = {};
+  linaNewsData.forEach(item => {
+    linaNewsMap[item.news_id] = item.id;
+  });
+
+  // Extrai os IDs
+  const newsIds = linaNewsData.map(item => item.news_id);
+
+  // Busca as notícias correspondentes na tabela Controle Geral (apenas concluídas)
+  const { data, error, count } = await supabase
+    .from('Controle Geral')
+    .select('*', { count: 'exact' })
+    .in('id', newsIds)
+    .eq('is_archive', false)
+    .eq('isDone', true) // Apenas notícias que estão concluídas
+    .not('created_at', 'is', null)
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    console.error('Error fetching completed news from Controle Geral:', error);
+    throw new Error(error.message);
+  }
+
+  // Adiciona o lina_news_id a cada notícia
+  const enrichedData = data?.map(item => ({
+    ...item,
+    lina_news_id: linaNewsMap[item.id]
+  })) || [];
+
+  return { data: enrichedData, error, count };
 };

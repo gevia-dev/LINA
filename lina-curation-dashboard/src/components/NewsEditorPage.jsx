@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { fetchNewsById, updateNewsText } from '../services/dataService';
+import { fetchNewsById, updateNewsText } from '../services/contentApi';
 import { ArrowLeft } from 'lucide-react';
 import { marked } from 'marked';
 import AddBlockButton from '../components/AddBlockButton';

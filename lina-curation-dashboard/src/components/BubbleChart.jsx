@@ -38,6 +38,11 @@ const BubbleChart = ({ data }) => {
   const [hoveredNode, setHoveredNode] = useState(null);
   const [tooltipData, setTooltipData] = useState(null);
   
+  // Estados para zoom semântico
+  const [viewBox, setViewBox] = useState({ x: 0, y: 0, width: dimensions.width, height: dimensions.height });
+  const [scale, setScale] = useState(1);
+  const [focusedNode, setFocusedNode] = useState(null);
+  
   // Estados para otimizações de performance
   const [currentZoom, setCurrentZoom] = useState({ k: 1, x: 0, y: 0 });
   const [visibleNodes, setVisibleNodes] = useState([]);
@@ -45,6 +50,7 @@ const BubbleChart = ({ data }) => {
   // Refs para debounce e throttle
   const hoverTimeoutRef = useRef(null);
   const zoomTimeoutRef = useRef(null);
+  const tooltipRef = useRef(null);
   
   // Função helper para obter caminho na hierarquia
   const getNodePath = (node) => {
@@ -146,10 +152,34 @@ const BubbleChart = ({ data }) => {
     return text.length > maxChars ? text.substring(0, maxChars) + '...' : text;
   };
   
-  // Função para determinar se deve mostrar rótulo
+  // Função para determinar se deve mostrar rótulo (refinada)
   const shouldShowLabel = (node) => {
-    return node.r >= MIN_RADIUS_FOR_LABEL;
+    return node.r > 25; // Mostrar apenas em bolhas grandes
   };
+  
+  // Função para criar tooltip detalhado
+  const createTooltip = useCallback(() => {
+    // Remove tooltip anterior se existir
+    d3.select('body').selectAll('.bubble-tooltip').remove();
+    
+    // Criar container do tooltip
+    const tooltip = d3.select('body').append('div')
+      .attr('class', 'bubble-tooltip')
+      .style('opacity', 0)
+      .style('position', 'absolute')
+      .style('padding', '10px')
+      .style('background', 'rgba(0, 0, 0, 0.9)')
+      .style('color', 'white')
+      .style('border-radius', '8px')
+      .style('pointer-events', 'none')
+      .style('font-size', '12px')
+      .style('max-width', '250px')
+      .style('z-index', '1000')
+      .style('box-shadow', '0 4px 12px rgba(0, 0, 0, 0.3)');
+    
+    tooltipRef.current = tooltip;
+    return tooltip;
+  }, []);
   
   // Função para calcular tamanho da fonte baseado na hierarquia
   const getFontSize = (node) => {
@@ -184,12 +214,12 @@ const BubbleChart = ({ data }) => {
     };
   }, []);
   
-  // Memoização da hierarquia processada
+    // Memoização da hierarquia processada
   const processedHierarchy = useMemo(() => {
     if (!data || data.length === 0) return null;
     
     console.log('BubbleChart: Processando hierarquia (memoizado)', { dataLength: data.length });
-
+    
     // Filtra dados inválidos
     const validData = data.filter(d => d && (d.llm_title || d.id));
     
@@ -197,80 +227,134 @@ const BubbleChart = ({ data }) => {
     const root = d3.hierarchy({ children: validData })
       .sum(d => d.lambda_persistence || 1)
       .sort((a, b) => b.value - a.value);
-
-    // Calcula profundidade máxima para escala de cores
-    const maxDepth = d3.max(root.descendants(), d => d.depth);
     
-    // Escala de cores baseada na profundidade hierárquica
-    const colorScale = d3.scaleSequential(COLOR_SCHEME)
-      .domain([0, maxDepth || 1]);
+    // Calcula profundidade máxima para escala de cores baseada apenas nos filhos diretos
+    const directChildren = root.children || [];
+    const maxDepth = directChildren.length > 0 ? 
+      d3.max(directChildren, d => d.depth) : 0;
+    
+    // Escala de cores baseada na profundidade hierárquica com cores mais saturadas
+    const colorScale = d3.scaleSequential(d3.interpolateBlues)
+      .domain([0, Math.max(maxDepth, 1)])
+      .range(['#BBDEFB', '#1565C0']); // Azul mais saturado
     
     const pack = d3.pack()
       .size([dimensions.width, dimensions.height])
       .padding(BUBBLE_PADDING);
-
-    const nodes = pack(root).descendants();
-
+    
+    // Aplica pack layout no nó raiz
+    const packedRoot = pack(root);
+    
+    // Renderizar apenas os filhos diretos do nó atual
+    const nodesToRender = packedRoot.children || [];
+    
+    // Debug: verificar estrutura dos dados
+    console.log('BubbleChart: Estrutura dos dados', {
+      packedRoot: {
+        hasChildren: !!packedRoot.children,
+        childrenCount: packedRoot.children ? packedRoot.children.length : 0
+      },
+      nodesToRender: nodesToRender.map(n => ({
+        title: n.data.llm_title,
+        hasChildren: !!n.children,
+        childrenCount: n.children ? n.children.length : 0,
+        dataKeys: Object.keys(n.data || {})
+      }))
+    });
+    
+    console.log('BubbleChart: Nós para renderizar', { 
+      totalChildren: nodesToRender.length,
+      sampleNodes: nodesToRender.slice(0, 3).map(n => ({
+        title: n.data.llm_title,
+        hasChildren: !!n.children,
+        radius: n.r
+      }))
+    });
+    
     return {
-      root,
-      nodes: nodes.slice(1), // Remove nó raiz
+      root: packedRoot,
+      nodes: nodesToRender, // Apenas filhos diretos
       colorScale,
       validDataLength: validData.length
     };
   }, [data, dimensions]);
   
-  // Função para animação de zoom semântico
-  const animateTransition = (targetNode) => {
-    if (isTransitioning) return; // Previne múltiplas transições simultâneas
+  // Função para zoom semântico com transição suave
+  const zoomToNode = useCallback((node) => {
+    if (isTransitioning) return;
+    
+    console.log('BubbleChart: Iniciando zoom para nó', node);
     
     setIsTransitioning(true);
+    setFocusedNode(node);
+    
     const svg = d3.select(svgRef.current);
     
-    // Calcula nova viewport baseada no nó alvo
-    const targetX = targetNode.x;
-    const targetY = targetNode.y;
-    const targetRadius = targetNode.r;
+    // Calcular bounds do nó alvo com padding maior
+    const padding = node.r * 0.5; // Padding de 50% para melhor visualização
+    const newViewBox = {
+      x: node.x - node.r - padding,
+      y: node.y - node.r - padding,
+      width: (node.r * 2) + (padding * 2),
+      height: (node.r * 2) + (padding * 2)
+    };
     
-    // Calcula escala para que o cluster ocupe 80% da viewport
-    const scale = Math.min(
-      (dimensions.width * ZOOM_SCALE_FACTOR) / (targetRadius * 2),
-      (dimensions.height * ZOOM_SCALE_FACTOR) / (targetRadius * 2)
-    );
+    console.log('BubbleChart: Novo viewBox', newViewBox);
     
-    // Calcula translação para centralizar o nó
-    const translateX = dimensions.width / 2 - targetX * scale;
-    const translateY = dimensions.height / 2 - targetY * scale;
+    // Fade out dos nós atuais
+    svg.selectAll('.node-group')
+      .transition()
+      .duration(TRANSITION_DURATION / 3)
+      .style('opacity', 0);
     
-    // Aplicar transformação de zoom com transição suave
-    const transition = svg.transition()
+    // Animar transição do viewBox
+    svg.transition()
       .duration(TRANSITION_DURATION)
       .ease(d3.easeCubicInOut)
+      .attr('viewBox', `${newViewBox.x} ${newViewBox.y} ${newViewBox.width} ${newViewBox.height}`)
+      .on('start', () => {
+        console.log('BubbleChart: Iniciando animação de zoom');
+        // Desabilitar interações durante animação
+        svg.style('pointer-events', 'none');
+      })
       .on('end', () => {
+        console.log('BubbleChart: Animação de zoom concluída');
+        // Re-habilitar interações
+        svg.style('pointer-events', 'auto');
         setIsTransitioning(false);
-        // Emite evento de navegação completa
-        dispatchNodeEvent('bubbleChart:navigationComplete', targetNode, {
-          scale,
-          translateX,
-          translateY
+        
+        // Atualizar estado do viewBox
+        setViewBox(newViewBox);
+        setScale(dimensions.width / newViewBox.width);
+        
+        // Disparar evento de navegação completa
+        dispatchNodeEvent('bubbleChart:navigationComplete', node, {
+          viewBox: newViewBox,
+          scale: dimensions.width / newViewBox.width
         });
       });
+  }, [dimensions, isTransitioning, dispatchNodeEvent]);
+  
+  // Função para reset do zoom
+  const resetZoom = useCallback(() => {
+    if (isTransitioning) return;
     
-    // Fade out dos nós que saem de foco
-    svg.selectAll('g')
-      .transition(transition)
-      .style('opacity', d => {
-        // Mantém visibilidade dos nós próximos ao alvo
-        const distance = Math.sqrt(
-          Math.pow(d.x - targetX, 2) + Math.pow(d.y - targetY, 2)
-        );
-        return distance <= targetRadius * 2 ? 1 : 0.3;
+    setIsTransitioning(true);
+    setFocusedNode(null);
+    
+    const svg = d3.select(svgRef.current);
+    const defaultViewBox = { x: 0, y: 0, width: dimensions.width, height: dimensions.height };
+    
+    svg.transition()
+      .duration(500)
+      .ease(d3.easeCubicOut)
+      .attr('viewBox', `0 0 ${dimensions.width} ${dimensions.height}`)
+      .on('end', () => {
+        setIsTransitioning(false);
+        setViewBox(defaultViewBox);
+        setScale(1);
       });
-      
-    // Aplicar zoom transform
-    svg.select('.zoom-group')
-      .transition(transition)
-      .attr('transform', `translate(${translateX},${translateY}) scale(${scale})`);
-  };
+  }, [dimensions, isTransitioning]);
 
   useEffect(() => {
     if (!processedHierarchy || !svgRef.current) {
@@ -282,60 +366,94 @@ const BubbleChart = ({ data }) => {
     
     console.log('BubbleChart: Renderizando com hierarquia memoizada', { 
       validDataLength,
-      nodesLength: nodes.length
+      nodesLength: nodes.length,
+      sampleNodes: nodes.slice(0, 3).map(n => ({
+        title: n.data.llm_title,
+        hasChildren: !!n.children,
+        childrenCount: n.children ? n.children.length : 0,
+        radius: n.r,
+        depth: n.depth
+      }))
     });
 
     const svg = d3.select(svgRef.current);
     svg.selectAll('*').remove(); // Limpa o SVG anterior
     
+    // Configura viewBox inicial
+    svg.attr('viewBox', `${viewBox.x} ${viewBox.y} ${viewBox.width} ${viewBox.height}`);
+    
     // Cria grupo principal para zoom
     const zoomGroup = svg.append('g').attr('class', 'zoom-group');
+    
+    // Cria tooltip
+    const tooltip = createTooltip();
     
     // Atualiza nós visíveis na inicialização
     const initialVisibleNodes = getVisibleNodes(nodes, currentZoom);
     setVisibleNodes(initialVisibleNodes);
 
     const nodeElements = zoomGroup.selectAll('g')
-      .data(nodes.slice(1)) // Ignora o nó raiz
+      .data(nodes) // Usar apenas filhos diretos, não slice(1)
       .enter()
       .append('g')
       .attr('transform', d => `translate(${d.x},${d.y})`)
+      .attr('class', d => {
+        const baseClass = 'node-group';
+        const typeClass = d.children && d.children.length > 0 ? 'cluster-node' : 'leaf-node';
+        return `${baseClass} ${typeClass}`;
+      })
       .style('cursor', d => {
         if (isTransitioning) return 'wait';
-        return d.children ? 'pointer' : 'default';
+        return d.children && d.children.length > 0 ? 'pointer' : 'default';
       })
       .on('click', (event, d) => {
         if (isTransitioning) return; // Desabilita cliques durante transição
         
+        console.log('BubbleChart: Clique detectado no nó', d);
+        
         // Determina tipo do nó e emite evento apropriado
-        if (d.children && d.children.length > 0) {
-          // É um cluster - emite evento de cluster e inicia animação
+        const hasChildren = d.children && d.children.length > 0;
+        const hasDataChildren = d.data && d.data.children && d.data.children.length > 0;
+        console.log('BubbleChart: Nó tem filhos?', { 
+          hasChildren, 
+          hasDataChildren, 
+          children: d.children,
+          dataChildren: d.data?.children 
+        });
+        
+        if (hasChildren || hasDataChildren) {
+          // É um cluster - emite evento de cluster e inicia zoom
+          event.stopPropagation();
+          console.log('BubbleChart: Clique em cluster, iniciando zoom');
           dispatchNodeEvent('bubbleChart:clusterClick', d);
-          animateTransition(d);
+          zoomToNode(d); // Usar zoom animado em vez de callback direto
         } else {
           // É uma folha (notícia individual) - emite evento de folha
+          console.log('BubbleChart: Clique em folha');
           dispatchNodeEvent('bubbleChart:leafClick', d);
         }
       })
-      .on('mouseenter', debouncedHover((event, d) => {
+      .on('mouseover', (event, d) => {
         if (isTransitioning) return;
         
         setHoveredNode(d);
         
-        // Prepara dados do tooltip
-        const tooltip = {
-          title: d.data.llm_title || d.data.id || 'Sem título',
-          summary: d.data.llm_summary ? 
-            d.data.llm_summary.substring(0, 100) + (d.data.llm_summary.length > 100 ? '...' : '') : 
-            'Sem resumo disponível',
-          lambda_persistence: d.data.lambda_persistence || 0,
-          childrenCount: d.children ? d.children.length : 0,
-          depth: d.depth,
-          x: event.pageX,
-          y: event.pageY
-        };
-        
-        setTooltipData(tooltip);
+        // Mostrar tooltip apenas para nós pequenos ou ao segurar Shift
+        if (d.r <= 25 || event.shiftKey) {
+          tooltip.transition().duration(200).style('opacity', 0.9);
+          
+          const content = `
+            <strong>${d.data.llm_title || 'Sem título'}</strong><br/>
+            ${d.data.llm_summary ? d.data.llm_summary.substring(0, 100) + '...' : 'Sem resumo disponível'}<br/>
+            <hr style="margin: 5px 0; opacity: 0.3; border-color: rgba(255,255,255,0.3)"/>
+            <span style="color: #4FC3F7;">Estabilidade:</span> ${(d.data.lambda_persistence || 0).toFixed(2)}<br/>
+            <span style="color: #4FC3F7;">${d.children ? `Contém ${d.children.length} itens` : 'Item individual'}</span>
+          `;
+          
+          tooltip.html(content)
+            .style('left', (event.pageX + 15) + 'px')
+            .style('top', (event.pageY - 28) + 'px');
+        }
         
         // Emite evento de hover
         dispatchNodeEvent('bubbleChart:hover', d, {
@@ -345,20 +463,24 @@ const BubbleChart = ({ data }) => {
         
         // Mostra rótulo temporário se não estava visível
         if (!shouldShowLabel(d)) {
-          const textElement = d3.select(event.currentTarget).select('text');
-          textElement
-            .style('opacity', 0)
-            .style('display', 'block')
-            .transition()
-            .duration(TEXT_ANIMATION_DURATION)
-            .style('opacity', 1);
+          const textElement = d3.select(event.currentTarget).select('.node-label');
+          if (!textElement.empty()) {
+            textElement
+              .style('opacity', 0)
+              .style('display', 'block')
+              .transition()
+              .duration(TEXT_ANIMATION_DURATION)
+              .style('opacity', 1);
+          }
         }
-      }, HOVER_DEBOUNCE_DELAY))
-      .on('mouseleave', (event, d) => {
+      })
+      .on('mouseout', (event, d) => {
         if (isTransitioning) return;
         
         setHoveredNode(null);
-        setTooltipData(null);
+        
+        // Esconde tooltip
+        tooltip.transition().duration(500).style('opacity', 0);
         
         // Emite evento de hover (saindo)
         dispatchNodeEvent('bubbleChart:hover', d, {
@@ -368,14 +490,16 @@ const BubbleChart = ({ data }) => {
         
         // Esconde rótulo temporário se não deveria estar visível
         if (!shouldShowLabel(d)) {
-          const textElement = d3.select(event.currentTarget).select('text');
-          textElement
-            .transition()
-            .duration(TEXT_ANIMATION_DURATION)
-            .style('opacity', 0)
-            .on('end', function() {
-              d3.select(this).style('display', 'none');
-            });
+          const textElement = d3.select(event.currentTarget).select('.node-label');
+          if (!textElement.empty()) {
+            textElement
+              .transition()
+              .duration(TEXT_ANIMATION_DURATION)
+              .style('opacity', 0)
+              .on('end', function() {
+                d3.select(this).style('display', 'none');
+              });
+          }
         }
       })
       .on('mousemove', (event) => {
@@ -393,34 +517,72 @@ const BubbleChart = ({ data }) => {
       .attr('r', d => Math.max(MIN_BUBBLE_SIZE, Math.min(MAX_BUBBLE_SIZE, d.r))) // Aplica limites de tamanho
       .attr('fill', d => colorScale(d.depth)) // Usa profundidade para cor em vez de lambda_persistence
       .attr('stroke', '#fff')
-      .attr('stroke-width', 1.5)
+      .attr('stroke-width', d => d.children && d.children.length > 0 ? 2 : 1) // Borda mais grossa para clusters
       .attr('opacity', 0) // Inicia invisível
       .transition()
       .duration(TRANSITION_DURATION / 2)
       .ease(d3.easeQuadOut)
-      .attr('opacity', 0.8); // Fade in suave
+      .attr('opacity', 1.0) // Opacidade total - sem transparência para evitar sobreposição
+      .on('end', function() {
+        // Adicionar hover effect após animação
+        d3.select(this)
+          .on('mouseenter', function() {
+            d3.select(this).attr('stroke-width', d => (d.children && d.children.length > 0 ? 3 : 2));
+          })
+          .on('mouseleave', function() {
+            d3.select(this).attr('stroke-width', d => (d.children && d.children.length > 0 ? 2 : 1));
+          });
+      });
 
-    // Adiciona texto com sistema inteligente de rótulos
-    nodeElements.append('text')
+    // Sistema de rótulos adaptativos
+    nodeElements
+      .filter(shouldShowLabel)
+      .append('text')
+      .attr('class', 'node-label')
       .attr('dy', '0.3em')
       .style('text-anchor', 'middle')
-      .style('font-size', d => `${getFontSize(d)}px`)
-      .style('font-weight', d => getFontWeight(d))
+      .style('font-size', d => {
+        // Tamanho adaptativo baseado no raio
+        const size = Math.min(16, Math.max(10, d.r / 4));
+        return `${size}px`;
+      })
+      .style('font-weight', d => d.children && d.children.length > 0 ? 'bold' : 'normal')
       .style('fill', d => getTextColor(colorScale(d.depth)))
       .style('pointer-events', 'none')
-      .style('opacity', 0) // Inicia invisível
-      .style('display', d => shouldShowLabel(d) ? 'block' : 'none') // Controla visibilidade inicial
       .text(d => {
-        const title = d.data.llm_title || d.data.id || 'Sem título';
-        return getTruncatedText(title, d.r);
+        const title = d.data.llm_title || d.data.id || '';
+        const maxChars = Math.floor(d.r / 4);
+        return title.length > maxChars ? 
+          title.substring(0, maxChars - 2) + '...' : 
+          title;
       })
+      .style('opacity', 0)
       .transition()
-      .duration(TRANSITION_DURATION / 2)
-      .delay(TRANSITION_DURATION / 4) // Delay para texto aparecer após círculos
-      .ease(d3.easeQuadOut)
-      .style('opacity', d => shouldShowLabel(d) ? 1 : 0); // Fade in apenas para rótulos visíveis
+      .duration(300)
+      .style('opacity', 1);
+    
+    // Adicionar indicadores visuais para clusters navegáveis
+    nodeElements
+      .filter(d => d.children && d.children.length > 0)
+      .append('text')
+      .attr('class', 'cluster-indicator')
+      .attr('dy', d => d.r * 0.7)
+      .style('text-anchor', 'middle')
+      .style('font-size', d => `${Math.max(8, d.r / 3)}px`)
+      .style('fill', 'rgba(255,255,255,0.6)')
+      .style('pointer-events', 'none')
+      .text('▼') // Indicador de que pode expandir
+      .style('opacity', 0)
+      .transition()
+      .duration(400)
+      .delay(200)
+      .style('opacity', 1);
 
-  }, [processedHierarchy, currentZoom, getVisibleNodes]);
+    // Cleanup no useEffect
+    return () => {
+      d3.select('body').selectAll('.bubble-tooltip').remove();
+    };
+  }, [processedHierarchy, currentZoom, getVisibleNodes, viewBox, createTooltip, zoomToNode]);
 
   return (
     <div style={{ 
@@ -458,6 +620,33 @@ const BubbleChart = ({ data }) => {
           }}></div>
           Navegando...
         </div>
+      )}
+      
+      {/* Botão de Reset Zoom */}
+      {focusedNode && !isTransitioning && (
+        <button
+          onClick={resetZoom}
+          style={{
+            position: 'absolute',
+            top: '10px',
+            left: '10px',
+            background: 'rgba(0, 0, 0, 0.7)',
+            color: 'white',
+            border: 'none',
+            padding: '8px 12px',
+            borderRadius: '4px',
+            fontSize: '12px',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
+            transition: 'background-color 0.2s'
+          }}
+          onMouseEnter={(e) => e.target.style.background = 'rgba(0, 0, 0, 0.8)'}
+          onMouseLeave={(e) => e.target.style.background = 'rgba(0, 0, 0, 0.7)'}
+        >
+          ↗ Zoom Out
+        </button>
       )}
       
       {/* Tooltip Rico */}
