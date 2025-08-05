@@ -116,19 +116,13 @@ const LinaExplorerPage = () => {
       try {
         setLoadingHierarchy(true);
         const data = await fetchLinaHierarchy();
-        console.log('📥 Dados recebidos no componente:', data);
         
         if (data && data.length > 0) {
-          console.log('🔍 Estrutura do primeiro nó no componente:', data[0]);
-          console.log('📊 Campos disponíveis no componente:', Object.keys(data[0]));
-          
           // Verificar lambda_persistence no componente
           const lambdaValues = data
             .filter(node => node.lambda_persistence !== null && node.lambda_persistence !== undefined)
             .slice(0, 3)
             .map(node => ({ title: node.llm_title?.substring(0, 30), lambda: node.lambda_persistence }));
-          
-          console.log('📈 lambda_persistence no componente:', lambdaValues);
         }
         
         setHierarchy(data || []);
@@ -358,30 +352,32 @@ SISTEMA DE CORES DE ESTABILIDADE:
     >
       <div className="max-w-7xl mx-auto">
         {/* Header */}
-        <header className="mb-8">
-          <h1 
-            className="font-bold mb-2"
-            style={{ 
-              fontSize: '24px', 
-              fontWeight: '700',
-              color: 'var(--text-primary)'
-            }}
-          >
-            Explorador da Lina
-          </h1>
-          <p 
-            className="text-sm"
-            style={{ color: 'var(--text-secondary)' }}
-          >
-            Explore a hierarquia de tópicos e eventos gerados pela Lina
-          </p>
+        <header className="header-standard">
+          <div>
+            <h1 
+              className="font-bold mb-2"
+              style={{ 
+                fontSize: '24px', 
+                fontWeight: '700',
+                color: 'var(--text-primary)'
+              }}
+            >
+              Explorador da Lina
+            </h1>
+            <p 
+              className="text-sm"
+              style={{ color: 'var(--text-secondary)' }}
+            >
+              Explore a hierarquia de tópicos e eventos gerados pela Lina
+            </p>
+          </div>
         </header>
 
         {/* Layout de três colunas */}
-        <div className="grid grid-cols-4 gap-6 h-[calc(100vh-200px)]">
+        <div className="flex gap-6 h-[calc(100vh-200px)]">
           {/* Coluna da Esquerda - Hierarquia */}
           <div 
-            className="col-span-1 rounded-lg p-6 overflow-hidden flex flex-col"
+            className="w-[40%] rounded-lg p-6 overflow-hidden flex flex-col"
             style={{ 
               backgroundColor: 'var(--bg-secondary)', 
               borderRadius: '8px'
@@ -577,7 +573,7 @@ SISTEMA DE CORES DE ESTABILIDADE:
 
           {/* Coluna do Meio - Detalhes do Evento e Notícias */}
           <div 
-            className="col-span-2 rounded-lg p-6 overflow-hidden flex flex-col"
+            className="flex-1 rounded-lg p-6 overflow-hidden flex flex-col"
             style={{ 
               backgroundColor: 'var(--bg-secondary)', 
               borderRadius: '8px'
@@ -892,7 +888,7 @@ SISTEMA DE CORES DE ESTABILIDADE:
 
           {/* Coluna da Direita - Detalhes da Notícia Selecionada */}
           <div 
-            className="col-span-1 rounded-lg overflow-hidden flex flex-col"
+            className="w-[25%] rounded-lg overflow-hidden flex flex-col"
             style={{ 
               backgroundColor: 'var(--bg-secondary)', 
               borderRadius: '8px'

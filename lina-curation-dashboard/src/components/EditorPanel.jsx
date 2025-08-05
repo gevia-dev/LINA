@@ -416,7 +416,7 @@ const EditorPanel = ({ newsId, newsData: externalNewsData, newsTitle, isLoading:
 
   return (
     <div 
-      className="h-screen flex flex-col mx-20"
+      className="h-screen flex flex-col"
       style={{ 
         backgroundColor: 'var(--bg-primary)'
       }}
@@ -560,12 +560,7 @@ const EditorPanel = ({ newsId, newsData: externalNewsData, newsTitle, isLoading:
       `}</style>
 
       {/* Header do Editor */}
-      <div 
-        className="p-6 border-b flex items-center gap-3 flex-shrink-0"
-        style={{ 
-          borderColor: 'var(--border-primary)'
-        }}
-      >
+      <div className="header-standard flex items-center gap-3">
         <CheckSquare 
           size={24} 
           style={{ color: 'var(--primary-green)' }}

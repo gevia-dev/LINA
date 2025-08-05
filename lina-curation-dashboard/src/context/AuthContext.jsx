@@ -13,7 +13,6 @@ export const AuthProvider = ({ children }) => {
     // Função para buscar o perfil do usuário
     const fetchUserProfile = async (userId) => {
       try {
-        console.log('Buscando perfil para o usuário:', userId);
         const { data, error } = await supabase
           .from('profiles')
           .select('permission_level, email, full_name, avatar_url')
@@ -25,7 +24,6 @@ export const AuthProvider = ({ children }) => {
           // Não falhar a autenticação se o perfil não existir
           return null;
         }
-        console.log('Perfil encontrado:', data);
         return data;
       } catch (err) {
         console.warn('Erro inesperado ao buscar perfil (ignorando):', err);
@@ -37,15 +35,12 @@ export const AuthProvider = ({ children }) => {
     let unsub = null;
     const getAndListenSession = async () => {
       try {
-        console.log('Verificando sessão inicial...');
         const { data: { session } } = await supabase.auth.getSession();
-        console.log('Sessão encontrada:', session);
         
         setSession(session);
         setUser(session?.user ?? null);
         
         if (session?.user) {
-          console.log('Usuário autenticado:', session.user.email);
           fetchUserProfile(session.user.id).then((userProfile) => {
             setProfile(userProfile);
           }).catch(err => {
@@ -53,7 +48,6 @@ export const AuthProvider = ({ children }) => {
             setProfile(null);
           });
         } else {
-          console.log('Nenhum usuário autenticado');
           setProfile(null);
         }
         setLoading(false);
@@ -61,12 +55,10 @@ export const AuthProvider = ({ children }) => {
         // Escuta mudanças
         const { data: authListener } = supabase.auth.onAuthStateChange(
           async (event, session) => {
-            console.log('Evento de auth:', event, session);
             setSession(session);
             setUser(session?.user ?? null);
             
             if (session?.user) {
-              console.log('Usuário logou:', session.user.email);
               fetchUserProfile(session.user.id).then((userProfile) => {
                 setProfile(userProfile);
               }).catch(err => {
@@ -74,7 +66,6 @@ export const AuthProvider = ({ children }) => {
                 setProfile(null);
               });
             } else {
-              console.log('Usuário deslogou');
               setProfile(null);
             }
             setLoading(false);

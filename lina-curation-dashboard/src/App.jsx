@@ -1,3 +1,5 @@
+// src/App.jsx
+
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
@@ -9,9 +11,9 @@ import Login from './pages/Login';
 import CurationFeed from './pages/CurationFeed.jsx';
 import CurationPage from './components/CurationPage.jsx';
 import LinaExplorerPage from './components/LinaExplorerPage.jsx';
+import LinaBubbleExplorerPage from './pages/LinaBubbleExplorerPage.jsx'; // Importe a nova página
 
 // Componentes placeholder
-const Dashboard = () => <div className="text-white">Dashboard Principal</div>;
 const UploadPage = () => <div className="text-white">Página de Upload</div>;
 
 // Layout com sidebar
@@ -61,6 +63,14 @@ function App() {
                 </LayoutWithSidebar>
               </ProtectedRoute>
             } />
+            {/* Adicione a nova rota */}
+            <Route path="/bubble-explorer" element={
+              <ProtectedRoute>
+                <LayoutWithSidebar>
+                  <LinaBubbleExplorerPage />
+                </LayoutWithSidebar>
+              </ProtectedRoute>
+            } />
             <Route path="/upload" element={
               <ProtectedRoute>
                 <LayoutWithSidebar>
@@ -68,13 +78,7 @@ function App() {
                 </LayoutWithSidebar>
               </ProtectedRoute>
             } />
-            <Route path="/" element={
-              <ProtectedRoute>
-                <LayoutWithSidebar>
-                  <Dashboard />
-                </LayoutWithSidebar>
-              </ProtectedRoute>
-            } />
+            <Route path="/" element={<Navigate to="/feed" replace />} />
             <Route path="*" element={<Navigate to="/feed" />} />
           </Routes>
         </main>
@@ -83,4 +87,4 @@ function App() {
   );
 }
 
-export default App
+export default App;

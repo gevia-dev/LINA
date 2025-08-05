@@ -34,8 +34,6 @@ const CurationPage = () => {
     try {
       // Verificar se há sessão ativa
       const { data: { session } } = await supabase.auth.getSession();
-      console.log('📱 Status da sessão:', session ? 'Autenticado' : 'Anônimo');
-      console.log('🔍 Buscando dados para ID:', newsId);
       
       // Primeiro, buscar o news_id na tabela lina_news
       const { data: linaNewsData, error: linaNewsError } = await supabase
@@ -56,7 +54,6 @@ const CurationPage = () => {
       }
 
       const linaRecord = linaNewsData[0];
-      console.log('✅ Dados encontrados na tabela lina_news:', linaRecord);
 
       // Agora usar o news_id para buscar o título na tabela "Controle Geral"
       if (linaRecord.news_id) {
@@ -70,7 +67,6 @@ const CurationPage = () => {
           // Não vamos falhar aqui, apenas logar o erro
         } else if (controleGeralData && controleGeralData.length > 0) {
           setNewsTitle(controleGeralData[0].title);
-          console.log('✅ Título encontrado na tabela Controle Geral:', controleGeralData[0].title);
         } else {
           console.warn('⚠️ Título não encontrado na tabela Controle Geral para news_id:', linaRecord.news_id);
         }
@@ -135,8 +131,6 @@ const CurationPage = () => {
 
       // Desselecionar o bloco que foi movido
       setSelectedBlock(null);
-
-      console.log('✅ Bloco transferido com sucesso para variant_structure');
       
     } catch (error) {
       console.error('❌ Erro ao transferir bloco:', error);
@@ -186,7 +180,6 @@ const CurationPage = () => {
             variantStructure[sourceSection] = [];
           }
           variantStructure[sourceSection].push(existingContent);
-          console.log(`✅ Conteúdo existente preservado em ${sourceSection}:`, existingContent);
         }
       }
 
@@ -213,8 +206,6 @@ const CurationPage = () => {
         variant_structure: JSON.stringify(variantStructure)
       }));
 
-      console.log('✅ Item transferido com sucesso para core_structure (conteúdo anterior preservado)');
-      
       // Desselecionar o bloco para remover o blur e permitir visualização do conteúdo
       setSelectedBlock(null);
       
@@ -294,8 +285,6 @@ const CurationPage = () => {
         ...prevData,
         [structureKey]: JSON.stringify(targetStructure)
       }));
-
-      console.log('✅ Conteúdo do card atualizado com sucesso');
       
     } catch (error) {
       console.error('❌ Erro ao salvar conteúdo do card:', error);
@@ -319,7 +308,7 @@ const CurationPage = () => {
       </div>
       
       {/* Coluna Direita - Contexto (25% da tela) */}
-      <div className="w-1/4 flex-shrink-0" ref={contextSidebarRef} style={{ overflow: 'auto' }}>
+      <div className="w-1/2 flex-shrink-0" ref={contextSidebarRef} style={{ overflow: 'auto' }}>
         <ContextSidebar 
           newsData={newsData} 
           selectedBlock={selectedBlock}

@@ -25,7 +25,7 @@ const ContextSidebar = ({ newsData, selectedBlock, onTransferItem, onOpenCardMod
   };
 
   // Função para truncar texto
-  const truncateText = (text, maxLength = 150) => {
+  const truncateText = (text, maxLength = 250) => {
     if (text.length <= maxLength) return text;
     return text.substring(0, maxLength) + '...';
   };
@@ -84,7 +84,7 @@ const ContextSidebar = ({ newsData, selectedBlock, onTransferItem, onOpenCardMod
         }
       }
       
-      // Coletar todos os micro dados para o carrossel
+      // Coletar todos os micro dados para o carrossel (apenas quando necessário)
       let microDataArray = [];
       const allCoreQuotes = safeJsonParse(newsData?.core_quotes);
       if (allCoreQuotes) {
@@ -115,7 +115,7 @@ const ContextSidebar = ({ newsData, selectedBlock, onTransferItem, onOpenCardMod
     <div className="h-screen bg-[#1E1E1E] border-l border-[#333333] font-inter flex flex-col" style={{ overflow: 'visible' }}>
 
       {/* Título H2 */}
-      <div className="p-6 pb-0 flex-shrink-0">
+      <div className="px-10 pt-6 pb-0 flex-shrink-0">
         <h2 className="text-[#E0E0E0] text-lg font-semibold mb-6">
           Contexto
         </h2>
@@ -162,11 +162,11 @@ const ContextSidebar = ({ newsData, selectedBlock, onTransferItem, onOpenCardMod
       {/* Conteúdo das Abas */}
       <div 
         ref={scrollContainerRef}
-        className="px-6 flex-1 overflow-y-auto"
+        className="px-10 flex-1 overflow-y-auto"
       >
         {/* Aba Dados Completos */}
         {activeTab === 'complete' && (
-          <div className="space-y-4">
+          <div className="space-y-6 pt-4">
             {newsData && newsData.variant_structure ? (
               (() => {
                 const variantData = safeJsonParse(newsData.variant_structure);
@@ -201,16 +201,19 @@ const ContextSidebar = ({ newsData, selectedBlock, onTransferItem, onOpenCardMod
                   }
                   
                   return (
-                    <div key={section.key} className="space-y-2">
-                      <h3 className="text-[#A0A0A0] font-semibold text-sm uppercase tracking-wider mb-2">
-                        {section.title}
-                      </h3>
+                    <div key={section.key} className="space-y-3 mb-8">
+                      <div className="flex items-center gap-3 mb-4">
+                        <h3 className="text-[#E0E0E0] font-bold text-base uppercase tracking-wider">
+                          {section.title}
+                        </h3>
+                        <div className="flex-1 h-px bg-gradient-to-r from-[#2BB24C] to-transparent"></div>
+                      </div>
                       <AnimatePresence>
                         {sectionData.map((item, index) => {
                           const text = typeof item === 'string' ? item : (item.text || item.content || 'Sem conteúdo');
                           const itemId = `complete-${section.key}-${index}`;
                           const isExpanded = expandedItems[itemId];
-                          const shouldTruncate = text.length > 150;
+                          const shouldTruncate = text.length > 250;
                           
                           return (
                             <motion.div
@@ -231,7 +234,7 @@ const ContextSidebar = ({ newsData, selectedBlock, onTransferItem, onOpenCardMod
                               className="group"
                             >
                               <div 
-                                className="p-3 rounded-lg bg-[#1E1E1E] border border-[#333333] relative overflow-hidden hover:border-[#2BB24C50] transition-all duration-200 cursor-pointer"
+                                className="p-5 rounded-lg bg-[#1E1E1E] border border-[#333333] relative overflow-hidden hover:border-[#2BB24C50] transition-all duration-200 cursor-pointer min-h-[120px]"
                                 onClick={() => handleCardClick(text, 'complete', section.key, null, index)}
                               >
                                 {/* Botão de expandir/recolher */}
@@ -241,7 +244,7 @@ const ContextSidebar = ({ newsData, selectedBlock, onTransferItem, onOpenCardMod
                                       e.stopPropagation();
                                       toggleExpansion(itemId);
                                     }}
-                                    className="absolute top-2 right-2 p-2 rounded-full border text-[#A0A0A0] transition-all duration-300 hover:scale-110 z-10"
+                                    className="absolute top-3 right-3 p-2 rounded-full border text-[#A0A0A0] transition-all duration-300 hover:scale-110 z-10"
                                     style={{
                                       borderColor: 'var(--primary-green-transparent)',
                                       backgroundColor: 'transparent'
@@ -252,7 +255,7 @@ const ContextSidebar = ({ newsData, selectedBlock, onTransferItem, onOpenCardMod
                                       animate={{ rotate: isExpanded ? 180 : 0 }}
                                       transition={{ duration: 0.2 }}
                                     >
-                                      <ChevronDown size={14} />
+                                      <ChevronDown size={16} />
                                     </motion.div>
                                   </button>
                                 )}
@@ -263,7 +266,7 @@ const ContextSidebar = ({ newsData, selectedBlock, onTransferItem, onOpenCardMod
                                     e.stopPropagation();
                                     handleTransferItem(itemId, text);
                                   }}
-                                  className="absolute bottom-2 right-2 p-2 rounded-full border text-[#A0A0A0] opacity-0 group-hover:opacity-100 transition-all duration-300 hover:scale-110 z-10"
+                                  className="absolute bottom-3 right-3 p-2 rounded-full border text-[#A0A0A0] opacity-0 group-hover:opacity-100 transition-all duration-300 hover:scale-110 z-10"
                                   style={{
                                     borderColor: 'var(--primary-green-transparent)',
                                     backgroundColor: 'transparent'
@@ -278,7 +281,7 @@ const ContextSidebar = ({ newsData, selectedBlock, onTransferItem, onOpenCardMod
                                   animate={{ scale: 1 }}
                                   transition={{ duration: 0.2 }}
                                 >
-                                  <ArrowRight size={14} />
+                                  <ArrowRight size={16} />
                                 </motion.button>
                                 
                                 {/* Efeito de brilho no hover */}
@@ -289,7 +292,7 @@ const ContextSidebar = ({ newsData, selectedBlock, onTransferItem, onOpenCardMod
                                   transition={{ duration: 0.6, ease: "easeInOut" }}
                                 />
                                 
-                                <p className="text-[#E0E0E0] text-sm leading-relaxed pr-8 relative z-5">
+                                <p className="text-[#E0E0E0] text-base leading-relaxed pr-12 relative z-5">
                                   {shouldTruncate && !isExpanded ? truncateText(text) : text}
                                 </p>
                               </div>
@@ -347,7 +350,7 @@ const ContextSidebar = ({ newsData, selectedBlock, onTransferItem, onOpenCardMod
 
         {/* Aba Micro Dados */}
         {activeTab === 'micro' && (
-          <div className="space-y-4">
+          <div className="space-y-6 pt-4">
             {newsData && newsData.core_quotes ? (
               (() => {
                 const coreQuotes = safeJsonParse(newsData.core_quotes);
@@ -371,15 +374,18 @@ const ContextSidebar = ({ newsData, selectedBlock, onTransferItem, onOpenCardMod
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ duration: 0.3, delay: categoryIndex * 0.1 }}
                   >
-                    <h3 className="text-[#A0A0A0] font-semibold text-sm uppercase tracking-wider mb-2">
-                      {formatCategory(category)}
-                    </h3>
-                    <div className="space-y-2">
+                    <div className="flex items-center gap-3 mb-4">
+                      <h3 className="text-[#E0E0E0] font-bold text-base uppercase tracking-wider">
+                        {formatCategory(category)}
+                      </h3>
+                      <div className="flex-1 h-px bg-gradient-to-r from-[#2BB24C] to-transparent"></div>
+                    </div>
+                    <div className="space-y-3 mb-8">
                       <AnimatePresence>
                         {Array.isArray(quotes) ? quotes.map((quote, index) => {
                           const itemId = `micro-${category}-${index}`;
                           const isExpanded = expandedItems[itemId];
-                          const shouldTruncate = quote.length > 150;
+                          const shouldTruncate = quote.length > 250;
                           
                           return (
                             <motion.div
@@ -400,7 +406,7 @@ const ContextSidebar = ({ newsData, selectedBlock, onTransferItem, onOpenCardMod
                               className="group"
                             >
                               <div 
-                                className="p-3 rounded-lg bg-[#1E1E1E] border border-[#333333] text-[#E0E0E0] text-sm relative overflow-hidden hover:border-[#2BB24C50] transition-all duration-200 cursor-pointer"
+                                className="p-5 rounded-lg bg-[#1E1E1E] border border-[#333333] text-[#E0E0E0] text-base relative overflow-hidden hover:border-[#2BB24C50] transition-all duration-200 cursor-pointer min-h-[120px]"
                                 onClick={() => handleCardClick(quote, 'micro', null, category, index)}
                               >
                                 {/* Botão de expandir/recolher */}
@@ -410,7 +416,7 @@ const ContextSidebar = ({ newsData, selectedBlock, onTransferItem, onOpenCardMod
                                       e.stopPropagation();
                                       toggleExpansion(itemId);
                                     }}
-                                    className="absolute top-2 right-2 p-2 rounded-full border text-[#A0A0A0] transition-all duration-300 hover:scale-110 z-10"
+                                    className="absolute top-3 right-3 p-2 rounded-full border text-[#A0A0A0] transition-all duration-300 hover:scale-110 z-10"
                                     style={{
                                       borderColor: 'var(--primary-green-transparent)',
                                       backgroundColor: 'transparent'
@@ -421,7 +427,7 @@ const ContextSidebar = ({ newsData, selectedBlock, onTransferItem, onOpenCardMod
                                       animate={{ rotate: isExpanded ? 180 : 0 }}
                                       transition={{ duration: 0.2 }}
                                     >
-                                      <ChevronDown size={14} />
+                                      <ChevronDown size={16} />
                                     </motion.div>
                                   </button>
                                 )}
@@ -432,7 +438,7 @@ const ContextSidebar = ({ newsData, selectedBlock, onTransferItem, onOpenCardMod
                                     e.stopPropagation();
                                     handleTransferItem(itemId, quote);
                                   }}
-                                  className="absolute bottom-2 right-2 p-2 rounded-full border text-[#A0A0A0] opacity-0 group-hover:opacity-100 transition-all duration-300 hover:scale-110 z-10"
+                                  className="absolute bottom-3 right-3 p-2 rounded-full border text-[#A0A0A0] opacity-0 group-hover:opacity-100 transition-all duration-300 hover:scale-110 z-10"
                                   style={{
                                     borderColor: 'var(--primary-green-transparent)',
                                     backgroundColor: 'transparent'
@@ -447,7 +453,7 @@ const ContextSidebar = ({ newsData, selectedBlock, onTransferItem, onOpenCardMod
                                   animate={{ scale: 1 }}
                                   transition={{ duration: 0.2 }}
                                 >
-                                  <ArrowRight size={14} />
+                                  <ArrowRight size={16} />
                                 </motion.button>
                                 
                                 {/* Efeito de brilho no hover */}
@@ -458,7 +464,7 @@ const ContextSidebar = ({ newsData, selectedBlock, onTransferItem, onOpenCardMod
                                   transition={{ duration: 0.6, ease: "easeInOut" }}
                                 />
                                 
-                                <div className="pr-8 relative z-5">
+                                <div className="pr-12 relative z-5">
                                   {shouldTruncate && !isExpanded ? truncateText(quote) : quote}
                                 </div>
                               </div>
@@ -467,7 +473,7 @@ const ContextSidebar = ({ newsData, selectedBlock, onTransferItem, onOpenCardMod
                         }) : (() => {
                           const itemId = `micro-${category}-single`;
                           const isExpanded = expandedItems[itemId];
-                          const shouldTruncate = quotes.length > 150;
+                          const shouldTruncate = quotes.length > 250;
                           
                           return (
                             <motion.div
@@ -486,7 +492,7 @@ const ContextSidebar = ({ newsData, selectedBlock, onTransferItem, onOpenCardMod
                               className="group"
                             >
                               <div 
-                                className="p-3 rounded-lg bg-[#1E1E1E] border border-[#333333] text-[#E0E0E0] text-sm relative overflow-hidden hover:border-[#2BB24C50] transition-all duration-200 cursor-pointer"
+                                className="p-5 rounded-lg bg-[#1E1E1E] border border-[#333333] text-[#E0E0E0] text-base relative overflow-hidden hover:border-[#2BB24C50] transition-all duration-200 cursor-pointer min-h-[120px]"
                                 onClick={() => handleCardClick(quotes, 'micro', null, category, 0)}
                               >
                                 {/* Botão de expandir/recolher */}
@@ -496,7 +502,7 @@ const ContextSidebar = ({ newsData, selectedBlock, onTransferItem, onOpenCardMod
                                       e.stopPropagation();
                                       toggleExpansion(itemId);
                                     }}
-                                    className="absolute top-2 right-2 p-2 rounded-full border text-[#A0A0A0] transition-all duration-300 hover:scale-110 z-10"
+                                    className="absolute top-3 right-3 p-2 rounded-full border text-[#A0A0A0] transition-all duration-300 hover:scale-110 z-10"
                                     style={{
                                       borderColor: 'var(--primary-green-transparent)',
                                       backgroundColor: 'transparent'
@@ -518,7 +524,7 @@ const ContextSidebar = ({ newsData, selectedBlock, onTransferItem, onOpenCardMod
                                     e.stopPropagation();
                                     handleTransferItem(itemId, quotes);
                                   }}
-                                  className="absolute bottom-2 right-2 p-2 rounded-full border text-[#A0A0A0] opacity-0 group-hover:opacity-100 transition-all duration-300 hover:scale-110 z-10"
+                                  className="absolute bottom-3 right-3 p-2 rounded-full border text-[#A0A0A0] opacity-0 group-hover:opacity-100 transition-all duration-300 hover:scale-110 z-10"
                                   style={{
                                     borderColor: 'var(--primary-green-transparent)',
                                     backgroundColor: 'transparent'
@@ -533,7 +539,7 @@ const ContextSidebar = ({ newsData, selectedBlock, onTransferItem, onOpenCardMod
                                   animate={{ scale: 1 }}
                                   transition={{ duration: 0.2 }}
                                 >
-                                  <ArrowRight size={14} />
+                                  <ArrowRight size={16} />
                                 </motion.button>
                                 
                                 {/* Efeito de brilho no hover */}
@@ -544,7 +550,7 @@ const ContextSidebar = ({ newsData, selectedBlock, onTransferItem, onOpenCardMod
                                   transition={{ duration: 0.6, ease: "easeInOut" }}
                                 />
                                 
-                                <div className="pr-8 relative z-5">
+                                <div className="pr-12 relative z-5">
                                   {shouldTruncate && !isExpanded ? truncateText(quotes) : quotes}
                                 </div>
                               </div>

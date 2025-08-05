@@ -88,13 +88,7 @@ const CurationFeed = () => {
       {/* Coluna Central - Lista de Notícias */}
       <div className="flex-1 min-w-0 flex flex-col">
         {/* Header do Feed */}
-        <div 
-          style={{ 
-            borderBottom: '1px solid #333333', // Borders/Dividers do style guide
-            backgroundColor: '#1E1E1E', // Secondary Background do style guide
-            padding: '24px' // Seções Principais: 24px do style guide
-          }}
-        >
+        <div className="header-standard">
           <div className="flex items-center justify-between">
             <div>
               <h1 
@@ -199,7 +193,7 @@ const CurationFeed = () => {
         <div 
           className="flex-1 overflow-y-auto"
           style={{
-            padding: '24px' // Seções Principais: 24px do style guide
+            padding: '24px 260px' // Seções Principais: 24px do style guide + margens laterais aumentadas
           }}
         >
           {filteredNews.length === 0 ? (

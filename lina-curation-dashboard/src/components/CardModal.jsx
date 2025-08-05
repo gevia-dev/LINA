@@ -22,6 +22,9 @@ const CardModal = ({ isOpen, onClose, cardData, onSave, allCards = [], currentCa
   const currentCategory = categoryKeys[currentCategoryIndex] || '';
   const currentCategoryData = microDataByCategory[currentCategory] || [];
 
+  // Mostrar micro dados apenas quando o card atual for um "dado completo"
+  const shouldShowMicroData = cardData?.type === 'complete' && microData.length > 0;
+
   // Sincronizar o conteúdo editado quando o modal abrir
   useEffect(() => {
     if (isOpen && cardData?.content) {
@@ -255,86 +258,81 @@ const CardModal = ({ isOpen, onClose, cardData, onSave, allCards = [], currentCa
                        )}
                      </div>
                    </div>
-                 </div>
+                                   </div>
 
-                                   {/* Micro Data Carousel */}
-                  <div>
-                    <h3 className="text-[#A0A0A0] text-sm font-semibold mb-3 uppercase tracking-wider">
-                      Micro Dados
-                    </h3>
-                    {microData.length > 0 ? (
+                  {/* Micro Data Carousel - Apenas para dados completos */}
+                  {shouldShowMicroData && (
+                    <div>
+                      <h3 className="text-[#A0A0A0] text-sm font-semibold mb-3 uppercase tracking-wider">
+                        Micro Dados
+                      </h3>
                       <div className="flex flex-col">
-                                                                          {/* Category Navigation */}
-                         <div className="flex items-center justify-between mb-4">
-                           <button
-                             onClick={() => setCurrentCategoryIndex(prev => Math.max(0, prev - 1))}
-                             disabled={currentCategoryIndex === 0}
-                             className={`p-2 rounded-full border text-[#A0A0A0] transition-all duration-300 hover:scale-110 ${
-                               currentCategoryIndex === 0 ? 'opacity-50 cursor-not-allowed' : ''
-                             }`}
-                             style={{
-                               borderColor: 'var(--primary-green-transparent)',
-                               backgroundColor: 'transparent'
-                             }}
-                           >
-                             <ChevronLeft size={16} />
-                           </button>
-                           
-                                                       <div className="text-center">
-                              <div className="text-[#E0E0E0] text-sm font-medium">
-                                {currentCategory.replace(/_/g, ' ')}
-                              </div>
-                              <div className="text-[#A0A0A0] text-xs">
-                                Categoria {currentCategoryIndex + 1} de {categoryKeys.length} • {currentCategoryData.length} micro dados
-                              </div>
+                        {/* Category Navigation */}
+                        <div className="flex items-center justify-between mb-4">
+                          <button
+                            onClick={() => setCurrentCategoryIndex(prev => Math.max(0, prev - 1))}
+                            disabled={currentCategoryIndex === 0}
+                            className={`p-2 rounded-full border text-[#A0A0A0] transition-all duration-300 hover:scale-110 ${
+                              currentCategoryIndex === 0 ? 'opacity-50 cursor-not-allowed' : ''
+                            }`}
+                            style={{
+                              borderColor: 'var(--primary-green-transparent)',
+                              backgroundColor: 'transparent'
+                            }}
+                          >
+                            <ChevronLeft size={16} />
+                          </button>
+                          
+                          <div className="text-center">
+                            <div className="text-[#E0E0E0] text-sm font-medium">
+                              {currentCategory.replace(/_/g, ' ')}
                             </div>
-                           
-                           <button
-                             onClick={() => setCurrentCategoryIndex(prev => Math.min(categoryKeys.length - 1, prev + 1))}
-                             disabled={currentCategoryIndex >= categoryKeys.length - 1}
-                             className={`p-2 rounded-full border text-[#A0A0A0] transition-all duration-300 hover:scale-110 ${
-                               currentCategoryIndex >= categoryKeys.length - 1 ? 'opacity-50 cursor-not-allowed' : ''
-                             }`}
-                             style={{
-                               borderColor: 'var(--primary-green-transparent)',
-                               backgroundColor: 'transparent'
-                             }}
-                           >
-                             <ChevronRight size={16} />
-                           </button>
-                         </div>
-                         
-                                                   {/* Category Content - Grid flexível */}
-                          <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 max-h-64 overflow-y-auto">
-                            {currentCategoryData.map((item, index) => (
-                              <div 
-                                key={item.itemId || index} 
-                                className="bg-[#1A1A1A] border border-[#333333] rounded-lg p-3 min-h-[80px] flex flex-col"
-                              >
-                                <div className="text-[#E0E0E0] text-xs leading-relaxed flex-1 overflow-hidden">
-                                  <div className="line-clamp-4 break-words">
-                                    {item.content}
-                                  </div>
-                                </div>
-                                {item.category && (
-                                  <div className="mt-2 text-[#A0A0A0] text-xs font-medium flex-shrink-0">
-                                    {item.category.replace(/_/g, ' ')}
-                                  </div>
-                                )}
-                              </div>
-                            ))}
+                            <div className="text-[#A0A0A0] text-xs">
+                              Categoria {currentCategoryIndex + 1} de {categoryKeys.length} • {currentCategoryData.length} micro dados
+                            </div>
                           </div>
+                          
+                          <button
+                            onClick={() => setCurrentCategoryIndex(prev => Math.min(categoryKeys.length - 1, prev + 1))}
+                            disabled={currentCategoryIndex >= categoryKeys.length - 1}
+                            className={`p-2 rounded-full border text-[#A0A0A0] transition-all duration-300 hover:scale-110 ${
+                              currentCategoryIndex >= categoryKeys.length - 1 ? 'opacity-50 cursor-not-allowed' : ''
+                            }`}
+                            style={{
+                              borderColor: 'var(--primary-green-transparent)',
+                              backgroundColor: 'transparent'
+                            }}
+                          >
+                            <ChevronRight size={16} />
+                          </button>
+                        </div>
+                        
+                        {/* Category Content - Grid flexível */}
+                        <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 max-h-64 overflow-y-auto">
+                          {currentCategoryData.map((item, index) => (
+                            <div 
+                              key={item.itemId || index} 
+                              className="bg-[#1A1A1A] border border-[#333333] rounded-lg p-3 min-h-[80px] flex flex-col"
+                            >
+                              <div className="text-[#E0E0E0] text-xs leading-relaxed flex-1 overflow-hidden">
+                                <div className="line-clamp-4 break-words">
+                                  {item.content}
+                                </div>
+                              </div>
+                              {item.category && (
+                                <div className="mt-2 text-[#A0A0A0] text-xs font-medium flex-shrink-0">
+                                  {item.category.replace(/_/g, ' ')}
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
                       </div>
-                    ) : (
-                      <div className="flex items-center justify-center py-8">
-                        <p className="text-[#A0A0A0] text-sm">
-                          Nenhum micro dado disponível
-                        </p>
-                      </div>
-                    )}
-                  </div>
-               </div>
-             </div>
+                    </div>
+                  )}
+
+                </div>
+              </div>
 
             {/* Footer */}
             <div className="flex items-center justify-end gap-3 p-6 border-t border-[#333333] bg-[#1A1A1A]">

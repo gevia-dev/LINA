@@ -75,8 +75,9 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* Esconder todas as scrollbars */
+/* Box-sizing global e esconder scrollbars */
 * {
+  box-sizing: border-box;
   scrollbar-width: none; /* Firefox */
   -ms-overflow-style: none; /* Internet Explorer e Edge */
 }
@@ -103,4 +104,28 @@ body {
 .overflow-scroll::-webkit-scrollbar,
 .overflow-x-scroll::-webkit-scrollbar {
   display: none; /* Chrome, Safari e Opera */
+}
+
+/* === PADRÃO DE HEADERS === */
+.header-standard {
+  display: flex;
+  align-items: center;
+  height: 80px;
+  padding: 24px;
+  background-color: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-primary);
+  flex-shrink: 0;
+  width: 100%;
+}
+
+/* Header para sidebar (sem padding extra) */
+.header-sidebar {
+  display: flex;
+  align-items: center;
+  height: 80px;
+  padding: 16px 24px;
+  background-color: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-primary);
+  flex-shrink: 0;
+  width: 100%;
 }

@@ -21,21 +21,16 @@ const Login = () => {
         return;
       }
 
-      console.log('Tentando fazer login com:', email);
-
       // Login com Supabase Auth
       const { data, error: signInError } = await supabase.auth.signInWithPassword({
         email: email,
         password: senha,
       });
 
-      console.log('Resultado do login:', { data, signInError });
-
       if (signInError) {
         console.error('Erro de login:', signInError);
         setError(`Erro: ${signInError.message}`);
       } else if (data?.user) {
-        console.log('Login bem-sucedido! Usuário:', data.user);
         // Login bem-sucedido - redirecionar
         navigate('/feed');
       }

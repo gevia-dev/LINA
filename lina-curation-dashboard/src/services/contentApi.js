@@ -152,8 +152,6 @@ export const fetchNewsFromLinaNews = async (page = 0, limit = 50) => {
  */
 export const fetchLinaHierarchy = async () => {
   try {
-    console.log('🔍 Buscando hierarquia diretamente do banco...');
-    
     // Buscar todos os eventos da tabela lina_events com lambda_persistence
     const { data: events, error: eventsError } = await supabase
       .from('lina_events')
@@ -165,20 +163,15 @@ export const fetchLinaHierarchy = async () => {
       throw eventsError;
     }
 
-    console.log('📥 Eventos carregados:', events?.length || 0);
-    
     // Verificar se lambda_persistence está presente
     if (events && events.length > 0) {
       const hasLambdaPersistence = events.some(event => 'lambda_persistence' in event);
-      console.log('✅ lambda_persistence presente nos eventos:', hasLambdaPersistence);
       
       // Mostrar alguns valores de lambda_persistence
       const lambdaValues = events
         .filter(event => event.lambda_persistence !== null && event.lambda_persistence !== undefined)
         .slice(0, 5)
         .map(event => ({ title: event.llm_title?.substring(0, 30), lambda: event.lambda_persistence }));
-      
-      console.log('📈 Valores de lambda_persistence encontrados:', lambdaValues);
     }
 
     // Construir a hierarquia
@@ -191,7 +184,6 @@ export const fetchLinaHierarchy = async () => {
     };
 
     const hierarchy = buildHierarchy();
-    console.log('🌳 Hierarquia construída:', hierarchy.length, 'nós raiz');
     
     return hierarchy;
   } catch (error) {

@@ -560,7 +560,7 @@ const NewsEditorPage = () => {
         }
       `}</style>
       <div className="w-full max-w-4xl mx-auto">
-        <header className="flex items-center justify-between mb-6">
+        <header className="header-standard flex items-center justify-between">
           <button onClick={() => navigate(isReadOnly ? '/concluded-news' : '/outputs')} className="flex items-center gap-2 text-text-secondary hover:text-white transition-colors">
             <ArrowLeft size={16} />
             {isReadOnly ? 'Voltar para Notícias Concluídas' : 'Voltar para Notícias'}
