@@ -1,6 +1,6 @@
 import React, { useCallback, useRef, useEffect, useState } from 'react';
 import { Handle, Position } from '@xyflow/react';
-import { Bold, Italic, Underline, Move, Edit3 } from 'lucide-react';
+import { Bold, Italic, Underline, Move, Edit3, Trash2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 /**
@@ -34,6 +34,10 @@ const AdvancedCardNode = ({ data, selected, dragging }) => {
   const [isHoveringSelectionToolbar, setIsHoveringSelectionToolbar] = useState(false);
   const [isHoveringNode, setIsHoveringNode] = useState(false);
   const [isDragMode, setIsDragMode] = useState(false);
+  
+  // Estados para menu de contexto
+  const [showContextMenu, setShowContextMenu] = useState(false);
+  const [contextMenuPosition, setContextMenuPosition] = useState({ x: 0, y: 0 });
 
   // Função para lidar com clique no bloco - ativa edição diretamente
   const handleClick = useCallback((e) => {
@@ -67,6 +71,55 @@ const AdvancedCardNode = ({ data, selected, dragging }) => {
       }
     }
   }, [id, onEdit, onEditStart, onEditEnd, isEditing, dragging, isDragMode]);
+
+  // Função para lidar com clique direito (menu de contexto)
+  const handleContextMenu = useCallback((e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    // Não mostrar menu durante edição
+    if (isEditing) return;
+    
+    const rect = e.currentTarget.getBoundingClientRect();
+    setContextMenuPosition({
+      x: e.clientX - rect.left,
+      y: e.clientY - rect.top
+    });
+    setShowContextMenu(true);
+  }, [isEditing]);
+
+  // Função para fechar menu de contexto
+  const closeContextMenu = useCallback(() => {
+    setShowContextMenu(false);
+  }, []);
+
+  // Função para remover node
+  const handleRemoveNode = useCallback((e) => {
+    e.stopPropagation();
+    if (data.onRemove) {
+      data.onRemove(id);
+    }
+    closeContextMenu();
+  }, [id, data.onRemove, closeContextMenu]);
+
+  // Fechar menu de contexto quando clicar fora
+  useEffect(() => {
+    const handleClickOutside = () => {
+      if (showContextMenu) {
+        closeContextMenu();
+      }
+    };
+
+    if (showContextMenu) {
+      document.addEventListener('click', handleClickOutside);
+      document.addEventListener('contextmenu', handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener('click', handleClickOutside);
+      document.removeEventListener('contextmenu', handleClickOutside);
+    };
+  }, [showContextMenu, closeContextMenu]);
 
 
 
@@ -258,6 +311,7 @@ const AdvancedCardNode = ({ data, selected, dragging }) => {
         cursor: isEditing ? 'text' : 'pointer'
       }}
       onClick={handleClick}
+      onContextMenu={handleContextMenu}
     >
       {/* Indicador de modo drag */}
       <AnimatePresence>
@@ -444,6 +498,45 @@ const AdvancedCardNode = ({ data, selected, dragging }) => {
         transition={{ delay: 0.3 }}
         title={hasContent ? 'Conteúdo válido' : 'Conteúdo vazio'}
       />
+
+      {/* Menu de Contexto */}
+      <AnimatePresence>
+        {showContextMenu && (
+          <motion.div
+            className="context-menu absolute z-[9999] flex flex-col gap-1 p-2 rounded-lg border shadow-lg nopan nowheel nodrag"
+            style={{
+              top: contextMenuPosition.y,
+              left: contextMenuPosition.x,
+              backgroundColor: '#1E1E1E',
+              borderColor: '#333333',
+              boxShadow: 'rgba(0,0,0,0.4) 0px 8px 24px',
+              minWidth: '160px'
+            }}
+            initial={{ opacity: 0, y: 10, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 10, scale: 0.95 }}
+            transition={{ duration: 0.2 }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <motion.button
+              onClick={handleRemoveNode}
+              className="flex items-center gap-2 px-3 py-2 rounded transition-colors text-left w-full"
+              style={{ color: '#FF6B6B' }}
+              whileHover={{ 
+                backgroundColor: '#FF6B6B20',
+                scale: 1.02
+              }}
+              whileTap={{ scale: 0.98 }}
+              title="Remover bloco do canvas"
+            >
+              <Trash2 size={14} />
+              <span style={{ fontSize: '13px', fontFamily: '"Nunito Sans", "Inter", sans-serif' }}>
+                Remover bloco
+              </span>
+            </motion.button>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </motion.div>
   );
 };

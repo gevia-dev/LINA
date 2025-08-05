@@ -312,6 +312,7 @@ export const useAdvancedCanvas = (newsData, newsId) => {
         onTransfer: () => {}, // Será configurado pelo componente pai
         onEditStart: () => {}, // Será configurado pelo componente pai
         onEditEnd: () => {}, // Será configurado pelo componente pai
+        onRemove: () => {}, // Será configurado pelo componente pai
         animation: {
           opacity: [0, 1],
           scale: [0.8, 1],
@@ -338,6 +339,14 @@ export const useAdvancedCanvas = (newsData, newsId) => {
     
     return newNodeId;
   }, [nodes.length, viewport, setNodes]);
+
+  // Função para remover node do canvas
+  const removeNode = useCallback((nodeId) => {
+    setNodes(prevNodes => prevNodes.filter(node => node.id !== nodeId));
+    setEdges(prevEdges => prevEdges.filter(edge => 
+      edge.source !== nodeId && edge.target !== nodeId
+    ));
+  }, [setNodes, setEdges]);
 
   // Limpar animação frame ao desmontar
   useEffect(() => {
@@ -388,6 +397,7 @@ export const useAdvancedCanvas = (newsData, newsId) => {
     animateNodes,
     saveCanvasState,
     addNewNode,
+    removeNode,
     
     // Setters
     setNodes,

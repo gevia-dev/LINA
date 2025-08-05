@@ -11,7 +11,7 @@ const MainSidebar = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { signOut, user, profile } = useAuth();
-  const [isCollapsed, setIsCollapsed] = useState(false);
+  const [isCollapsed, setIsCollapsed] = useState(true);
   const [isMobile, setIsMobile] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -22,6 +22,10 @@ const MainSidebar = () => {
       const collapsed = JSON.parse(savedState);
       setIsCollapsed(collapsed);
       console.log('Sidebar initial state:', collapsed);
+    } else {
+      // Estado padrão: colapsado
+      setIsCollapsed(true);
+      localStorage.setItem('sidebarCollapsed', JSON.stringify(true));
     }
   }, []);
 
@@ -418,17 +422,17 @@ const MainSidebar = () => {
           <AnimatePresence>
             {!isCollapsed && (
               <motion.div
-                className="mb-4 p-3 rounded-lg"
+                className="mb-4 rounded-lg"
                 initial={{ opacity: 0, height: 0 }}
                 animate={{ opacity: 1, height: 'auto' }}
                 exit={{ opacity: 0, height: 0 }}
                 transition={{ duration: 0.2 }}
                 style={{
-                  backgroundColor: '#1A1A1A',
-                  borderRadius: '8px'
+                  borderRadius: '8px',
+                  padding: '12px 12px 12px 0px'
                 }}
               >
-                <div className="flex items-center">
+                <div className="flex items-center justify-start">
                   {/* Avatar */}
                   <div
                     className="flex items-center justify-center mr-3 flex-shrink-0"
@@ -486,25 +490,16 @@ const MainSidebar = () => {
               paddingLeft: isCollapsed ? '0px' : '0px',
               paddingRight: isCollapsed ? '0px' : '0px'
             }}
-            title={isCollapsed ? "Sair" : "Fazer logout"}
+            title="Fazer logout"
             aria-label="Fazer logout"
           >
             <LogOut
               size={16}
-              className={`${isCollapsed ? "" : "mr-3"} ${
-                isCollapsed 
-                  ? 'text-gray-400 hover:text-red-300' 
-                  : 'text-gray-400 hover:text-red-400'
-              }`}
+              className="text-gray-400 hover:text-red-400"
               style={{
                 transition: 'color 0.2s ease'
               }}
             />
-            {!isCollapsed && (
-              <span className="flex-1 truncate">
-                Sair
-              </span>
-            )}
           </button>
         </div>
       </motion.div>

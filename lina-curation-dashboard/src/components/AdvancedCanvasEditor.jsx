@@ -77,6 +77,7 @@ const AdvancedCanvasEditor = ({
     exportToNewsData,
     animateNodes,
     addNewNode,
+    removeNode,
     setCanvasLimits
   } = useAdvancedCanvas(newsData, newsId);
 
@@ -99,6 +100,11 @@ const AdvancedCanvasEditor = ({
     }
   }, [onTransferBlock]);
 
+  // Função para remover node
+  const handleRemoveNode = useCallback((nodeId) => {
+    removeNode(nodeId);
+  }, [removeNode]);
+
   // Função para inicializar ReactFlow instance
   const onInit = useCallback((instance) => {
     reactFlowInstance.current = instance;
@@ -118,6 +124,7 @@ const AdvancedCanvasEditor = ({
       onTransfer: handleTransferBlock,
       onEditStart: onNodeEditStart,
       onEditEnd: onNodeEditEnd,
+      onRemove: handleRemoveNode,
       isEditing: editingNode === node.id
     }
   }));
@@ -210,8 +217,9 @@ const AdvancedCanvasEditor = ({
       focusNode(newNodeId);
     }, 500);
     
-    // Não fechar automaticamente a biblioteca para permitir múltiplas transferências
-  }, [addNewNode, focusNode]);
+    // Fechar a biblioteca após adicionar o node
+    closeLibrary();
+  }, [addNewNode, focusNode, closeLibrary]);
 
   // Atalhos de teclado
   useEffect(() => {
