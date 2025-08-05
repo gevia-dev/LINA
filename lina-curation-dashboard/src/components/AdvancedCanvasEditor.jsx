@@ -440,7 +440,7 @@ const AdvancedCanvasEditor = ({
                     fontFamily: '"Nunito Sans", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif'
                   }}
                 >
-                  {newsId ? 'Editando Notícia - Canvas Avançado' : 'Nova Notícia - Canvas Avançado'}
+                  {newsTitle || (newsId ? 'Editando Notícia' : 'Nova Notícia')}
                 </h1>
                 {isInitialized && (
                   <motion.div
@@ -457,18 +457,6 @@ const AdvancedCanvasEditor = ({
                   </motion.div>
                 )}
               </div>
-              {newsTitle && (
-                <p style={{ 
-                  color: 'var(--text-secondary)', 
-                  fontSize: '16px', 
-                  fontFamily: '"Nunito Sans", "Inter", sans-serif', 
-                  marginTop: '8px',
-                  fontWeight: '500',
-                  lineHeight: '1.4'
-                }}>
-                  {newsTitle}
-                </p>
-              )}
               {isLoading && (
                 <motion.p 
                   style={{ color: 'var(--text-secondary)', fontSize: '14px', fontFamily: '"Nunito Sans", "Inter", sans-serif', marginTop: '4px' }}
