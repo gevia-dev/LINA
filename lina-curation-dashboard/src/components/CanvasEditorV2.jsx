@@ -15,12 +15,12 @@ import { CheckSquare } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 // Importar componentes customizados
-import CardNode from './CardNode';
+import AdvancedCardNode from './AdvancedCardNode';
 import { useCanvasState } from '../hooks/useCanvasState';
 
 // Tipos de nodes customizados
 const nodeTypes = {
-  cardNode: CardNode,
+  cardNode: AdvancedCardNode,
 };
 
 const CanvasEditorV2 = ({ 
@@ -93,6 +93,183 @@ const CanvasEditorV2 = ({
       onTransferBlock(blockId, content);
     }
   }, [onTransferBlock]);
+
+  // Callback para quando conecta start (debug)
+  const onConnectStart = useCallback((event, { nodeId, handleType }) => {
+    console.log('🔗 Iniciando conexão:', { nodeId, handleType });
+  }, []);
+
+  // Callback para quando conecta end (debug)
+  const onConnectEnd = useCallback((event) => {
+    console.log('🔗 Finalizando conexão');
+  }, []);
+
+  // Função para lidar com novas conexões
+  const onConnect = useCallback((connection) => {
+    console.log('🎯 Nova conexão tentada:', connection);
+    
+    // Validações de conexão
+    if (!connection.source || !connection.target) {
+      console.warn('❌ Conexão inválida: origem ou destino ausente');
+      return;
+    }
+    
+    // Prevenir auto-conexão (loop direto)
+    if (connection.source === connection.target) {
+      console.warn('❌ Conexão rejeitada: não é possível conectar um node a si mesmo');
+      return;
+    }
+    
+    // Verificar se a conexão já existe
+    const connectionExists = edges.some(edge => 
+      edge.source === connection.source && 
+      edge.target === connection.target
+    );
+    
+    if (connectionExists) {
+      console.warn('❌ Conexão rejeitada: conexão já existe');
+      return;
+    }
+    
+    // Adicionar a nova conexão com estilo customizado
+    const newEdge = {
+      ...connection,
+      id: `edge-${connection.source}-${connection.target}`,
+      type: 'smoothstep',
+      animated: true,
+      style: {
+        stroke: '#2BB24C',
+        strokeWidth: 3,
+        filter: 'drop-shadow(0 0 4px rgba(43, 178, 76, 0.4))'
+      },
+      markerEnd: {
+        type: 'arrowclosed',
+        color: '#2BB24C',
+        width: 20,
+        height: 20
+      },
+    };
+    
+    setEdges((eds) => addEdge(newEdge, eds));
+    console.log('✅ Conexão adicionada com sucesso:', newEdge);
+  }, [edges, setEdges]);
+
+  // Função para validar conexões (evitar loops complexos)
+  const isValidConnection = useCallback((connection) => {
+    // Verificar loops mais complexos usando DFS
+    const checkForCycle = (sourceId, targetId, visitedNodes = new Set()) => {
+      if (visitedNodes.has(sourceId)) {
+        return true; // Ciclo detectado
+      }
+      
+      visitedNodes.add(sourceId);
+      
+      // Encontrar todas as conexões saindo do node atual
+      const outgoingEdges = edges.filter(edge => edge.source === sourceId);
+      
+      for (const edge of outgoingEdges) {
+        if (edge.target === targetId || checkForCycle(edge.target, targetId, new Set(visitedNodes))) {
+          return true;
+        }
+      }
+      
+      return false;
+    };
+    
+    return !checkForCycle(connection.target, connection.source);
+  }, [edges]);
+
+  // Função para salvar estado do canvas
+  const saveCanvasState = useCallback((nodesToSave, edgesToSave) => {
+    if (!newsId) return; // Só salvar se tiver um ID da notícia
+    
+    try {
+      const canvasState = {
+        nodes: nodesToSave.map(node => ({
+          id: node.id,
+          position: node.position,
+          data: {
+            title: node.data.title,
+            content: node.data.content
+          }
+        })),
+        edges: edgesToSave.map(edge => ({
+          id: edge.id,
+          source: edge.source,
+          target: edge.target,
+          type: edge.type
+        })),
+        timestamp: Date.now()
+      };
+      
+      const storageKey = `canvas_state_${newsId}`;
+      localStorage.setItem(storageKey, JSON.stringify(canvasState));
+      console.log('Estado do canvas salvo:', storageKey);
+    } catch (error) {
+      console.warn('Erro ao salvar estado do canvas:', error);
+    }
+  }, [newsId]);
+
+  // Função para carregar estado do canvas
+  const loadCanvasState = useCallback(() => {
+    if (!newsId) return null;
+    
+    try {
+      const storageKey = `canvas_state_${newsId}`;
+      const saved = localStorage.getItem(storageKey);
+      
+      if (saved) {
+        const canvasState = JSON.parse(saved);
+        console.log('Estado do canvas carregado:', storageKey);
+        return canvasState;
+      }
+    } catch (error) {
+      console.warn('Erro ao carregar estado do canvas:', error);
+    }
+    
+    return null;
+  }, [newsId]);
+
+  // Auto-save quando nodes ou edges mudam
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      if (nodes.length > 0) {
+        saveCanvasState(nodes, edges);
+      }
+    }, 1000); // Salvar após 1 segundo de inatividade
+
+    return () => clearTimeout(timeoutId);
+  }, [nodes, edges, saveCanvasState]);
+
+  // Carregar estado salvo ao montar o componente
+  useEffect(() => {
+    const savedState = loadCanvasState();
+    if (savedState && savedState.nodes.length > 0) {
+      // Aplicar posições salvas aos nodes existentes
+      const updatedNodes = nodes.map(node => {
+        const savedNode = savedState.nodes.find(saved => saved.id === node.id);
+        if (savedNode) {
+          return {
+            ...node,
+            position: savedNode.position
+          };
+        }
+        return node;
+      });
+      
+      updateNodes(updatedNodes);
+      
+      // Restaurar edges se existirem
+      if (savedState.edges.length > 0) {
+        setEdges(savedState.edges.map(edge => ({
+          ...edge,
+          animated: true,
+          style: { stroke: '#2BB24C', strokeWidth: 2 },
+          markerEnd: { type: 'arrowclosed', color: '#2BB24C' }
+        })));
+      }
+    }
+  }, [newsId]); // Executar apenas quando newsId mudar
 
   // Atualizar nodes com callbacks corretos
   const nodesWithCallbacks = nodes.map(node => ({
@@ -179,6 +356,86 @@ const CanvasEditorV2 = ({
         
         .react-flow__node {
           background: transparent;
+        }
+
+        /* Estilos para handles de conexão */
+        .connection-handle {
+          z-index: 1000 !important;
+          cursor: crosshair !important;
+          pointer-events: auto !important;
+        }
+        
+        .connection-handle:hover {
+          opacity: 1 !important;
+          transform: scale(1.3) !important;
+          box-shadow: 0 0 0 4px rgba(43, 178, 76, 0.4) !important;
+          background: #22A043 !important;
+        }
+        
+        .connection-handle-target:hover {
+          transform: translateY(-2px) scale(1.3) !important;
+        }
+        
+        .connection-handle-source:hover {
+          transform: translateY(2px) scale(1.3) !important;
+        }
+        
+        /* Estilos para linhas de conexão - mais visíveis */
+        .react-flow__connection-line {
+          stroke: #2BB24C !important;
+          stroke-width: 4 !important;
+          stroke-dasharray: 8, 4 !important;
+          opacity: 0.8 !important;
+          z-index: 999 !important;
+          filter: drop-shadow(0 0 6px rgba(43, 178, 76, 0.6)) !important;
+        }
+        
+        .react-flow__edge-path {
+          stroke: #2BB24C !important;
+          stroke-width: 3 !important;
+          opacity: 0.9 !important;
+          filter: drop-shadow(0 0 4px rgba(43, 178, 76, 0.4)) !important;
+        }
+        
+        .react-flow__edge:hover .react-flow__edge-path {
+          stroke: #22A043 !important;
+          stroke-width: 4 !important;
+          opacity: 1 !important;
+          filter: drop-shadow(0 0 8px rgba(34, 160, 67, 0.6)) !important;
+        }
+        
+        .react-flow__edge-selected .react-flow__edge-path {
+          stroke: #1E8E3E !important;
+          stroke-width: 4 !important;
+          opacity: 1 !important;
+          filter: drop-shadow(0 0 10px rgba(30, 142, 62, 0.8)) !important;
+        }
+        
+        /* Melhorar visibilidade da linha sendo arrastada */
+        .react-flow__connection {
+          pointer-events: none !important;
+          z-index: 1001 !important;
+        }
+        
+        .react-flow__connectionpath {
+          stroke: #2BB24C !important;
+          stroke-width: 4 !important;
+          stroke-dasharray: 8, 4 !important;
+          opacity: 0.9 !important;
+          filter: drop-shadow(0 0 8px rgba(43, 178, 76, 0.7)) !important;
+        }
+
+        /* Garantir que a linha de conexão seja sempre visível */
+        .react-flow__viewport {
+          position: relative;
+        }
+        
+        .react-flow__edges {
+          z-index: 998 !important;
+        }
+        
+        .react-flow__nodes {
+          z-index: 999 !important;
         }
 
         /* Estilos para formatação de texto */
@@ -284,12 +541,25 @@ const CanvasEditorV2 = ({
           edges={edges}
           onNodesChange={onNodesChange}
           onEdgesChange={onEdgesChange}
+          onConnect={onConnect}
+          onConnectStart={onConnectStart}
+          onConnectEnd={onConnectEnd}
+          isValidConnection={isValidConnection}
           nodeTypes={nodeTypes}
           connectionLineType={ConnectionLineType.SmoothStep}
+          connectionLineStyle={{
+            stroke: '#2BB24C',
+            strokeWidth: 4,
+            strokeDasharray: '8,4',
+            filter: 'drop-shadow(0 0 8px rgba(43, 178, 76, 0.7))'
+          }}
           defaultViewport={{ x: 0, y: 0, zoom: 1 }}
           minZoom={0.5}
           maxZoom={2}
           attributionPosition="bottom-left"
+          snapToGrid={false}
+          snapGrid={[15, 15]}
+          connectOnClick={false}
           fitView
           fitViewOptions={{ padding: 0.2 }}
         >
@@ -310,11 +580,23 @@ const CanvasEditorV2 = ({
           />
           <MiniMap 
             position="bottom-right"
-            nodeColor="#2BB24C"
+            nodeColor={(node) => {
+              // Colorir nodes baseado no tipo e status
+              const hasContent = node.data?.hasContent;
+              const contentLength = node.data?.content?.length || 0;
+              
+              if (!hasContent) return '#FF6B6B'; // Vermelho para vazio
+              if (contentLength > 100) return '#2BB24C'; // Verde para completo
+              if (contentLength > 50) return '#FFA500'; // Laranja para médio
+              return '#FFD700'; // Amarelo para básico
+            }}
             nodeStrokeWidth={2}
             style={{
-              width: 200,
-              height: 150
+              width: 220,
+              height: 160,
+              backgroundColor: 'var(--bg-secondary)',
+              border: '1px solid var(--border-primary)',
+              borderRadius: '8px'
             }}
           />
           
@@ -331,8 +613,10 @@ const CanvasEditorV2 = ({
               }}
             >
               <div>Canvas Interativo V2</div>
-              <div>Arraste os blocos para reorganizar</div>
-              <div>Clique para selecionar, duplo clique para editar</div>
+              <div>🎯 Enter: editar | Delete: remover | Esc: sair</div>
+              <div>🔗 Arraste das bolinhas verdes para conectar blocos</div>
+              <div>🖱️ Cursor crosshair = área conectável</div>
+              <div>💾 Auto-save ativo | {edges.length} conexão{edges.length !== 1 ? 'ões' : ''}</div>
             </div>
           </Panel>
         </ReactFlow>
