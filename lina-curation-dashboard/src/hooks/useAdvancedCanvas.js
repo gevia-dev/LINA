@@ -286,6 +286,59 @@ export const useAdvancedCanvas = (newsData, newsId) => {
     );
   }, [setNodes]);
 
+  // Função para adicionar novo node ao canvas
+  const addNewNode = useCallback((content, title = 'Novo Bloco', type = 'custom') => {
+    const newNodeId = `node-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    
+    // Calcular posição baseada no viewport atual e número de nodes existentes
+    const newNodePosition = {
+      x: viewport.x + 100 + (nodes.length * 50),
+      y: viewport.y + 100 + (nodes.length * 30)
+    };
+    
+    const newNode = {
+      id: newNodeId,
+      type: 'cardNode',
+      position: newNodePosition,
+      data: {
+        id: newNodeId,
+        title: title,
+        content: content,
+        minHeight: '120px',
+        coreKey: type,
+        isEditing: false,
+        hasContent: content && content.trim().length > 0,
+        onEdit: () => {}, // Será configurado pelo componente pai
+        onTransfer: () => {}, // Será configurado pelo componente pai
+        onEditStart: () => {}, // Será configurado pelo componente pai
+        onEditEnd: () => {}, // Será configurado pelo componente pai
+        animation: {
+          opacity: [0, 1],
+          scale: [0.8, 1],
+          transition: {
+            duration: 0.4,
+            ease: 'easeOut'
+          }
+        }
+      }
+    };
+    
+    setNodes(prevNodes => [...prevNodes, newNode]);
+    
+    // Animar o novo node
+    setTimeout(() => {
+      setNodes(prevNodes => 
+        prevNodes.map(node => 
+          node.id === newNodeId 
+            ? { ...node, data: { ...node.data, animation: null } }
+            : node
+        )
+      );
+    }, 400);
+    
+    return newNodeId;
+  }, [nodes.length, viewport, setNodes]);
+
   // Limpar animação frame ao desmontar
   useEffect(() => {
     return () => {
@@ -334,6 +387,7 @@ export const useAdvancedCanvas = (newsData, newsId) => {
     exportToNewsData,
     animateNodes,
     saveCanvasState,
+    addNewNode,
     
     // Setters
     setNodes,

@@ -1,6 +1,6 @@
 import React, { useCallback, useRef, useEffect, useState } from 'react';
 import { Handle, Position } from '@xyflow/react';
-import { Bold, Italic, Underline, ArrowLeft, Move, Edit3 } from 'lucide-react';
+import { Bold, Italic, Underline, Move, Edit3 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 /**
@@ -35,7 +35,7 @@ const AdvancedCardNode = ({ data, selected, dragging }) => {
   const [isHoveringNode, setIsHoveringNode] = useState(false);
   const [isDragMode, setIsDragMode] = useState(false);
 
-  // Função para lidar com clique no bloco com prevenção de conflitos
+  // Função para lidar com clique no bloco - ativa edição diretamente
   const handleClick = useCallback((e) => {
     // Prevenir clique durante drag
     if (dragging || isDragMode) {
@@ -51,30 +51,24 @@ const AdvancedCardNode = ({ data, selected, dragging }) => {
       return;
     }
     
-    // Se já está em modo de edição de outro campo, sair primeiro
+    // Se já está em modo de edição, sair
     if (isEditing && onEditEnd) {
       onEditEnd();
       return;
     }
 
-    // Gerenciar início/fim da edição
-    if (onEdit) {
+    // Ativar edição diretamente
+    if (onEdit && !isEditing) {
       onEdit(id);
       
-      // Notificar sobre início/fim da edição
-      if (!isEditing && onEditStart) {
+      // Notificar sobre início da edição
+      if (onEditStart) {
         onEditStart(id);
       }
     }
   }, [id, onEdit, onEditStart, onEditEnd, isEditing, dragging, isDragMode]);
 
-  // Função para lidar com clique no botão de transferência
-  const handleTransferClick = useCallback((e) => {
-    e.stopPropagation();
-    if (onTransfer && hasContent) {
-      onTransfer(id, content);
-    }
-  }, [id, content, onTransfer, hasContent]);
+
 
   // Função para entrar em modo drag
   const handleDragModeStart = useCallback((e) => {
@@ -225,6 +219,7 @@ const AdvancedCardNode = ({ data, selected, dragging }) => {
     //   }
     // },
     editing: {
+      opacity: 1,
       scale: 1.05,
       boxShadow: "0 0 0 3px var(--primary-green-transparent)",
       transition: { duration: 0.3 }
@@ -242,7 +237,7 @@ const AdvancedCardNode = ({ data, selected, dragging }) => {
   return (
     <motion.div
       ref={nodeRef}
-      className={`advanced-card-node group ${selected ? 'selected' : ''} ${isEditing ? 'editing' : ''}`}
+      className={`advanced-card-node group ${isEditing ? 'editing' : ''}`}
       variants={nodeVariants}
       initial="initial"
       animate={currentVariant}
@@ -255,9 +250,7 @@ const AdvancedCardNode = ({ data, selected, dragging }) => {
         backgroundColor: 'var(--bg-secondary)',
         border: isEditing 
           ? '2px solid var(--primary-green)' 
-          : selected 
-            ? '2px solid var(--primary-green-transparent)'
-            : '1px solid var(--border-primary)',
+          : '1px solid var(--border-primary)',
         borderRadius: '12px',
         padding: '16px',
         position: 'relative',
@@ -288,18 +281,7 @@ const AdvancedCardNode = ({ data, selected, dragging }) => {
         )}
       </AnimatePresence>
 
-      {/* Efeito de brilho animado */}
-      <motion.div
-        className="absolute inset-0 bg-gradient-to-r from-transparent via-[#2BB24C10] to-transparent"
-        initial={{ x: '-100%' }}
-        animate={selected ? { x: ['100%', '-100%'] } : { x: '-100%' }}
-        transition={{ 
-          duration: 2, 
-          ease: "easeInOut",
-          repeat: selected ? Infinity : 0,
-          repeatType: "loop"
-        }}
-      />
+
 
       {/* Header do bloco */}
       <div className="flex justify-between items-center mb-3 relative z-10">
@@ -326,32 +308,7 @@ const AdvancedCardNode = ({ data, selected, dragging }) => {
           )}
         </motion.h3>
         
-        {/* Botão de transferência */}
-        <AnimatePresence>
-          {hasContent && selected && !isEditing && (
-            <motion.button
-              onClick={handleTransferClick}
-              className="transfer-button p-2 rounded-full border text-[#A0A0A0] transition-all duration-300 z-20"
-              style={{
-                borderColor: 'var(--primary-green-transparent)',
-                backgroundColor: 'transparent'
-              }}
-              whileHover={{ 
-                scale: 1.1,
-                backgroundColor: 'var(--primary-green)',
-                color: 'white'
-              }}
-              whileTap={{ scale: 0.95 }}
-              initial={{ scale: 0, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0, opacity: 0 }}
-              transition={{ duration: 0.2 }}
-              title="Transferir para ContextSidebar"
-            >
-              <ArrowLeft size={14} />
-            </motion.button>
-          )}
-        </AnimatePresence>
+
       </div>
       
       {/* Conteúdo do bloco */}
@@ -387,42 +344,7 @@ const AdvancedCardNode = ({ data, selected, dragging }) => {
         {content}
       </motion.div>
       
-      {/* Overlay para bloco selecionado */}
-      <AnimatePresence>
-        {selected && !isEditing && (
-          <motion.div 
-            className="block-overlay absolute inset-0 bg-black bg-opacity-15 backdrop-blur-sm flex items-center justify-center z-40 rounded-lg"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.3 }}
-            style={{
-              cursor: 'pointer',
-              userSelect: 'none',
-              WebkitUserSelect: 'none'
-            }}
-          >
-            <motion.div 
-              className="block-overlay-text"
-              style={{
-                color: '#E0E0E0',
-                fontSize: '18px',
-                fontWeight: '600',
-                textAlign: 'center',
-                fontFamily: "'Nunito Sans', 'Inter', sans-serif",
-                textShadow: '0 2px 4px rgba(0, 0, 0, 0.8)',
-                letterSpacing: '0.5px',
-                pointerEvents: 'none'
-              }}
-              initial={{ scale: 0.8, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              transition={{ delay: 0.1 }}
-            >
-              Clique mais uma vez para editar 📝
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+
 
       {/* Toolbar de Seleção de Texto */}
       <AnimatePresence>

@@ -2,7 +2,15 @@ import React, { useState, useRef } from 'react';
 import { FileText, Database, ChevronDown, ChevronUp, ArrowRight } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
-const ContextSidebar = ({ newsData, selectedBlock, onTransferItem, onOpenCardModal }) => {
+const ContextSidebar = ({ 
+  newsData, 
+  selectedBlock, 
+  onTransferItem, 
+  onOpenCardModal, 
+  isLibraryMode = false, 
+  searchTerm = '', 
+  activeFilter = 'all' 
+}) => {
   const [activeTab, setActiveTab] = useState('complete');
   const [expandedItems, setExpandedItems] = useState({});
   
@@ -184,15 +192,8 @@ const ContextSidebar = ({ newsData, selectedBlock, onTransferItem, onOpenCardMod
                   { key: 'conclusoes', title: 'Conclusões', blockId: 'conclusion' }
                 ];
                 
-                // Filtrar seções baseado no bloco selecionado
-                let filteredSections;
-                if (selectedBlock) {
-                  // Se há um bloco selecionado, filtrar apenas essa seção
-                  filteredSections = sections.filter(section => section.blockId === selectedBlock);
-                } else {
-                  // Se nenhum bloco está selecionado, mostrar todas as seções
-                  filteredSections = sections;
-                }
+                // Sempre mostrar todas as seções
+                const filteredSections = sections;
                 
                 const renderedSections = filteredSections.map((section) => {
                   const sectionData = variantData[section.key];
@@ -319,19 +320,7 @@ const ContextSidebar = ({ newsData, selectedBlock, onTransferItem, onOpenCardMod
                   );
                 }
                 
-                // Se nenhum bloco está selecionado, mostrar todas as seções
-                if (!selectedBlock && renderedSections.length === 0) {
-                  return (
-                    <motion.p 
-                      className="text-[#A0A0A0] text-sm"
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      transition={{ duration: 0.3 }}
-                    >
-                      Nenhum dado completo disponível.
-                    </motion.p>
-                  );
-                }
+
                 
                 return renderedSections;
               })()

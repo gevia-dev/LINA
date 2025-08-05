@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams } from 'react-router-dom';
 import AdvancedCanvasEditor from './AdvancedCanvasEditor';
-import ContextSidebar from './ContextSidebar';
 import CardModal from './CardModal';
 import supabase from '../lib/supabaseClient.js';
 
@@ -20,9 +19,8 @@ const CurationPage = () => {
   const [currentCardIndex, setCurrentCardIndex] = useState(0);
   const [microData, setMicroData] = useState([]);
   
-  // Refs para detectar posições dos painéis durante drop
+  // Ref para o painel do editor
   const editorPanelRef = useRef(null);
-  const contextSidebarRef = useRef(null);
 
   // Função para buscar dados completos da notícia
   const fetchFullNewsData = useCallback(async (newsId) => {
@@ -292,9 +290,9 @@ const CurationPage = () => {
   }, [newsData]);
 
   return (
-    <div className="w-full h-screen flex" style={{ backgroundColor: 'var(--bg-primary)', overflow: 'hidden' }}>
-      {/* Coluna Central - Editor */}
-      <div className="flex-1 min-w-0" ref={editorPanelRef}>
+    <div className="w-full h-screen" style={{ backgroundColor: 'var(--bg-primary)', overflow: 'hidden' }}>
+      {/* Canvas Editor - Tela Cheia */}
+      <div className="w-full h-full" ref={editorPanelRef}>
         <AdvancedCanvasEditor 
           newsId={id} 
           newsData={newsData}
@@ -304,15 +302,6 @@ const CurationPage = () => {
           selectedBlock={selectedBlock}
           onBlockSelected={handleBlockSelected}
           onTransferBlock={transferBlockToContext}
-        />
-      </div>
-      
-      {/* Coluna Direita - Contexto (25% da tela) */}
-      <div className="w-1/2 flex-shrink-0" ref={contextSidebarRef} style={{ overflow: 'auto' }}>
-        <ContextSidebar 
-          newsData={newsData} 
-          selectedBlock={selectedBlock}
-          onTransferItem={transferContextItemToEditor}
           onOpenCardModal={handleOpenCardModal}
         />
       </div>

@@ -8,11 +8,12 @@ import {
   ConnectionLineType
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { CheckSquare, Maximize2, RotateCcw, ZoomIn, ZoomOut, Move } from 'lucide-react';
+import { CheckSquare, Maximize2, RotateCcw, ZoomIn, ZoomOut, Move, Library } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 // Importar componentes customizados
 import AdvancedCardNode from './AdvancedCardNode';
+import ContextLibrary from './ContextLibrary';
 import { useAdvancedCanvas } from '../hooks/useAdvancedCanvas';
 
 // Tipos de nodes customizados
@@ -36,11 +37,13 @@ const AdvancedCanvasEditor = ({
   loadError, 
   selectedBlock, 
   onBlockSelected, 
-  onTransferBlock 
+  onTransferBlock,
+  onOpenCardModal
 }) => {
   // Estados locais para UI
   const [showControls, setShowControls] = useState(true);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [isLibraryOpen, setIsLibraryOpen] = useState(false);
   const [canvasStats, setCanvasStats] = useState({
     nodeCount: 0,
     zoom: 1,
@@ -73,28 +76,21 @@ const AdvancedCanvasEditor = ({
     updateNodeContent,
     exportToNewsData,
     animateNodes,
+    addNewNode,
     setCanvasLimits
   } = useAdvancedCanvas(newsData, newsId);
 
   // Função para lidar com edição de blocos
   const handleBlockEdit = useCallback((blockId) => {
-    if (blockId === selectedBlock && blockId !== editingNode) {
-      // Se o bloco já está selecionado, ativar edição
-      if (onBlockSelected) {
-        onBlockSelected(null);
-      }
-      onNodeEditStart(blockId);
+    if (blockId === editingNode) {
+      // Se já está editando este bloco, sair da edição
+      onNodeEditEnd();
     } else if (blockId !== editingNode) {
-      // Se é um bloco diferente, selecionar
+      // Se é um bloco diferente, sair da edição atual e iniciar nova
       onNodeEditEnd();
-      if (onBlockSelected) {
-        onBlockSelected(blockId);
-      }
-    } else if (blockId === null) {
-      // Sair do modo de edição
-      onNodeEditEnd();
+      onNodeEditStart(blockId);
     }
-  }, [selectedBlock, editingNode, onBlockSelected, onNodeEditStart, onNodeEditEnd]);
+  }, [editingNode, onNodeEditStart, onNodeEditEnd]);
 
   // Função para transferir bloco
   const handleTransferBlock = useCallback((blockId, content) => {
@@ -167,6 +163,56 @@ const AdvancedCanvasEditor = ({
     }
   }, [isFullscreen]);
 
+  const openLibrary = useCallback(() => {
+    setIsLibraryOpen(true);
+  }, []);
+
+  const closeLibrary = useCallback(() => {
+    setIsLibraryOpen(false);
+  }, []);
+
+  // Função para lidar com transferência de item da biblioteca (lógica aditiva)
+  const handleTransferFromLibrary = useCallback((blockId, content) => {
+    // Extrair informações do blockId para determinar o tipo e título
+    let title = 'Novo Bloco';
+    let type = 'custom';
+    
+    if (blockId.startsWith('complete-')) {
+      const section = blockId.split('-')[1];
+      switch (section) {
+        case 'introducoes':
+          title = 'Introdução';
+          type = 'introducoes';
+          break;
+        case 'corpos_de_analise':
+          title = 'Corpo de Análise';
+          type = 'corpos_de_analise';
+          break;
+        case 'conclusoes':
+          title = 'Conclusão';
+          type = 'conclusoes';
+          break;
+        default:
+          title = 'Conteúdo Completo';
+          type = section;
+      }
+    } else if (blockId.startsWith('micro-')) {
+      const category = blockId.split('-')[1];
+      title = `Citação - ${category.charAt(0).toUpperCase() + category.slice(1)}`;
+      type = `micro_${category}`;
+    }
+    
+    // Adicionar novo node ao canvas
+    const newNodeId = addNewNode(content, title, type);
+    
+    // Focar no novo node após um pequeno delay
+    setTimeout(() => {
+      focusNode(newNodeId);
+    }, 500);
+    
+    // Não fechar automaticamente a biblioteca para permitir múltiplas transferências
+  }, [addNewNode, focusNode]);
+
   // Atalhos de teclado
   useEffect(() => {
     const handleKeyDown = (e) => {
@@ -192,6 +238,10 @@ const AdvancedCanvasEditor = ({
             e.preventDefault();
             toggleFullscreen();
             break;
+          case 'b':
+            e.preventDefault();
+            openLibrary();
+            break;
         }
       }
 
@@ -203,7 +253,7 @@ const AdvancedCanvasEditor = ({
 
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [editingNode, handleFitView, handleZoomIn, handleZoomOut, toggleFullscreen, onNodeEditEnd]);
+  }, [editingNode, handleFitView, handleZoomIn, handleZoomOut, toggleFullscreen, openLibrary, onNodeEditEnd]);
 
   return (
     <div 
@@ -239,10 +289,7 @@ const AdvancedCanvasEditor = ({
           cursor: grabbing !important;
         }
         
-        /* Melhorias visuais do ReactFlow */
-        .react-flow__node.selected .advanced-card-node {
-          border-color: var(--primary-green) !important;
-        }
+
         
         .advanced-card-node:hover {
           border-color: #2BB24C50 !important;
@@ -256,6 +303,8 @@ const AdvancedCanvasEditor = ({
         
         .advanced-card-node.editing {
           z-index: 1000 !important;
+          opacity: 1 !important;
+          visibility: visible !important;
         }
         
         /* Animações personalizadas */
@@ -540,23 +589,24 @@ const AdvancedCanvasEditor = ({
               {/* Controles avançados */}
               <div className="flex flex-col gap-1">
                 {[
+                  { action: openLibrary, icon: Library, label: 'Biblioteca de Contexto (Ctrl/Cmd + B)', primary: true },
                   { action: handleZoomIn, icon: ZoomIn, label: 'Zoom In (Ctrl/Cmd + +)' },
                   { action: handleZoomOut, icon: ZoomOut, label: 'Zoom Out (Ctrl/Cmd + -)' },
                   { action: handleFitView, icon: RotateCcw, label: 'Fit View (Ctrl/Cmd + 0)' },
                   { action: toggleFullscreen, icon: Maximize2, label: 'Fullscreen (Ctrl/Cmd + F)' }
-                ].map(({ action, icon: Icon, label }, index) => (
+                ].map(({ action, icon: Icon, label, primary }, index) => (
                   <motion.button
                     key={label}
                     onClick={action}
                     className="p-2 rounded flex items-center justify-center transition-all duration-200"
                     style={{
-                      backgroundColor: 'var(--bg-secondary)',
-                      border: '1px solid var(--border-primary)',
-                      color: 'var(--text-secondary)'
+                      backgroundColor: primary ? 'var(--primary-green-transparent)' : 'var(--bg-secondary)',
+                      border: `1px solid ${primary ? 'var(--primary-green)' : 'var(--border-primary)'}`,
+                      color: primary ? 'var(--primary-green)' : 'var(--text-secondary)'
                     }}
                     whileHover={{
-                      backgroundColor: 'var(--primary-green-transparent)',
-                      color: 'var(--primary-green)',
+                      backgroundColor: primary ? 'var(--primary-green)' : 'var(--primary-green-transparent)',
+                      color: primary ? 'white' : 'var(--primary-green)',
                       scale: 1.05
                     }}
                     whileTap={{ scale: 0.95 }}
@@ -598,6 +648,16 @@ const AdvancedCanvasEditor = ({
           </Panel>
         </ReactFlow>
       </div>
+
+      {/* Biblioteca de Contexto Modal */}
+      <ContextLibrary
+        isOpen={isLibraryOpen}
+        onClose={closeLibrary}
+        newsData={newsData}
+        selectedBlock={selectedBlock}
+        onTransferItem={handleTransferFromLibrary}
+        onOpenCardModal={onOpenCardModal}
+      />
     </div>
   );
 };
