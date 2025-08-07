@@ -164,3 +164,106 @@ body {
   box-sizing: border-box;
   position: relative;
 }
+
+/* === ESTILOS AVANÇADOS PARA REACT FLOW HANDLES === */
+
+/* Base para todos os handles */
+.react-flow__handle {
+  width: 10px;
+  height: 10px;
+  background-color: var(--bg-secondary);
+  border: 2px solid var(--primary-green);
+  transition: all 0.2s ease;
+}
+
+/* Handles especializados - apenas borda colorida */
+.react-flow__handle[id="dados"],
+.react-flow__handle.connection-handle-dados {
+  background-color: var(--bg-secondary) !important;
+  border: 2px solid #4A90E2 !important;
+}
+
+.react-flow__handle[id="estrutura"],
+.react-flow__handle.connection-handle-estrutura {
+  background-color: var(--bg-secondary) !important;
+  border: 2px solid #F5A623 !important;
+}
+
+/* Remove o estilo padrão do React Flow quando conectado */
+.react-flow__handle.connecting, .react-flow__handle:hover {
+  background-color: var(--primary-green-hover);
+  border-color: var(--primary-green-hover);
+  box-shadow: 0 0 0 4px var(--primary-green-transparent);
+  transform: scale(1.4);
+}
+
+/* Posicionamento perfeito dos handles */
+.react-flow__handle-top {
+  top: 0;
+  transform: translate(-50%, -50%);
+}
+.react-flow__handle-bottom {
+  bottom: 0;
+  transform: translate(-50%, 50%);
+}
+.react-flow__handle-left {
+  left: 0;
+  transform: translate(-50%, -50%);
+}
+.react-flow__handle-right {
+  right: 0;
+  transform: translate(50%, -50%);
+}
+
+/* Estilo da linha de conexão (edge) */
+.react-flow__edge-path {
+  stroke: rgba(255, 255, 255, 0.4);
+  stroke-width: 2;
+  stroke-dasharray: 5, 5;
+}
+
+.react-flow__edge:hover .react-flow__edge-path,
+.react-flow__edge-selected .react-flow__edge-path {
+  stroke: var(--primary-green);
+  stroke-width: 2;
+}
+
+/* Remover animações de hover dos handles */
+.react-flow__handle {
+  transition: none !important;
+  transform: none !important;
+}
+
+.react-flow__handle:hover {
+  transform: none !important;
+  scale: none !important;
+}
+
+.react-flow__handle.connecting {
+  transform: none !important;
+  scale: none !important;
+}
+
+/* Sobrescrever estilos de hover específicos */
+.connection-handle-dados:hover,
+.connection-handle-estrutura:hover,
+.connection-handle-source:hover {
+  transform: none !important;
+  scale: none !important;
+  opacity: 1 !important;
+  background-color: transparent !important;
+  box-shadow: 0 0 0 4px rgba(245, 166, 35, 0.2) !important;
+  cursor: default !important;
+}
+
+/* Corrigir cursor dos elementos nodrag */
+.react-flow__node .nodrag,
+.react-flow__node .nodrag * {
+  cursor: default !important;
+}
+
+/* Sobrescrever especificamente o cursor text */
+.react-flow__node .nodrag[style*="cursor: text"],
+.react-flow__node .nodrag[style*="cursor:text"] {
+  cursor: default !important;
+}

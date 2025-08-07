@@ -194,9 +194,42 @@ export const convertNewsDataToCanvasState = (newsData, savedCanvasState = null) 
         };
       });
 
+      // Verificar se existe MonitorNode e criar conexão com conclusão se necessário
+      const monitorNode = deserializedState.nodes.find(node => node.type === 'monitorNode');
+      const conclusionNode = updatedNodes.find(node => node.id === 'conclusion');
+      
+      let updatedEdges = deserializedState.edges || [];
+      
+      if (monitorNode && conclusionNode) {
+        // Verificar se já existe conexão entre conclusão e monitor
+        const existingConnection = updatedEdges.find(edge => 
+          edge.source === 'conclusion' && edge.target === monitorNode.id
+        );
+        
+        if (!existingConnection) {
+          // Criar conexão automática entre conclusão e monitor
+          const monitorEdge = {
+            id: `edge-conclusion-monitor-default`,
+            source: 'conclusion',
+            target: monitorNode.id,
+            sourceHandle: 'source',
+            targetHandle: 'target',
+            type: 'default',
+            animated: true,
+            style: {
+              stroke: 'rgba(255, 255, 255, 0.7)',
+              strokeWidth: 2,
+            }
+          };
+          
+          updatedEdges.push(monitorEdge);
+        }
+      }
+
       const result = {
         ...deserializedState,
-        nodes: updatedNodes
+        nodes: updatedNodes,
+        edges: updatedEdges
       };
       
 
@@ -206,11 +239,59 @@ export const convertNewsDataToCanvasState = (newsData, savedCanvasState = null) 
     // Criar novo estado do canvas
     const nodes = createDefaultNodes(newsData);
     
+    // Adicionar MonitorNode e conexão com conclusão
+    const monitorNode = {
+      id: `monitor-${Date.now()}`,
+      type: 'monitorNode',
+      position: { x: 400, y: 100 }, // Posicionado próximo aos nodes padrão
+      data: {
+        title: 'Monitor',
+        displayMode: 'structured',
+        autoRefresh: true,
+        showHeaders: true,
+        hasContent: false,
+        isEditing: false,
+        metadata: {
+          createdAt: new Date().toISOString(),
+          nodeType: 'monitor',
+          isDefault: true
+        }
+      },
+      style: {
+        width: 500,
+        height: 800
+      }
+    };
+    
+    nodes.push(monitorNode);
+    
+    // Criar conexão automática entre conclusão e monitor
+    const conclusionNode = nodes.find(node => node.id === 'conclusion');
+    const edges = [];
+    
+    if (conclusionNode) {
+      const monitorEdge = {
+        id: `edge-conclusion-monitor-default`,
+        source: 'conclusion',
+        target: monitorNode.id,
+        sourceHandle: 'source',
+        targetHandle: 'target',
+        type: 'default',
+        animated: true,
+        style: {
+          stroke: 'rgba(255, 255, 255, 0.7)',
+          strokeWidth: 2,
+        }
+      };
+      
+      edges.push(monitorEdge);
+    }
+    
     const result = {
       version: CURRENT_SCHEMA_VERSION,
       viewport: { x: 0, y: 0, zoom: 0.75 },
       nodes: nodes,
-      edges: [],
+      edges: edges,
       metadata: {
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),

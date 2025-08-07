@@ -356,23 +356,11 @@ const CardNode = ({ data, selected }) => {
       <Handle
         type="target"
         position={Position.Top}
-        style={{
-          background: 'var(--primary-green)',
-          width: '8px',
-          height: '8px',
-          border: '2px solid var(--bg-secondary)'
-        }}
       />
       
       <Handle
         type="source"
         position={Position.Bottom}
-        style={{
-          background: 'var(--primary-green)',
-          width: '8px',
-          height: '8px',
-          border: '2px solid var(--bg-secondary)'
-        }}
       />
     </motion.div>
   );

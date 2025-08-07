@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { 
   ReactFlow, 
   Background, 
@@ -581,12 +581,7 @@ const CanvasEditorV2 = ({
           isValidConnection={isValidConnection}
           nodeTypes={nodeTypes}
           connectionLineType={ConnectionLineType.SmoothStep}
-          connectionLineStyle={{
-            stroke: '#2BB24C',
-            strokeWidth: 4,
-            strokeDasharray: '8,4',
-            filter: 'drop-shadow(0 0 8px rgba(43, 178, 76, 0.7))'
-          }}
+
           defaultViewport={{ x: 0, y: 0, zoom: 1 }}
           minZoom={0.5}
           maxZoom={2}

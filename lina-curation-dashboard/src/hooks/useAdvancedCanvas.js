@@ -87,10 +87,10 @@ export const useAdvancedCanvas = (newsData, newsId) => {
             const monitorNode = {
               id: `monitor-${Date.now()}`,
               type: 'monitorNode',
-              position: { x: 0, y: 200 },
+              position: { x: 400, y: 100 }, // Posicionado próximo aos nodes padrão
               data: {
                 title: 'Monitor',
-                displayMode: 'combined',
+                displayMode: 'structured',
                 autoRefresh: true,
                 showHeaders: true,
                 hasContent: false,
@@ -108,6 +108,29 @@ export const useAdvancedCanvas = (newsData, newsId) => {
             };
             
             canvasState.nodes.push(monitorNode);
+            
+            // Criar conexão automática entre conclusão e monitor
+            const conclusionNode = canvasState.nodes.find(node => node.id === 'conclusion');
+            if (conclusionNode) {
+              const monitorEdge = {
+                id: `edge-conclusion-monitor-default`,
+                source: 'conclusion',
+                target: monitorNode.id,
+                sourceHandle: 'source',
+                targetHandle: 'target',
+                type: 'default',
+                animated: true,
+                style: {
+                  stroke: 'rgba(255, 255, 255, 0.7)',
+                  strokeWidth: 2,
+                }
+              };
+              
+              if (!canvasState.edges) {
+                canvasState.edges = [];
+              }
+              canvasState.edges.push(monitorEdge);
+            }
           }
           
           setNodes(canvasState.nodes);
@@ -129,10 +152,25 @@ export const useAdvancedCanvas = (newsData, newsId) => {
   // Função para resetar viewport
   const resetViewport = useCallback(() => {
     if (reactFlowInstance.current) {
-      reactFlowInstance.current.fitView({
-        padding: 0.1,
-        duration: 800
-      });
+      // Filtrar apenas os nodes principais (excluir MonitorNode)
+      const mainNodes = nodes.filter(node => 
+        ['summary', 'body', 'conclusion'].includes(node.id)
+      );
+      
+      if (mainNodes.length > 0) {
+        // Fazer fit view apenas nos nodes principais
+        reactFlowInstance.current.fitView({
+          padding: 0.1,
+          duration: 800,
+          nodes: mainNodes
+        });
+      } else {
+        // Fallback para fit view geral
+        reactFlowInstance.current.fitView({
+          padding: 0.1,
+          duration: 800
+        });
+      }
       
       // Aplicar zoom de 75% após o fit view
       setTimeout(() => {
@@ -145,78 +183,115 @@ export const useAdvancedCanvas = (newsData, newsId) => {
         }
       }, 850);
     }
-  }, []);
+  }, [nodes]);
 
-  // Fit view automático quando o canvas é inicializado
+  // Fit view automático apenas na primeira inicialização
   useEffect(() => {
-    if (isInitialized && reactFlowInstance.current) {
+    if (isInitialized && reactFlowInstance.current && nodes.length > 0) {
       // Pequeno delay para garantir que os nodes foram renderizados
       const timer = setTimeout(() => {
         resetViewport();
-    
       }, 300);
       
       return () => clearTimeout(timer);
     }
-  }, [isInitialized, resetViewport]);
+  }, [isInitialized]); // Removido resetViewport e nodes das dependências
 
   // Função para lidar com novas conexões
   const onConnect = useCallback((connection) => {
-    console.log('🔌 Nova conexão estabelecida:', connection);
+    console.log('🔌 Tentativa de conexão:', connection);
+    
+    // Validar se a conexão é permitida
+    const sourceHandle = connection.sourceHandle;
+    const targetHandle = connection.targetHandle;
+    
+    // Lista de handles especializados
+    const specializedHandles = ['dados', 'estrutura', 'estrutura-output', 'micro-output'];
+    const standardHandles = ['target', 'source'];
+    
+    // Verificar se está tentando conectar handles especializados com padrão
+    const isSourceSpecialized = specializedHandles.includes(sourceHandle);
+    const isTargetSpecialized = specializedHandles.includes(targetHandle);
+    const isSourceStandard = standardHandles.includes(sourceHandle) || !sourceHandle;
+    const isTargetStandard = standardHandles.includes(targetHandle) || !targetHandle;
+    
+    // Bloquear conexões entre handles especializados e padrão
+    if ((isSourceSpecialized && isTargetStandard) || (isSourceStandard && isTargetSpecialized)) {
+      console.log('❌ Conexão bloqueada: handles especializados não podem conectar com padrão');
+      return;
+    }
+    
+    // Regras específicas para handles de estrutura
+    if (sourceHandle === 'estrutura-output') {
+      // Handle de saída de estrutura só pode conectar com handle de entrada de estrutura
+      if (targetHandle !== 'estrutura') {
+        console.log('❌ Conexão bloqueada: saída de estrutura só pode conectar com entrada de estrutura');
+        return;
+      }
+    } else if (targetHandle === 'estrutura') {
+      // Handle de entrada de estrutura só pode receber de saída de estrutura
+      if (sourceHandle !== 'estrutura-output') {
+        console.log('❌ Conexão bloqueada: entrada de estrutura só pode receber de saída de estrutura');
+        return;
+      }
+    }
+    
+    // Regras específicas para handles de micro-dado
+    if (sourceHandle === 'micro-output') {
+      // Handle de saída de micro-dado só pode conectar com handle de entrada de dados
+      if (targetHandle !== 'dados') {
+        console.log('❌ Conexão bloqueada: saída de micro-dado só pode conectar com entrada de dados');
+        return;
+      }
+    } else if (targetHandle === 'dados') {
+      // Handle de entrada de dados só pode receber de saída de micro-dado
+      if (sourceHandle !== 'micro-output') {
+        console.log('❌ Conexão bloqueada: entrada de dados só pode receber de saída de micro-dado');
+        return;
+      }
+    }
+    
+    // Bloquear conexões entre handles especializados diferentes (exceto estrutura e micro-dado)
+    if (isSourceSpecialized && isTargetSpecialized && sourceHandle !== targetHandle && 
+        !(sourceHandle === 'estrutura-output' && targetHandle === 'estrutura') &&
+        !(sourceHandle === 'micro-output' && targetHandle === 'dados')) {
+      console.log('❌ Conexão bloqueada: handles especializados diferentes não podem se conectar');
+      return;
+    }
+    
+    console.log('✅ Conexão permitida:', connection);
     
     // Determinar estilo baseado no tipo de handle
     let edgeStyle = {
-      stroke: 'rgba(255, 255, 255, 0.6)',
+      stroke: 'rgba(255, 255, 255, 0.7)',
       strokeWidth: 2,
     };
-    let markerColor = 'rgba(255, 255, 255, 0.6)';
+    let animated = true;
     
     // Estilos específicos para handles especializados
-    if (connection.sourceHandle === 'dados' || connection.targetHandle === 'dados') {
+    if (targetHandle === 'dados' || sourceHandle === 'micro-output') {
       edgeStyle = {
         stroke: '#4A90E2',
-        strokeWidth: 3,
-        strokeDasharray: '5, 5',
+        strokeWidth: 2.5,
+        strokeDasharray: '5 5',
       };
-      markerColor = '#4A90E2';
-    } else if (connection.sourceHandle === 'estrutura' || connection.targetHandle === 'estrutura') {
+      animated = false;
+    } else if (targetHandle === 'estrutura' || sourceHandle === 'estrutura-output') {
       edgeStyle = {
         stroke: '#F5A623',
-        strokeWidth: 3,
-        strokeDasharray: '10, 5',
+        strokeWidth: 2.5,
+        strokeDasharray: '10 5',
       };
-      markerColor = '#F5A623';
+      animated = false;
     }
     
-    // Estilo customizado para a nova aresta
     const newEdge = {
       ...connection,
-      id: `edge-${connection.source}-${connection.target}-${connection.sourceHandle || 'default'}-${connection.targetHandle || 'default'}`,
-      type: 'smoothstep',
-      animated: true,
+      id: `edge-${connection.source}-${connection.target}-${sourceHandle || 'default'}-${targetHandle || 'default'}`,
+      type: 'default',
+      animated: animated,
       style: edgeStyle,
-      markerEnd: {
-        type: 'arrowclosed',
-        color: markerColor,
-      },
-      data: {
-        sourceHandle: connection.sourceHandle,
-        targetHandle: connection.targetHandle,
-        type: connection.sourceHandle || connection.targetHandle || 'default'
-      },
-      // Adicionar atributos data para CSS targeting
-      'data-source-handle': connection.sourceHandle || 'default',
-      'data-target-handle': connection.targetHandle || 'default'
     };
-    
-    console.log('🔗 Edge criada:', {
-      id: newEdge.id,
-      source: newEdge.source,
-      target: newEdge.target,
-      sourceHandle: newEdge.sourceHandle,
-      targetHandle: newEdge.targetHandle,
-      style: edgeStyle
-    });
     
     setEdges((eds) => addEdge(newEdge, eds));
   }, [setEdges]);
@@ -232,10 +307,10 @@ export const useAdvancedCanvas = (newsData, newsId) => {
       const monitorNode = {
         id: `monitor-${Date.now()}`,
         type: 'monitorNode',
-        position: { x: 0, y: 200 },
+        position: { x: 400, y: 100 }, // Posicionado próximo aos nodes padrão
         data: {
           title: 'Monitor',
-          displayMode: 'combined',
+          displayMode: 'structured',
           autoRefresh: true,
           showHeaders: true,
           hasContent: false,
@@ -253,6 +328,29 @@ export const useAdvancedCanvas = (newsData, newsId) => {
       };
       
       defaultState.nodes.push(monitorNode);
+      
+      // Criar conexão automática entre conclusão e monitor
+      const conclusionNode = defaultState.nodes.find(node => node.id === 'conclusion');
+      if (conclusionNode) {
+        const monitorEdge = {
+          id: `edge-conclusion-monitor-default`,
+          source: 'conclusion',
+          target: monitorNode.id,
+          sourceHandle: 'source',
+          targetHandle: 'target',
+          type: 'default',
+          animated: true,
+          style: {
+            stroke: 'rgba(255, 255, 255, 0.7)',
+            strokeWidth: 2,
+          }
+        };
+        
+        if (!defaultState.edges) {
+          defaultState.edges = [];
+        }
+        defaultState.edges.push(monitorEdge);
+      }
     }
     
     setNodes(defaultState.nodes);
@@ -359,7 +457,7 @@ export const useAdvancedCanvas = (newsData, newsId) => {
   }, [nodes]);
 
   // Função para atualizar conteúdo de um node
-  const updateNodeContent = useCallback((nodeId, newContent) => {
+  const updateNodeContent = useCallback((nodeId, newData) => {
     setNodes(prevNodes => 
       prevNodes.map(node => 
         node.id === nodeId 
@@ -367,10 +465,10 @@ export const useAdvancedCanvas = (newsData, newsId) => {
               ...node, 
               data: { 
                 ...node.data, 
-                content: newContent,
-                hasContent: newContent && 
-                  !newContent.includes('Clique para selecionar') &&
-                  !newContent.includes('Clique novamente para editar')
+                ...newData,
+                hasContent: newData.content && 
+                  !newData.content.includes('Clique para selecionar') &&
+                  !newData.content.includes('Clique novamente para editar')
               } 
             }
           : node
@@ -609,10 +707,10 @@ export const useAdvancedCanvas = (newsData, newsId) => {
     const newNode = {
       id: `monitor-${Date.now()}`,
       type: 'monitorNode',
-      position: { x: 250, y: 250 },
+      position: { x: 400, y: 100 }, // Posicionado próximo aos nodes padrão
       data: {
         title: 'Monitor',
-        displayMode: 'combined',
+        displayMode: 'structured',
         autoRefresh: true,
         showHeaders: true
       }

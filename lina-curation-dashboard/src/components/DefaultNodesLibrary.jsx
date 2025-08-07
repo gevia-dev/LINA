@@ -52,7 +52,7 @@ const DefaultNodesLibrary = ({ onAddNode }) => {
     {
       id: 'estrutura',
       title: 'Estrutura',
-      description: 'Node para organizar a estrutura do conteúdo',
+      description: 'Node para organizar a estrutura do conteúdo - apenas saída laranja',
       icon: Layers,
       color: '#F5A623', // Laranja para estrutura
       template: {
@@ -64,6 +64,8 @@ const DefaultNodesLibrary = ({ onAddNode }) => {
           coreKey: 'micro_estrutura', // Para ter estilo de microdado
           hasContent: true,
           isEditing: false,
+          isStructureNode: true, // Flag especial para identificar node de estrutura
+          structureType: 'continua', // Tipo de estrutura padrão
           metadata: {
             createdAt: new Date().toISOString(),
             nodeType: 'estrutura',
@@ -72,8 +74,8 @@ const DefaultNodesLibrary = ({ onAddNode }) => {
         },
         position: { x: 0, y: 0 },
         style: {
-          width: 250, // Largura de microdado
-          height: 120 // Altura de microdado
+          width: 245, // 70% da largura padrão (350px)
+          height: 110 // Altura ajustada para radio buttons
         }
       }
     }

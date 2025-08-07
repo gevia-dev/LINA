@@ -26,23 +26,34 @@ const NodeModal = ({ isOpen, onClose, nodeData, onSave }) => {
 
   // Sincronizar o conteúdo editado quando o modal abrir
   useEffect(() => {
-    if (isOpen && nodeData?.content) {
-      setEditedContent(nodeData.content);
+    if (isOpen && nodeData) {
+      setEditedContent(nodeData.content || '');
       setHasChanges(false);
       
-      // Detectar qual estrutura está selecionada baseado no conteúdo
-      const currentStructure = structureOptions.find(option => 
-        nodeData.content.trim() === option.estrutura.trim()
-      );
-      
-      // Se não encontrou correspondência exata, verificar correspondência parcial
-      const partialMatch = structureOptions.find(option => 
-        nodeData.content.includes(option.estrutura.substring(0, 50))
-      );
-      
-      // Definir a estrutura selecionada
-      const selectedStructureOption = currentStructure || partialMatch || null;
-      setSelectedStructure(selectedStructureOption ? selectedStructureOption.titulo : '');
+      // Usar structureType do node se disponível, senão detectar pelo conteúdo
+      if (nodeData.structureType) {
+        // Mapear structureType para o título da estrutura
+        const structureMap = {
+          'continua': 'Continua',
+          'paragrafos': 'Paragrafos',
+          'topicos': 'Topicos'
+        };
+        setSelectedStructure(structureMap[nodeData.structureType] || 'Continua');
+      } else {
+        // Detectar qual estrutura está selecionada baseado no conteúdo (fallback)
+        const currentStructure = structureOptions.find(option => 
+          nodeData.content && nodeData.content.trim() === option.estrutura.trim()
+        );
+        
+        // Se não encontrou correspondência exata, verificar correspondência parcial
+        const partialMatch = structureOptions.find(option => 
+          nodeData.content && nodeData.content.includes(option.estrutura.substring(0, 50))
+        );
+        
+        // Definir a estrutura selecionada
+        const selectedStructureOption = currentStructure || partialMatch || null;
+        setSelectedStructure(selectedStructureOption ? selectedStructureOption.titulo : 'Continua');
+      }
     }
   }, [isOpen, nodeData]);
 
@@ -57,7 +68,18 @@ const NodeModal = ({ isOpen, onClose, nodeData, onSave }) => {
 
   const handleSave = () => {
     if (onSave && hasChanges) {
-      onSave(nodeData, editedContent);
+      // Mapear selectedStructure para structureType se for um node de estrutura
+      let additionalData = {};
+      if (nodeData.type === 'estrutura' || nodeData.isStructureNode) {
+        const structureTypeMap = {
+          'Continua': 'continua',
+          'Paragrafos': 'paragrafos',
+          'Topicos': 'topicos'
+        };
+        additionalData = { structureType: structureTypeMap[selectedStructure] || 'continua' };
+      }
+      
+      onSave(nodeData, editedContent, additionalData);
     }
     setHasChanges(false);
   };
@@ -78,6 +100,19 @@ const NodeModal = ({ isOpen, onClose, nodeData, onSave }) => {
     setSelectedStructure(structure.titulo);
     setEditedContent(structure.estrutura);
     setHasChanges(true);
+    
+    // Mapear título para structureType
+    const structureTypeMap = {
+      'Continua': 'continua',
+      'Paragrafos': 'paragrafos',
+      'Topicos': 'topicos'
+    };
+    
+    // Atualizar o node com o novo structureType
+    if (nodeData && onSave) {
+      const newStructureType = structureTypeMap[structure.titulo];
+      onSave(nodeData, structure.estrutura, { structureType: newStructureType });
+    }
   };
 
   // Fechar modal ao pressionar ESC
@@ -178,10 +213,10 @@ const NodeModal = ({ isOpen, onClose, nodeData, onSave }) => {
                   animate={{ scale: 1 }}
                   transition={{ delay: 0.1 }}
                 >
-                  <nodeIcon 
-                    size={24} 
-                    style={{ color: nodeColor }}
-                  />
+                  {React.createElement(nodeIcon, {
+                    size: 24,
+                    style: { color: nodeColor }
+                  })}
                 </motion.div>
                 <div>
                   <h2 

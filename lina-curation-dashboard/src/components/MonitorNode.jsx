@@ -28,7 +28,7 @@ const MonitorNode = ({ data, selected }) => {
   const { 
     id,
     title = 'Monitor',
-    displayMode = 'combined', // 'combined', 'structured', 'markdown'
+    displayMode = 'structured', // 'structured', 'combined', 'markdown'
     autoRefresh = true,
     showHeaders = true
   } = data;
@@ -431,8 +431,8 @@ const MonitorNode = ({ data, selected }) => {
               fontFamily: '"Nunito Sans", "Inter", sans-serif'
             }}
           >
-            <option value="combined">Combinado</option>
             <option value="structured">Estruturado</option>
+            <option value="combined">Combinado</option>
             <option value="markdown">Markdown</option>
           </select>
 
@@ -555,40 +555,17 @@ const MonitorNode = ({ data, selected }) => {
         </div>
       </div>
 
-      {/* Handles de conexão - apenas entrada */}
+      {/* Handle de conexão - canto superior esquerdo */}
       <Handle
         type="target"
         position={Position.Top}
         id="monitor-input"
-        style={{
-          background: 'var(--primary-green)',
-          width: 16,
-          height: 16,
-          border: '3px solid var(--bg-secondary)',
-          cursor: 'crosshair',
-          borderRadius: '50%',
-          boxShadow: '0 2px 8px rgba(43, 178, 76, 0.4)'
-        }}
-        className="connection-handle connection-handle-monitor"
         title="Conecte nodes para visualizar"
-      />
-
-      {/* Handle lateral - lado direito */}
-      <Handle
-        type="target"
-        position={Position.Right}
-        id="monitor-right"
         style={{
-          background: 'var(--primary-green)',
-          width: 14,
-          height: 14,
-          border: '3px solid var(--bg-secondary)',
-          cursor: 'crosshair',
-          borderRadius: '50%',
-          boxShadow: '0 2px 8px rgba(43, 178, 76, 0.4)'
+          left: '10px',
+          right: 'auto',
+          top: '65px'
         }}
-        className="connection-handle"
-        title="Entrada lateral"
       />
 
       {/* Estilos adicionais */}

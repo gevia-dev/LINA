@@ -15,7 +15,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import AdvancedCardNode from './AdvancedCardNode';
 import MonitorNode from './MonitorNode';
 import ContextLibrary from './ContextLibrary';
-import NodeModal from './NodeModal';
+import CardModal from './CardModal';
 import { useAdvancedCanvas } from '../hooks/useAdvancedCanvas';
 
 // Tipos de nodes customizados
@@ -92,11 +92,135 @@ const AdvancedCanvasEditor = ({
 
 
 
-  // Função para abrir modal de node
+  // Função para abrir modal de node usando CardModal
   const handleOpenNodeModal = useCallback((modalData) => {
-    setNodeModalData(modalData);
+    // Função auxiliar para fazer parse seguro de JSON
+    const safeJsonParse = (jsonString) => {
+      try {
+        return jsonString ? JSON.parse(jsonString) : null;
+      } catch (error) {
+        console.warn('❌ Erro ao fazer parse do JSON:', error);
+        return null;
+      }
+    };
+
+    // Determinar o tipo e seção baseado no node
+    let type = 'complete';
+    let section = null;
+    let category = null;
+    
+    if (modalData.coreKey) {
+      switch (modalData.coreKey) {
+        case 'Introduce':
+        case 'introducoes':
+          type = 'complete';
+          section = 'introducoes';
+          break;
+        case 'corpos_de_analise':
+          type = 'complete';
+          section = 'corpos_de_analise';
+          break;
+        case 'conclusoes':
+          type = 'complete';
+          section = 'conclusoes';
+          break;
+        case 'micro_estrutura':
+          type = 'complete';
+          section = 'estrutura';
+          break;
+        default:
+          if (modalData.coreKey.startsWith('micro_')) {
+            type = 'micro';
+            category = modalData.coreKey.replace('micro_', '');
+          } else {
+            type = 'complete';
+            section = modalData.coreKey;
+          }
+      }
+    } else if (modalData.type === 'estrutura') {
+      type = 'complete';
+      section = 'estrutura';
+    } else if (modalData.nodeType === 'estrutura') {
+      type = 'complete';
+      section = 'estrutura';
+    }
+
+    // Adaptar dados do node para o formato do CardModal
+    const cardData = {
+      content: modalData.content || '',
+      type,
+      section,
+      category,
+      itemId: modalData.itemId,
+      title: modalData.title || 'Editar Conteúdo'
+    };
+
+    // Coletar todos os cards disponíveis para navegação
+    let allCardsData = [];
+    let microDataArray = [];
+    
+    if (type === 'complete' && section && newsData?.variant_structure) {
+      // Para dados completos, coletar todos os cards da seção atual
+      const variantData = safeJsonParse(newsData.variant_structure);
+      if (variantData && variantData[section]) {
+        allCardsData = variantData[section].map((item, idx) => ({
+          content: typeof item === 'string' ? item : (item.text || item.content || ''),
+          type: 'complete',
+          section,
+          itemId: `complete-${section}-${idx}`
+        }));
+      }
+    } else if (type === 'micro' && category && newsData?.core_quotes) {
+      // Para micro dados, coletar todos os cards da categoria atual
+      const coreQuotes = safeJsonParse(newsData.core_quotes);
+      if (coreQuotes && coreQuotes[category]) {
+        const quotes = Array.isArray(coreQuotes[category]) ? coreQuotes[category] : [coreQuotes[category]];
+        allCardsData = quotes.map((quote, idx) => ({
+          content: quote,
+          type: 'micro',
+          category,
+          itemId: `micro-${category}-${idx}`
+        }));
+      }
+    }
+    
+    // Coletar todos os micro dados para o carrossel (apenas quando necessário)
+    if (type === 'complete' && newsData?.core_quotes) {
+      const allCoreQuotes = safeJsonParse(newsData.core_quotes);
+      if (allCoreQuotes) {
+        Object.entries(allCoreQuotes).forEach(([cat, quotes]) => {
+          if (Array.isArray(quotes)) {
+            quotes.forEach((quote, idx) => {
+              microDataArray.push({
+                content: quote,
+                category: cat,
+                itemId: `micro-${cat}-${idx}`
+              });
+            });
+          } else {
+            microDataArray.push({
+              content: quotes,
+              category: cat,
+              itemId: `micro-${cat}-0`
+            });
+          }
+        });
+      }
+    }
+
+    // Encontrar o índice do card atual
+    const currentIndex = allCardsData.findIndex(card => 
+      card.content === modalData.content || card.itemId === modalData.itemId
+    );
+    
+    setNodeModalData({
+      cardData,
+      allCards: allCardsData,
+      currentIndex: currentIndex >= 0 ? currentIndex : 0,
+      microData: microDataArray
+    });
     setIsNodeModalOpen(true);
-  }, []);
+  }, [newsData]);
 
   // Função para fechar modal de node
   const handleCloseNodeModal = useCallback(() => {
@@ -105,10 +229,36 @@ const AdvancedCanvasEditor = ({
   }, []);
 
   // Função para salvar conteúdo do node
-  const handleSaveNodeContent = useCallback((nodeData, newContent) => {
-    updateNodeContent(nodeData.itemId, newContent);
+  const handleSaveNodeContent = useCallback((cardData, newContent) => {
+    // Extrair o itemId do cardData para atualizar o node correto
+    const nodeId = cardData.itemId;
+    if (nodeId) {
+      updateNodeContent(nodeId, { content: newContent });
+    }
+    // Não fechar o modal automaticamente para permitir navegação
+  }, [updateNodeContent]);
+
+  // Função para salvar e fechar modal
+  const handleSaveAndClose = useCallback((cardData, newContent) => {
+    // Extrair o itemId do cardData para atualizar o node correto
+    const nodeId = cardData.itemId;
+    if (nodeId) {
+      updateNodeContent(nodeId, { content: newContent });
+    }
     handleCloseNodeModal();
   }, [updateNodeContent, handleCloseNodeModal]);
+
+  // Função para navegar entre cards
+  const handleNavigateCard = useCallback((newIndex) => {
+    if (nodeModalData && nodeModalData.allCards && nodeModalData.allCards[newIndex]) {
+      const newCard = nodeModalData.allCards[newIndex];
+      setNodeModalData(prev => ({
+        ...prev,
+        cardData: newCard,
+        currentIndex: newIndex
+      }));
+    }
+  }, [nodeModalData]);
 
   // Função para transferir bloco
   const handleTransferBlock = useCallback((blockId, content) => {
@@ -130,18 +280,7 @@ const AdvancedCanvasEditor = ({
     setTimeout(() => {
       animateNodes('slideUp');
     }, 100);
-    
-    // Fit view automático na inicialização
-    setTimeout(() => {
-      if (instance && nodes.length > 0) {
-        instance.fitView({
-          padding: 0.1,
-          duration: 800,
-          includeHiddenNodes: false
-        });
-      }
-    }, 200);
-  }, [animateNodes, nodes.length]);
+  }, [animateNodes]);
 
   // Atualizar nodes com callbacks corretos
   const nodesWithCallbacks = nodes.map(node => ({
@@ -292,7 +431,7 @@ const AdvancedCanvasEditor = ({
         }
         
         .react-flow__node .nodrag {
-          cursor: text !important;
+          cursor: default !important;
         }
         
         .node-editing .react-flow__pane {
@@ -372,6 +511,40 @@ const AdvancedCanvasEditor = ({
         
         .react-flow__controls button:last-child {
           border-bottom: none;
+        }
+
+        /* Estilos para feedback visual dos handles */
+        .react-flow__handle {
+          opacity: 0.8 !important;
+          transition: all 0.2s ease !important;
+        }
+
+        .react-flow__handle:hover {
+          opacity: 1 !important;
+          transform: scale(1.3) !important;
+        }
+
+        .connection-handle-dados:hover {
+          box-shadow: 0 0 0 4px rgba(74, 144, 226, 0.4) !important;
+          background: #3A80D2 !important;
+        }
+
+        .connection-handle-estrutura:hover {
+          box-shadow: 0 0 0 4px rgba(245, 166, 35, 0.4) !important;
+          background: #E59613 !important;
+        }
+
+        .connection-handle-source:hover {
+           box-shadow: 0 0 0 4px rgba(43, 178, 76, 0.4) !important;
+           background: var(--primary-green-hover) !important;
+        }
+
+        .react-flow__connection-line {
+          stroke-width: 3 !important;
+          stroke-dasharray: 8, 4 !important;
+          opacity: 0.9 !important;
+          filter: drop-shadow(0 0 4px rgba(255, 255, 255, 0.3)) !important;
+        }
         }
         
         .react-flow__minimap {
@@ -678,11 +851,7 @@ const AdvancedCanvasEditor = ({
           {...viewportConfig}
           {...interactionConfig}
           attributionPosition="bottom-left"
-          connectionLineStyle={{
-            stroke: 'var(--primary-green)',
-            strokeWidth: 4,
-            strokeDasharray: '8, 4'
-          }}
+
           connectionMode="loose"
         >
           <Background 
@@ -818,12 +987,16 @@ const AdvancedCanvasEditor = ({
         onAddNode={addNewNode}
       />
 
-      {/* Modal de Node */}
-      <NodeModal
+      {/* Modal de Node usando CardModal */}
+      <CardModal
         isOpen={isNodeModalOpen}
         onClose={handleCloseNodeModal}
-        nodeData={nodeModalData}
-        onSave={handleSaveNodeContent}
+        cardData={nodeModalData?.cardData}
+        onSave={handleSaveAndClose}
+        allCards={nodeModalData?.allCards || []}
+        currentCardIndex={nodeModalData?.currentIndex || 0}
+        onNavigate={handleNavigateCard}
+        microData={nodeModalData?.microData || []}
       />
     </div>
   );

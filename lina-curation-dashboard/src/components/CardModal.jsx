@@ -189,7 +189,7 @@ const CardModal = ({ isOpen, onClose, cardData, onSave, allCards = [], currentCa
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.9, y: 20 }}
           transition={{ duration: 0.3, ease: "easeOut" }}
-          className="relative w-full max-w-4xl mx-4 max-h-[90vh] overflow-hidden"
+          className="relative w-full max-w-4xl mx-4 max-h-[90vh]"
         >
           <div className="bg-[#1E1E1E] border border-[#333333] rounded-lg shadow-2xl flex flex-col">
             {/* Header */}
@@ -229,7 +229,7 @@ const CardModal = ({ isOpen, onClose, cardData, onSave, allCards = [], currentCa
 
                                                   {/* Content */}
              <div className="flex-1 flex flex-col overflow-hidden">
-               <div className="flex-1 p-6 overflow-y-auto" style={{ overflowY: 'hidden' }}>
+               <div className="flex-1 p-6 overflow-y-auto modal-content">
                  {/* Edit Area */}
                  <div className="mb-6">
                    <h3 className="text-[#A0A0A0] text-sm font-semibold mb-3 uppercase tracking-wider">
@@ -308,7 +308,7 @@ const CardModal = ({ isOpen, onClose, cardData, onSave, allCards = [], currentCa
                         </div>
                         
                         {/* Category Content - Grid flexível */}
-                        <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 max-h-64 overflow-y-auto">
+                        <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 max-h-64 overflow-y-auto modal-content">
                           {currentCategoryData.map((item, index) => (
                             <div 
                               key={item.itemId || index} 
@@ -366,6 +366,16 @@ const CardModal = ({ isOpen, onClose, cardData, onSave, allCards = [], currentCa
           :root {
             --primary-green: #2BB24C;
             --primary-green-transparent: rgba(43, 178, 76, 0.3);
+          }
+          
+          /* Esconder scrollbar em todos os navegadores */
+          .modal-content::-webkit-scrollbar {
+            display: none;
+          }
+          
+          .modal-content {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
           }
         `}</style>
       </motion.div>
