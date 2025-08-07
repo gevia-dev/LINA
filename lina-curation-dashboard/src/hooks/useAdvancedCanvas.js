@@ -2,7 +2,6 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useNodesState, useEdgesState, addEdge } from '@xyflow/react';
 import { 
   serializeCanvasState, 
-  deserializeCanvasState, 
   convertNewsDataToCanvasState,
   convertCanvasStateToNewsData,
   validateCanvasState 
@@ -36,7 +35,6 @@ export const useAdvancedCanvas = (newsData, newsId) => {
   // Estados para gestão de conflitos e interações
   const [draggedNode, setDraggedNode] = useState(null);
   const [isNodeDragging, setIsNodeDragging] = useState(false);
-  const [editingNode, setEditingNode] = useState(null);
   
   // Refs para controle de elementos
   const reactFlowInstance = useRef(null);
@@ -59,15 +57,15 @@ export const useAdvancedCanvas = (newsData, newsId) => {
 
   // Configurações de interação para prevenir conflitos
   const interactionConfig = useMemo(() => ({
-    nodesDraggable: !editingNode,
-    nodesConnectable: !editingNode,
-    elementsSelectable: !editingNode,
-    panOnDrag: canvasLimits.panOnDrag && !isNodeDragging && !editingNode,
-    zoomOnScroll: canvasLimits.zoomOnScroll && !editingNode,
-    zoomOnPinch: canvasLimits.zoomOnPinch && !editingNode,
+    nodesDraggable: true,
+    nodesConnectable: true,
+    elementsSelectable: true,
+    panOnDrag: canvasLimits.panOnDrag && !isNodeDragging,
+    zoomOnScroll: canvasLimits.zoomOnScroll,
+    zoomOnPinch: canvasLimits.zoomOnPinch,
     panOnScrollMode: canvasLimits.panOnScrollMode,
-    preventScrolling: editingNode !== null
-  }), [canvasLimits, isNodeDragging, editingNode]);
+    preventScrolling: false
+  }), [canvasLimits, isNodeDragging]);
 
   // Inicialização do canvas com dados da notícia
   useEffect(() => {
@@ -81,13 +79,42 @@ export const useAdvancedCanvas = (newsData, newsId) => {
         const canvasState = convertNewsDataToCanvasState(newsData, savedState);
         
         if (validateCanvasState(canvasState)) {
-      
+          // Verificar se o MonitorNode existe no estado carregado
+          const monitorNodeExists = canvasState.nodes.some(node => node.type === 'monitorNode');
+          
+          if (!monitorNodeExists) {
+            // Adicionar MonitorNode se não existir
+            const monitorNode = {
+              id: `monitor-${Date.now()}`,
+              type: 'monitorNode',
+              position: { x: 0, y: 200 },
+              data: {
+                title: 'Monitor',
+                displayMode: 'combined',
+                autoRefresh: true,
+                showHeaders: true,
+                hasContent: false,
+                isEditing: false,
+                metadata: {
+                  createdAt: new Date().toISOString(),
+                  nodeType: 'monitor',
+                  isDefault: true
+                }
+              },
+              style: {
+                width: 500,
+                height: 800
+              }
+            };
+            
+            canvasState.nodes.push(monitorNode);
+          }
+          
           setNodes(canvasState.nodes);
           setEdges(canvasState.edges || []);
           setViewport(canvasState.viewport);
           setIsInitialized(true);
           
-      
         } else {
           // Estado do canvas inválido, usando padrão
           initializeDefaultCanvas();
@@ -135,6 +162,7 @@ export const useAdvancedCanvas = (newsData, newsId) => {
 
   // Função para lidar com novas conexões
   const onConnect = useCallback((connection) => {
+    console.log('🔌 Nova conexão estabelecida:', connection);
     
     // Determinar estilo baseado no tipo de handle
     let edgeStyle = {
@@ -181,12 +209,52 @@ export const useAdvancedCanvas = (newsData, newsId) => {
       'data-target-handle': connection.targetHandle || 'default'
     };
     
+    console.log('🔗 Edge criada:', {
+      id: newEdge.id,
+      source: newEdge.source,
+      target: newEdge.target,
+      sourceHandle: newEdge.sourceHandle,
+      targetHandle: newEdge.targetHandle,
+      style: edgeStyle
+    });
+    
     setEdges((eds) => addEdge(newEdge, eds));
   }, [setEdges]);
 
   // Função para inicializar canvas com valores padrão
   const initializeDefaultCanvas = useCallback(() => {
     const defaultState = convertNewsDataToCanvasState(newsData);
+    
+    // Adicionar MonitorNode por padrão se não existir
+    const monitorNodeExists = defaultState.nodes.some(node => node.type === 'monitorNode');
+    
+    if (!monitorNodeExists) {
+      const monitorNode = {
+        id: `monitor-${Date.now()}`,
+        type: 'monitorNode',
+        position: { x: 0, y: 200 },
+        data: {
+          title: 'Monitor',
+          displayMode: 'combined',
+          autoRefresh: true,
+          showHeaders: true,
+          hasContent: false,
+          isEditing: false,
+          metadata: {
+            createdAt: new Date().toISOString(),
+            nodeType: 'monitor',
+            isDefault: true
+          }
+        },
+        style: {
+          width: 500,
+          height: 800
+        }
+      };
+      
+      defaultState.nodes.push(monitorNode);
+    }
+    
     setNodes(defaultState.nodes);
     setEdges(defaultState.edges);
     setViewport(defaultState.viewport);
@@ -261,7 +329,7 @@ export const useAdvancedCanvas = (newsData, newsId) => {
     if (canvasContainer.current) {
       canvasContainer.current.classList.add('node-dragging');
     }
-  }, []);
+  }, [canvasContainer]);
 
   // Gerenciar fim de drag de node
   const handleNodeDragStop = useCallback((event, node) => {
@@ -272,27 +340,9 @@ export const useAdvancedCanvas = (newsData, newsId) => {
     if (canvasContainer.current) {
       canvasContainer.current.classList.remove('node-dragging');
     }
-  }, []);
+  }, [canvasContainer]);
 
-  // Gerenciar início de edição de node
-  const handleNodeEditStart = useCallback((nodeId) => {
-    setEditingNode(nodeId);
-    
-    // Desabilitar interações do canvas durante edição
-    if (canvasContainer.current) {
-      canvasContainer.current.classList.add('node-editing', 'nopan', 'nowheel');
-    }
-  }, []);
 
-  // Gerenciar fim de edição de node
-  const handleNodeEditEnd = useCallback(() => {
-    setEditingNode(null);
-    
-    // Reabilitar interações do canvas
-    if (canvasContainer.current) {
-      canvasContainer.current.classList.remove('node-editing', 'nopan', 'nowheel');
-    }
-  }, []);
 
   // Função para centralizar em um node específico
   const focusNode = useCallback((nodeId) => {
@@ -551,10 +601,26 @@ export const useAdvancedCanvas = (newsData, newsId) => {
 
   // Função para remover todas as conexões
   const removeAllEdges = useCallback(() => {
-    const edgeCount = edges.length;
     setEdges([]);
+  }, [setEdges]);
 
-  }, [setEdges, edges.length]);
+  // Função para adicionar um MonitorNode
+  const addMonitorNode = useCallback(() => {
+    const newNode = {
+      id: `monitor-${Date.now()}`,
+      type: 'monitorNode',
+      position: { x: 250, y: 250 },
+      data: {
+        title: 'Monitor',
+        displayMode: 'combined',
+        autoRefresh: true,
+        showHeaders: true
+      }
+    };
+    
+    setNodes((nds) => [...nds, newNode]);
+    return newNode.id;
+  }, [setNodes]);
 
   // Função para lidar com elementos selecionados e tecla Delete
   const handleKeyDown = useCallback((event) => {
@@ -598,7 +664,6 @@ export const useAdvancedCanvas = (newsData, newsId) => {
     // Estados de interação
     draggedNode,
     isNodeDragging,
-    editingNode,
     
     // Configurações
     viewportConfig,
@@ -617,9 +682,7 @@ export const useAdvancedCanvas = (newsData, newsId) => {
     onNodeDragStart: handleNodeDragStart,
     onNodeDragStop: handleNodeDragStop,
     
-    // Handlers customizados
-    onNodeEditStart: handleNodeEditStart,
-    onNodeEditEnd: handleNodeEditEnd,
+
     
     // Funções utilitárias
     resetViewport,
@@ -629,6 +692,7 @@ export const useAdvancedCanvas = (newsData, newsId) => {
     animateNodes,
     saveCanvasState,
     addNewNode,
+    addMonitorNode,
     removeNode,
     removeEdge,
     removeAllEdges,

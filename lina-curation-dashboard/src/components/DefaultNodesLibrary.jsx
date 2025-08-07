@@ -7,7 +7,9 @@ import {
   Layers,
   Database,
   Link,
-  Target
+  Target,
+  Monitor,
+  Eye
 } from 'lucide-react';
 
 /**
@@ -18,6 +20,36 @@ const DefaultNodesLibrary = ({ onAddNode }) => {
   // Definição dos nodes padrão disponíveis
   const defaultNodes = [
     {
+      id: 'monitor',
+      title: 'Monitor / Preview',
+      description: 'Visualiza e combina conteúdo de múltiplos nodes conectados',
+      icon: Monitor,
+      color: '#2BB24C', // Verde principal
+      isSpecial: true, // Indicador de node especial
+      template: {
+        type: 'monitorNode', // Tipo especial
+        data: {
+          title: 'Monitor',
+          displayMode: 'combined',
+          autoRefresh: true,
+          showHeaders: true,
+          hasContent: false,
+          isEditing: false,
+          metadata: {
+            createdAt: new Date().toISOString(),
+            nodeType: 'monitor',
+            template: true,
+            special: true
+          }
+        },
+        position: { x: 0, y: 0 },
+        style: {
+          width: 500,
+          height: 800
+        }
+      }
+    },
+    {
       id: 'estrutura',
       title: 'Estrutura',
       description: 'Node para organizar a estrutura do conteúdo',
@@ -26,6 +58,7 @@ const DefaultNodesLibrary = ({ onAddNode }) => {
       template: {
         type: 'cardNode',
         data: {
+          title: 'Estrutura',
           content: '## Estrutura\n\nOrganize aqui a estrutura do seu conteúdo...',
           nodeType: 'estrutura',
           coreKey: 'micro_estrutura', // Para ter estilo de microdado
@@ -53,10 +86,15 @@ const DefaultNodesLibrary = ({ onAddNode }) => {
       const randomX = Math.random() * 400 - 200;
       const randomY = Math.random() * 400 - 200;
       
+      // Para o MonitorNode, posicionar mais ao centro
+      const position = nodeTemplate.id === 'monitor' 
+        ? { x: 0, y: 200 } // Posição mais centralizada para o monitor
+        : { x: randomX, y: randomY };
+      
       const newNode = {
         ...nodeTemplate.template,
         id: `${nodeTemplate.id}-${Date.now()}`,
-        position: { x: randomX, y: randomY }
+        position
       };
       
       onAddNode(newNode);
@@ -112,11 +150,36 @@ const DefaultNodesLibrary = ({ onAddNode }) => {
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.2 + index * 0.1 }}
             >
+              {/* Badge para node especial */}
+              {node.isSpecial && (
+                <motion.div
+                  className="absolute -top-2 -right-2"
+                  initial={{ scale: 0 }}
+                  animate={{ scale: 1 }}
+                  transition={{ delay: 0.3 + index * 0.1 }}
+                >
+                  <span 
+                    className="px-2 py-1 text-xs font-medium rounded-full"
+                    style={{
+                      backgroundColor: 'var(--primary-green)',
+                      color: 'white'
+                    }}
+                  >
+                    NOVO
+                  </span>
+                </motion.div>
+              )}
               <div 
-                className="p-4 rounded-lg border transition-all duration-200 cursor-pointer"
+                className={`p-4 rounded-lg border transition-all duration-200 cursor-pointer ${
+                  node.isSpecial ? 'ring-2 ring-green-500/20' : ''
+                }`}
                 style={{
-                  backgroundColor: 'var(--bg-secondary)',
-                  borderColor: 'var(--border-primary)',
+                  backgroundColor: node.isSpecial 
+                    ? 'rgba(43, 178, 76, 0.05)' 
+                    : 'var(--bg-secondary)',
+                  borderColor: node.isSpecial 
+                    ? 'var(--primary-green)' 
+                    : 'var(--border-primary)',
                   borderLeft: `4px solid ${node.color}`
                 }}
                 onClick={() => handleAddNode(node)}
@@ -124,8 +187,13 @@ const DefaultNodesLibrary = ({ onAddNode }) => {
                 <div className="flex items-start justify-between mb-3">
                   <div className="flex items-center gap-3">
                     <div 
-                      className="p-2 rounded-lg"
-                      style={{ backgroundColor: `${node.color}20` }}
+                      className={`p-2 rounded-lg ${
+                        node.isSpecial ? 'animate-pulse' : ''
+                      }`}
+                      style={{ 
+                        backgroundColor: `${node.color}20`,
+                        animation: node.isSpecial ? 'pulse 2s infinite' : 'none'
+                      }}
                     >
                       <node.icon 
                         size={18} 
@@ -134,13 +202,16 @@ const DefaultNodesLibrary = ({ onAddNode }) => {
                     </div>
                     <div>
                       <h4 
-                        className="font-medium"
+                        className="font-medium flex items-center gap-2"
                         style={{ 
                           color: 'var(--text-primary)',
                           fontFamily: '"Nunito Sans", "Inter", sans-serif'
                         }}
                       >
                         {node.title}
+                        {node.isSpecial && (
+                          <Eye size={14} style={{ color: 'var(--primary-green)' }} />
+                        )}
                       </h4>
                       <p 
                         className="text-sm"
@@ -176,8 +247,12 @@ const DefaultNodesLibrary = ({ onAddNode }) => {
                 <div 
                   className="p-3 rounded border text-sm"
                   style={{
-                    backgroundColor: 'var(--bg-primary)',
-                    borderColor: 'var(--border-primary)',
+                    backgroundColor: node.isSpecial 
+                      ? 'rgba(0, 0, 0, 0.5)' 
+                      : 'var(--bg-primary)',
+                    borderColor: node.isSpecial 
+                      ? 'var(--primary-green)' 
+                      : 'var(--border-primary)',
                     color: 'var(--text-secondary)',
                     fontFamily: '"Nunito Sans", "Inter", sans-serif',
                     fontSize: '13px',
@@ -187,12 +262,22 @@ const DefaultNodesLibrary = ({ onAddNode }) => {
                   <div className="flex items-center gap-2 mb-2">
                     <Target size={12} style={{ color: node.color }} />
                     <span style={{ color: node.color, fontWeight: 500 }}>
-                      Preview do conteúdo
+                      {node.id === 'monitor' ? 'Funcionalidades' : 'Preview do conteúdo'}
                     </span>
                   </div>
-                  <div className="text-xs opacity-80">
-                    {node.template.data.content.split('\n')[0]}...
-                  </div>
+                  {node.id === 'monitor' ? (
+                    <ul className="text-xs space-y-1 list-disc list-inside">
+                      <li>Agrega conteúdo de múltiplos nodes</li>
+                      <li>3 modos de visualização</li>
+                      <li>Preview em tempo real</li>
+                      <li>Exportar e copiar conteúdo</li>
+                      <li>Modo tela cheia</li>
+                    </ul>
+                  ) : (
+                    <div className="text-xs opacity-80">
+                      {node.template.data.content.split('\n')[0]}...
+                    </div>
+                  )}
                 </div>
 
                 {/* Informações do node */}
@@ -201,7 +286,7 @@ const DefaultNodesLibrary = ({ onAddNode }) => {
                     <div className="flex items-center gap-1">
                       <Database size={12} style={{ color: 'var(--text-secondary)' }} />
                       <span style={{ color: 'var(--text-secondary)' }}>
-                        {node.template.data.nodeType}
+                        {node.template.data.nodeType || node.template.type}
                       </span>
                     </div>
                     <div className="flex items-center gap-1">
@@ -231,36 +316,36 @@ const DefaultNodesLibrary = ({ onAddNode }) => {
         <motion.div 
           className="mt-6 p-4 rounded-lg border border-dashed"
           style={{
-            borderColor: 'var(--border-primary)',
-            backgroundColor: 'var(--bg-primary)'
+            borderColor: 'var(--primary-green)',
+            backgroundColor: 'rgba(43, 178, 76, 0.05)'
           }}
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ delay: 0.5 }}
         >
           <div className="text-center">
-            <FileText 
+            <Monitor 
               size={24} 
-              style={{ color: 'var(--text-secondary)', margin: '0 auto 8px' }}
+              style={{ color: 'var(--primary-green)', margin: '0 auto 8px' }}
             />
             <p 
-              className="text-sm"
+              className="text-sm font-medium"
               style={{ 
-                color: 'var(--text-secondary)',
+                color: 'var(--primary-green)',
                 fontFamily: '"Nunito Sans", "Inter", sans-serif'
               }}
             >
-              Clique em qualquer node para adicioná-lo ao canvas
+              💡 Dica: Use o Monitor para visualizar conteúdo agregado
             </p>
             <p 
               className="text-xs mt-1"
               style={{ 
                 color: 'var(--text-secondary)',
-                opacity: 0.7,
+                opacity: 0.8,
                 fontFamily: '"Nunito Sans", "Inter", sans-serif'
               }}
             >
-              Os nodes serão posicionados automaticamente
+              Conecte múltiplos nodes ao Monitor para ver o conteúdo combinado em tempo real
             </p>
           </div>
         </motion.div>

@@ -1,4 +1,4 @@
-import React, { useRef, useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { 
   ReactFlow, 
   Background, 
@@ -8,11 +8,12 @@ import {
   ConnectionLineType
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { CheckSquare, Maximize2, RotateCcw, ZoomIn, ZoomOut, Move, Library, Unlink } from 'lucide-react';
+import { CheckSquare, Maximize2, RotateCcw, Library } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 // Importar componentes customizados
 import AdvancedCardNode from './AdvancedCardNode';
+import MonitorNode from './MonitorNode';
 import ContextLibrary from './ContextLibrary';
 import NodeModal from './NodeModal';
 import { useAdvancedCanvas } from '../hooks/useAdvancedCanvas';
@@ -20,6 +21,7 @@ import { useAdvancedCanvas } from '../hooks/useAdvancedCanvas';
 // Tipos de nodes customizados
 const nodeTypes = {
   cardNode: AdvancedCardNode,
+  monitorNode: MonitorNode,
 };
 
 /**
@@ -61,7 +63,7 @@ const AdvancedCanvasEditor = ({
     isInitialized,
     draggedNode,
     isNodeDragging,
-    editingNode,
+
     viewportConfig,
     interactionConfig,
     canvasLimits,
@@ -88,17 +90,7 @@ const AdvancedCanvasEditor = ({
     setCanvasLimits
   } = useAdvancedCanvas(newsData, newsId);
 
-  // Função para lidar com edição de blocos
-  const handleBlockEdit = useCallback((blockId) => {
-    if (blockId === editingNode) {
-      // Se já está editando este bloco, sair da edição
-      onNodeEditEnd();
-    } else if (blockId !== editingNode) {
-      // Se é um bloco diferente, sair da edição atual e iniciar nova
-      onNodeEditEnd();
-      onNodeEditStart(blockId);
-    }
-  }, [editingNode, onNodeEditStart, onNodeEditEnd]);
+
 
   // Função para abrir modal de node
   const handleOpenNodeModal = useCallback((modalData) => {
@@ -156,14 +148,10 @@ const AdvancedCanvasEditor = ({
     ...node,
     data: {
       ...node.data,
-      onEdit: handleBlockEdit,
       onTransfer: handleTransferBlock,
-      onEditStart: onNodeEditStart,
-      onEditEnd: onNodeEditEnd,
       onRemove: handleRemoveNode,
       onOpenModal: handleOpenNodeModal,
-      onUpdateContent: updateNodeContent,
-      isEditing: editingNode === node.id
+      onUpdateContent: updateNodeContent
     }
   }));
 
@@ -177,18 +165,6 @@ const AdvancedCanvasEditor = ({
   }, [nodes.length, viewport]);
 
   // Funções de controle do canvas
-  const handleZoomIn = useCallback(() => {
-    if (reactFlowInstance.current) {
-      reactFlowInstance.current.zoomIn({ duration: 300 });
-    }
-  }, []);
-
-  const handleZoomOut = useCallback(() => {
-    if (reactFlowInstance.current) {
-      reactFlowInstance.current.zoomOut({ duration: 300 });
-    }
-  }, []);
-
   const handleFitView = useCallback(() => {
     resetViewport();
   }, [resetViewport]);
@@ -215,21 +191,6 @@ const AdvancedCanvasEditor = ({
   const closeLibrary = useCallback(() => {
     setIsLibraryOpen(false);
   }, []);
-
-  // Função para remover todas as conexões com confirmação
-  const handleRemoveAllConnections = useCallback(() => {
-    if (edges.length === 0) {
-      return;
-    }
-    
-    const confirmed = window.confirm(
-      `Tem certeza que deseja remover todas as ${edges.length} conexão${edges.length !== 1 ? 'ões' : ''}? Esta ação não pode ser desfeita.`
-    );
-    
-    if (confirmed) {
-      removeAllEdges();
-    }
-  }, [edges.length, removeAllEdges]);
 
   // Função para lidar com transferência de item da biblioteca (lógica aditiva)
   const handleTransferFromLibrary = useCallback((blockId, content) => {
@@ -277,8 +238,7 @@ const AdvancedCanvasEditor = ({
   // Atalhos de teclado
   useEffect(() => {
     const handleKeyDownLocal = (e) => {
-      // Não processar alguns atalhos durante edição
-      if (editingNode && (e.ctrlKey || e.metaKey)) return;
+
 
       // Atalhos com Ctrl/Cmd
       if (e.ctrlKey || e.metaKey) {
@@ -286,15 +246,6 @@ const AdvancedCanvasEditor = ({
           case '0':
             e.preventDefault();
             handleFitView();
-            break;
-          case '=':
-          case '+':
-            e.preventDefault();
-            handleZoomIn();
-            break;
-          case '-':
-            e.preventDefault();
-            handleZoomOut();
             break;
           case 'f':
             e.preventDefault();
@@ -307,14 +258,8 @@ const AdvancedCanvasEditor = ({
         }
       }
 
-      // Escape para sair da edição
-      if (e.key === 'Escape' && editingNode) {
-        onNodeEditEnd();
-        return;
-      }
-
-      // Delete/Backspace para remover elementos selecionados (quando não editando)
-      if ((e.key === 'Delete' || e.key === 'Backspace') && !editingNode) {
+      // Delete/Backspace para remover elementos selecionados
+      if (e.key === 'Delete' || e.key === 'Backspace') {
         e.preventDefault();
         handleKeyDown(e);
       }
@@ -322,7 +267,7 @@ const AdvancedCanvasEditor = ({
 
     document.addEventListener('keydown', handleKeyDownLocal);
     return () => document.removeEventListener('keydown', handleKeyDownLocal);
-  }, [editingNode, handleFitView, handleZoomIn, handleZoomOut, toggleFullscreen, openLibrary, onNodeEditEnd, handleKeyDown]);
+  }, [handleFitView, toggleFullscreen, openLibrary, handleKeyDown]);
 
   return (
     <div 
@@ -460,17 +405,67 @@ const AdvancedCanvasEditor = ({
         /* Handles específicos para estrutura e dados */
         .connection-handle-target:hover {
           opacity: 1 !important;
-          transform: scale(1.2) !important;
-          box-shadow: 0 0 0 3px rgba(43, 178, 76, 0.3) !important;
-          background: #22A043 !important;
+          transform: scale(1.3) !important;
+          box-shadow: 0 0 0 4px rgba(43, 178, 76, 0.4) !important;
+          background: var(--primary-green-hover) !important;
         }
+        
+        .connection-handle-dados:hover {
+          opacity: 1 !important;
+          transform: scale(1.3) !important;
+          box-shadow: 0 0 0 4px rgba(74, 144, 226, 0.4) !important;
+          background: #3A80D2 !important;
+        }
+        
+        .connection-handle-estrutura:hover {
+          opacity: 1 !important;
+          transform: scale(1.3) !important;
+          box-shadow: 0 0 0 4px rgba(245, 166, 35, 0.4) !important;
+          background: #E59613 !important;
+        }
+        
+        /* Handles do MonitorNode */
+        .connection-handle-monitor:hover {
+          opacity: 1 !important;
+          transform: scale(1.3) !important;
+          box-shadow: 0 0 0 4px rgba(43, 178, 76, 0.4) !important;
+          background: var(--primary-green-hover) !important;
+        }
+        
+        .connection-handle-monitor-left:hover {
+          opacity: 1 !important;
+          transform: scale(1.3) !important;
+          box-shadow: 0 0 0 4px rgba(74, 144, 226, 0.4) !important;
+          background: #3A80D2 !important;
+        }
+        
+        .connection-handle-monitor-right:hover {
+          opacity: 1 !important;
+          transform: scale(1.3) !important;
+          box-shadow: 0 0 0 4px rgba(245, 166, 35, 0.4) !important;
+          background: #E59613 !important;
+        }
+        
+        /* Estilos para handles - seguindo padrão ReactFlow */
+        .react-flow__handle {
+          opacity: 1 !important;
+          transition: all 0.2s ease !important;
+        }
+        
+        .connection-handle {
+          opacity: 1 !important;
+          transition: all 0.2s ease !important;
+        }
+        
+
         
         /* Estilos para linhas de conexão - melhorados para cliques */
         .react-flow__connection-line {
-          stroke: rgba(255, 255, 255, 0.6) !important;
-          stroke-width: 4 !important;
+          stroke: var(--primary-green) !important;
+          stroke-width: 5 !important;
           stroke-dasharray: 8, 4 !important;
-          opacity: 0.8 !important;
+          opacity: 0.9 !important;
+          filter: drop-shadow(0 0 4px rgba(43, 178, 76, 0.3)) !important;
         }
         
         .react-flow__edge-path {
@@ -684,10 +679,11 @@ const AdvancedCanvasEditor = ({
           {...interactionConfig}
           attributionPosition="bottom-left"
           connectionLineStyle={{
-            stroke: 'rgba(255, 255, 255, 0.6)',
-            strokeWidth: 3,
+            stroke: 'var(--primary-green)',
+            strokeWidth: 4,
             strokeDasharray: '8, 4'
           }}
+          connectionMode="loose"
         >
           <Background 
             variant="dots" 
@@ -741,104 +737,41 @@ const AdvancedCanvasEditor = ({
             zoomable
           />
           
-          {/* Panel de informações e controles */}
+          {/* Panel de controles simplificado */}
           <Panel position="top-right" className="bg-transparent">
             <motion.div 
-              className="flex flex-col gap-2"
+              className="flex flex-col gap-1"
               initial={{ opacity: 0, y: -10 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.2 }}
             >
-              {/* Informações do canvas */}
-              <div 
-                className="p-3 rounded-lg"
-                style={{
-                  backgroundColor: 'var(--bg-secondary)',
-                  border: '1px solid var(--border-primary)',
-                  color: 'var(--text-secondary)',
-                  fontSize: '12px',
-                  fontFamily: '"Nunito Sans", "Inter", sans-serif'
-                }}
-              >
-                <div className="flex items-center gap-2 mb-2">
-                  <Move size={14} style={{ color: 'var(--primary-green)' }} />
-                  <span>Canvas Avançado</span>
-                </div>
-                <div>Zoom: {Math.round(canvasStats.zoom * 100)}%</div>
-                <div>Blocos: {canvasStats.nodeCount}</div>
-                <div>Conexões: {edges.length}</div>
-                {editingNode && (
-                  <div style={{ color: 'var(--primary-green)' }}>
-                    🖊️ Editando: {editingNode}
-                  </div>
-                )}
-                <div style={{ fontSize: '11px', marginTop: '4px', opacity: 0.8 }}>
-                  💡 Arraste das bolinhas verdes para conectar
-                </div>
-                <div style={{ fontSize: '11px', opacity: 0.8 }}>
-                  🔵 Azul: Dados | 🟠 Laranja: Estrutura
-                </div>
-                <div style={{ fontSize: '11px', opacity: 0.8 }}>
-                  🗑️ Delete: remover selecionados
-                </div>
-                <div style={{ fontSize: '11px', opacity: 0.8 }}>
-                  🖱️ Clique nas linhas para remover conexões
-                </div>
-              </div>
-
-              {/* Controles avançados */}
+              {/* Controles essenciais */}
               <div className="flex flex-col gap-1">
                 {[
                   { action: openLibrary, icon: Library, label: 'Biblioteca de Contexto (Ctrl/Cmd + B)', primary: true },
-                  { action: handleZoomIn, icon: ZoomIn, label: 'Zoom In (Ctrl/Cmd + +)' },
-                  { action: handleZoomOut, icon: ZoomOut, label: 'Zoom Out (Ctrl/Cmd + -)' },
                   { action: handleFitView, icon: RotateCcw, label: 'Fit View (Ctrl/Cmd + 0)' },
-                  { action: toggleFullscreen, icon: Maximize2, label: 'Fullscreen (Ctrl/Cmd + F)' },
-                  { 
-                    action: handleRemoveAllConnections, 
-                    icon: Unlink, 
-                    label: `Remover Todas as Conexões (${edges.length})`, 
-                    danger: true,
-                    disabled: edges.length === 0
-                  }
-                ].map(({ action, icon: Icon, label, primary, danger, disabled }, index) => (
+                  { action: toggleFullscreen, icon: Maximize2, label: 'Fullscreen (Ctrl/Cmd + F)' }
+                ].map(({ action, icon: Icon, label, primary }, index) => (
                   <motion.button
                     key={label}
-                    onClick={disabled ? undefined : action}
-                    disabled={disabled}
+                    onClick={action}
                     className="p-2 rounded flex items-center justify-center transition-all duration-200"
                     style={{
-                      backgroundColor: disabled 
-                        ? 'var(--bg-primary)' 
-                        : danger 
-                          ? '#FF6B6B20' 
-                          : primary 
-                            ? 'var(--primary-green-transparent)' 
-                            : 'var(--bg-secondary)',
-                      border: `1px solid ${disabled 
-                        ? 'var(--border-primary)' 
-                        : danger 
-                          ? '#FF6B6B' 
-                          : primary 
-                            ? 'var(--primary-green)' 
-                            : 'var(--border-primary)'}`,
-                      color: disabled 
-                        ? 'var(--text-secondary)' 
-                        : danger 
-                          ? '#FF6B6B' 
-                          : primary 
-                            ? 'var(--primary-green)' 
-                            : 'var(--text-secondary)',
-                      cursor: disabled ? 'not-allowed' : 'pointer',
-                      opacity: disabled ? 0.5 : 1
+                      backgroundColor: primary 
+                        ? 'var(--primary-green-transparent)' 
+                        : 'var(--bg-secondary)',
+                      border: `1px solid ${primary 
+                        ? 'var(--primary-green)' 
+                        : 'var(--border-primary)'}`,
+                      color: primary 
+                        ? 'var(--primary-green)' 
+                        : 'var(--text-secondary)',
+                      cursor: 'pointer'
                     }}
-                    whileHover={disabled ? {} : {
-                      /* Efeito de hover removido */
-                    }}
-                    whileTap={disabled ? {} : { scale: 0.95 }}
+                    whileTap={{ scale: 0.95 }}
                     title={label}
                     initial={{ opacity: 0, scale: 0.8 }}
-                    animate={{ opacity: disabled ? 0.5 : 1, scale: 1 }}
+                    animate={{ opacity: 1, scale: 1 }}
                     transition={{ delay: 0.3 + index * 0.1 }}
                   >
                     <Icon size={16} />
@@ -851,7 +784,7 @@ const AdvancedCanvasEditor = ({
           {/* Indicador de estado global */}
           <Panel position="bottom-left" className="bg-transparent">
             <AnimatePresence>
-              {(isNodeDragging || editingNode) && (
+              {isNodeDragging && (
                 <motion.div
                   className="p-2 rounded-lg flex items-center gap-2"
                   style={{
@@ -866,8 +799,7 @@ const AdvancedCanvasEditor = ({
                   exit={{ opacity: 0, y: 20, scale: 0.8 }}
                   transition={{ duration: 0.3 }}
                 >
-                  {isNodeDragging && '🖱️ Arrastando bloco'}
-                  {editingNode && '✏️ Modo de edição ativo - ESC para sair'}
+                  🖱️ Arrastando bloco
                 </motion.div>
               )}
             </AnimatePresence>

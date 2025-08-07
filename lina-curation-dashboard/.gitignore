@@ -25,3 +25,6 @@ pnpm-debug.log*
 
 # System files
 .DS_Store
+
+
+/PRPs-agentic-eng
