@@ -1,7 +1,7 @@
 import React, { useCallback, useRef, useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Handle, Position } from '@xyflow/react';
-import { Bold, Italic, Underline, Edit3, Trash2, Link, List, Hash } from 'lucide-react';
+import { Bold, Italic, Underline, Edit3, Trash2, Link, List, Hash, ChevronDown, ChevronUp, Database } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { marked } from 'marked';
 
@@ -11,6 +11,12 @@ import { marked } from 'marked';
  * - Prevenção de conflitos de eventos
  * - Indicadores visuais de estado
  * - Gestão avançada de interações
+ * - Suporte especial para nodes "micro-dado":
+ *   * Tamanho compacto (250px vs 350px de largura)
+ *   * Sem handles de entrada (apenas saída na direita)
+ *   * Indicador visual com ícone de banco de dados
+ *   * Fonte e padding reduzidos
+ *   * Botão "Ler mais" adaptado para tamanho menor
  */
 const AdvancedCardNode = ({ data, selected, dragging }) => {
   const { 
@@ -24,11 +30,25 @@ const AdvancedCardNode = ({ data, selected, dragging }) => {
     onTransfer,
     onEditStart,
     onEditEnd,
-    animation
+    animation,
+    coreKey
   } = data;
+  
+  // Detectar se é um node "micro-dado" baseado no coreKey
+  const isMicroDado = coreKey?.startsWith('micro_');
   
   const editableRef = useRef(null);
   const nodeRef = useRef(null);
+  
+  // DEBUG: Log das props recebidas
+  console.log({
+    id, 
+    title, 
+    content, 
+    contentType: typeof content,
+    hasContent,
+    data: data 
+  });
   
   // Estados locais para interações
   const [showToolbar, setShowToolbar] = useState(false);
@@ -37,10 +57,15 @@ const AdvancedCardNode = ({ data, selected, dragging }) => {
   const [rawContent, setRawContent] = useState(content || '');
   const [parsedContent, setParsedContent] = useState('');
   
+  // Estados para expansão de conteúdo
+  const [isExpanded, setIsExpanded] = useState(false);
+  const [isTextTruncated, setIsTextTruncated] = useState(false);
+  const previewContentRef = useRef(null);
+  
   // Estados para menu de contexto
   const [showContextMenu, setShowContextMenu] = useState(false);
   const [contextMenuPosition, setContextMenuPosition] = useState({ x: 0, y: 0 });
-  
+
   // Ref para calcular tamanhos dos menus
   const toolbarRef = useRef(null);
   const contextMenuRef = useRef(null);
@@ -114,7 +139,7 @@ const AdvancedCardNode = ({ data, selected, dragging }) => {
     } else {
       // Entrar no modo de edição
       if (onEdit) {
-        onEdit(id);
+      onEdit(id);
       }
       if (onEditStart) {
         onEditStart(id);
@@ -129,9 +154,22 @@ const AdvancedCardNode = ({ data, selected, dragging }) => {
     }
   }, [id, onEdit, onEditStart, onEditEnd, isEditing]);
 
+  // Função para alternar expansão de conteúdo
+  const handleExpand = useCallback((e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsExpanded(!isExpanded);
+  }, [isExpanded]);
+
   // Função para parsing markdown em tempo real
   const parseMarkdown = useCallback((text) => {
+    
     try {
+      // Garantir que text é uma string
+      if (typeof text !== 'string') {
+        return String(text || '').replace(/\n/g, '<br>');
+      }
+      
       // Configurar marked para renderização inline
       const renderer = new marked.Renderer();
       
@@ -163,12 +201,45 @@ const AdvancedCardNode = ({ data, selected, dragging }) => {
         gfm: true
       });
       
-      return marked.parse(text);
+      const result = marked.parse(text);
+
+      return result;
     } catch (error) {
-      console.warn('Erro no parsing markdown:', error);
-      return text.replace(/\n/g, '<br>');
+      const fallback = String(text || '').replace(/\n/g, '<br>');
+
+      return fallback;
     }
   }, []);
+
+  // Função para lidar com double-click (abrir modal)
+  const handleDoubleClick = useCallback((e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    // Não abrir modal durante edição
+    if (isEditing) return;
+    
+    // Verificar se é um node de estrutura ou microdado
+    const isEstruturaNode = data.nodeType === 'estrutura';
+    const isMicroDadoNode = data.coreKey?.startsWith('micro_');
+    
+    if (isEstruturaNode || isMicroDadoNode) {
+      // Preparar dados para o modal
+      const modalData = {
+        content: data.content || '',
+        type: isEstruturaNode ? 'estrutura' : 'micro',
+        nodeType: data.nodeType,
+        coreKey: data.coreKey,
+        itemId: id,
+        title: data.title || (isEstruturaNode ? 'Estrutura' : 'Micro-dado')
+      };
+      
+      // Chamar função para abrir modal (será passada via props)
+      if (data.onOpenModal) {
+        data.onOpenModal(modalData);
+      }
+    }
+  }, [isEditing, data, id]);
 
   // Função para lidar com clique direito (menu de contexto)
   const handleContextMenu = useCallback((e) => {
@@ -284,7 +355,7 @@ const AdvancedCardNode = ({ data, selected, dragging }) => {
       } else {
         // Para comandos simples (bold, italic, etc)
         if (selection.isCollapsed && format !== 'formatBlock') return;
-        document.execCommand(format, false, null);
+      document.execCommand(format, false, null);
       }
       
       // Restaurar foco no elemento editável
@@ -300,18 +371,33 @@ const AdvancedCardNode = ({ data, selected, dragging }) => {
         }
       }, 10);
       
-      setShowToolbar(false);
+      // Não fechar o tooltip imediatamente - deixar o usuário continuar formatando
+      // setShowToolbar(false);
     } catch (error) {
-      console.warn('Erro na formatação de texto:', error);
+      // Erro na formatação de texto
     }
   }, []);
 
+  // Effect para detectar se o texto está sendo truncado
+  useEffect(() => {
+    if (previewContentRef.current && content && !isExpanded && !isEditing) {
+      const element = previewContentRef.current;
+      // Pequeno delay para garantir que o DOM foi atualizado
+      setTimeout(() => {
+        setIsTextTruncated(element.scrollHeight > element.clientHeight);
+      }, 100);
+    }
+  }, [content, isExpanded, isEditing]);
+
   // Effect para inicializar conteúdo markdown
   useEffect(() => {
+    
     if (content !== undefined && content !== rawContent) {
+
       setRawContent(content || '');
       if (!isEditing) {
         const parsed = parseMarkdown(content || '');
+
         setParsedContent(parsed);
       }
     }
@@ -368,7 +454,8 @@ const AdvancedCardNode = ({ data, selected, dragging }) => {
           setShowToolbar(false);
         }
       } else {
-        if (!isHoveringToolbar) {
+        // Só fechar se não estiver hover na toolbar e não estiver editando
+        if (!isHoveringToolbar && !isEditing) {
           setShowToolbar(false);
         }
       }
@@ -399,6 +486,16 @@ const AdvancedCardNode = ({ data, selected, dragging }) => {
   useEffect(() => {
     const handleBlur = (e) => {
       if (isEditing && !nodeRef.current?.contains(e.target)) {
+        // Verificar se o clique foi em elementos do sistema de edição
+        const isFormattingToolbar = e.target.closest('.formatting-toolbar');
+        const isContextMenu = e.target.closest('.context-menu');
+        const isEditableContent = e.target.closest('.editable-content');
+        
+        // Não fechar se clicou em elementos do sistema de edição
+        if (isFormattingToolbar || isContextMenu || isEditableContent) {
+          return;
+        }
+        
         if (onEditEnd) {
           onEditEnd();
         }
@@ -524,37 +621,38 @@ const AdvancedCardNode = ({ data, selected, dragging }) => {
       // onMouseEnter={() => setIsHoveringNode(true)}
       // onMouseLeave={() => setIsHoveringNode(false)}
       style={{
-        width: '350px',
-        minHeight: minHeight || '120px',
+        width: isMicroDado ? '250px' : '350px', // Mais largo para micro-dados (era 175px)
+        minHeight: isMicroDado ? '60px' : (minHeight || '120px'), // 50% menor para micro-dados
         backgroundColor: 'var(--bg-secondary)',
         border: isEditing 
           ? '2px solid var(--primary-green)' 
           : '1px solid var(--border-primary)',
         borderRadius: '12px',
-        padding: '16px',
+        padding: isMicroDado ? '8px' : '16px', // Padding reduzido para micro-dados
         position: 'relative',
         overflow: 'hidden',
         cursor: 'default'
       }}
       onContextMenu={handleContextMenu}
+      onDoubleClick={handleDoubleClick}
     >
-      {/* Botão de edição explícito */}
+            {/* Botão de edição explícito - Posicionado na direita */}
       <motion.button
-        className="absolute top-3 right-3 p-2 rounded-lg opacity-70 hover:opacity-100 transition-all duration-200 nopan nowheel nodrag"
+        className={`absolute ${isMicroDado ? 'top-2 right-2 p-1' : 'top-3 right-3 p-2'} rounded-lg opacity-70 hover:opacity-100 transition-all duration-200 nopan nowheel nodrag`}
         style={{
           backgroundColor: isEditing ? 'var(--primary-green)' : 'var(--bg-primary)',
           color: isEditing ? 'white' : 'var(--text-secondary)',
-          border: '1px solid var(--border-primary)'
+          border: '1px solid var(--border-primary)',
+          zIndex: 20
         }}
         onClick={handleEditToggle}
         whileHover={{ 
-          scale: 1.05,
-          backgroundColor: isEditing ? '#22A043' : 'var(--primary-green-transparent)'
+          /* Efeito de hover removido */
         }}
         whileTap={{ scale: 0.95 }}
         title={isEditing ? 'Finalizar edição (Esc)' : 'Editar bloco (Enter)'}
       >
-        <Edit3 size={14} />
+        <Edit3 size={isMicroDado ? 10 : 14} />
       </motion.button>
 
 
@@ -562,7 +660,7 @@ const AdvancedCardNode = ({ data, selected, dragging }) => {
       {/* Header do bloco */}
       <div className="flex justify-between items-center mb-3 relative z-10">
         <motion.h3 
-          className="text-base font-medium pointer-events-none flex items-center gap-2"
+          className={`${isMicroDado ? 'text-sm' : 'text-base'} font-medium pointer-events-none flex items-center gap-2`}
           style={{
             color: 'var(--text-secondary)',
             fontFamily: "'Nunito Sans', 'Inter', sans-serif",
@@ -572,6 +670,16 @@ const AdvancedCardNode = ({ data, selected, dragging }) => {
           animate={{ opacity: 1, x: 0 }}
           transition={{ delay: 0.1 }}
         >
+          {isMicroDado && (
+            <motion.div
+              initial={{ scale: 0 }}
+              animate={{ scale: 1 }}
+              transition={{ delay: 0.1 }}
+              title="Micro-dado"
+            >
+              <Database size={isMicroDado ? 10 : 12} style={{ color: 'var(--primary-green)' }} />
+            </motion.div>
+          )}
           {title}
           {isEditing && (
             <motion.div
@@ -579,7 +687,7 @@ const AdvancedCardNode = ({ data, selected, dragging }) => {
               animate={{ scale: 1 }}
               transition={{ delay: 0.2 }}
             >
-              <Edit3 size={14} style={{ color: 'var(--primary-green)' }} />
+              <Edit3 size={isMicroDado ? 12 : 14} style={{ color: 'var(--primary-green)' }} />
             </motion.div>
           )}
         </motion.h3>
@@ -596,18 +704,18 @@ const AdvancedCardNode = ({ data, selected, dragging }) => {
       >
         {isEditing ? (
           <div
-            ref={editableRef}
+        ref={editableRef}
             className="editable-content nopan nowheel nodrag"
             contentEditable={true}
-            suppressContentEditableWarning={true}
-            style={{
-              fontSize: '15px',
+        suppressContentEditableWarning={true}
+                    style={{
+              fontSize: isMicroDado ? '12px' : '15px',
               color: 'var(--text-primary)',
               fontFamily: "'Nunito Sans', 'Inter', sans-serif",
               lineHeight: '1.7',
-              minHeight: '60px',
+              minHeight: isMicroDado ? '30px' : '60px',
               outline: 'none',
-              padding: '12px',
+              padding: isMicroDado ? '6px' : '12px',
               borderRadius: '8px',
               backgroundColor: 'var(--bg-primary)',
               border: '1px solid var(--border-primary)',
@@ -619,20 +727,198 @@ const AdvancedCardNode = ({ data, selected, dragging }) => {
             {rawContent}
           </div>
         ) : (
-          <div
-            className="markdown-preview"
-            style={{
-              fontSize: '15px',
-              color: 'var(--text-primary)',
-              fontFamily: "'Nunito Sans', 'Inter', sans-serif",
-              lineHeight: '1.7',
-              minHeight: '60px',
-              padding: '12px'
-            }}
-            dangerouslySetInnerHTML={{ 
-              __html: parsedContent || parseMarkdown(content || '') 
-            }}
-          />
+          <>
+            <div
+              ref={previewContentRef}
+              className="markdown-preview"
+              style={{
+                fontSize: isMicroDado ? '12px' : '15px',
+                color: 'var(--text-primary)',
+                fontFamily: "'Nunito Sans', 'Inter', sans-serif",
+                lineHeight: '1.7',
+                minHeight: isMicroDado ? '30px' : '60px',
+                padding: isMicroDado ? '6px' : '12px',
+                whiteSpace: 'pre-wrap',
+                // Lógica de truncamento igual ao FeedItem
+                display: isExpanded ? 'block' : '-webkit-box',
+                WebkitLineClamp: isExpanded ? 'unset' : (isMicroDado ? 2 : 3), // Menos linhas para micro-dados
+                WebkitBoxOrient: isExpanded ? 'unset' : 'vertical',
+                overflow: isExpanded ? 'visible' : 'hidden',
+                textOverflow: isExpanded ? 'unset' : 'ellipsis'
+              }}
+            >
+              {/* Renderização segura do conteúdo */}
+              {(() => {
+                const safeContent = String(content || '');
+                
+                // Detectar se é um node de estrutura e mostrar radio buttons
+                const isEstruturaNode = data.nodeType === 'estrutura' || data.coreKey === 'micro_estrutura';
+                
+                if (isEstruturaNode) {
+                  // Definir as opções de estrutura
+                  const structureOptions = [
+                    {
+                      titulo: "Continua",
+                      estrutura: "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum. Curabitur pretium tincidunt lacus. Nulla gravida orci a odio."
+                    },
+                    {
+                      titulo: "Paragrafos",
+                      estrutura: "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.\n\nUt enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur.\n\nExcepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.\n\nCurabitur pretium tincidunt lacus. Nulla gravida orci a odio. Nullam varius, turpis et commodo pharetra, est eros bibendum sem, nec luctus est odio sed risus."
+                    },
+                    {
+                      titulo: "Topicos",
+                      estrutura: "## Topico 1\nLorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.\n\n## Topico 2\nUt enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.\n\n## Topico 3\nDuis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum."
+                    }
+                  ];
+                  
+                  // Encontrar qual estrutura está selecionada baseado no conteúdo
+                  const selectedStructure = structureOptions.find(option => 
+                    safeContent.trim() === option.estrutura.trim()
+                  );
+                  
+                  // Se não encontrou correspondência exata, verificar se contém o conteúdo de alguma estrutura
+                  const partialMatch = structureOptions.find(option => 
+                    safeContent.includes(option.estrutura.substring(0, 50))
+                  );
+                  
+                  const currentStructure = selectedStructure || partialMatch || structureOptions[0];
+                  
+                  // Função para trocar estrutura
+                  const handleStructureChange = (structure) => {
+
+                    // Atualizar o conteúdo local imediatamente
+                    setRawContent(structure.estrutura);
+                    // Chamar função de atualização se disponível
+                    if (data.onUpdateContent) {
+                      data.onUpdateContent(id, structure.estrutura);
+                    }
+                  };
+                  
+                  return (
+                    <div className="space-y-2">
+                      <div 
+                        className="text-sm font-medium mb-2"
+                        style={{ 
+                          color: 'var(--text-secondary)',
+                          fontFamily: '"Nunito Sans", "Inter", sans-serif'
+                        }}
+                      >
+                        📋 Estrutura
+                      </div>
+                      <div className="space-y-1">
+                        {structureOptions.map((option) => {
+                          const isSelected = currentStructure.titulo === option.titulo;
+                          return (
+                            <motion.label
+                              key={option.titulo}
+                              className="flex items-center gap-2 nopan nowheel nodrag"
+                              style={{ cursor: 'pointer !important' }}
+                              whileHover={{ scale: 1.02 }}
+                              whileTap={{ scale: 0.98 }}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleStructureChange(option);
+                              }}
+                            >
+                              <div
+                                className="w-3 h-3 rounded-full border-2 flex items-center justify-center"
+                                style={{
+                                  borderColor: isSelected ? '#F5A623' : 'var(--border-primary)',
+                                  backgroundColor: isSelected ? '#F5A623' : 'transparent'
+                                }}
+                              >
+                                {isSelected && (
+                                  <motion.div
+                                    className="w-1.5 h-1.5 rounded-full"
+                                    style={{ backgroundColor: 'white' }}
+                                    initial={{ scale: 0 }}
+                                    animate={{ scale: 1 }}
+                                    transition={{ duration: 0.2 }}
+                                  />
+                                )}
+                              </div>
+                              <span
+                                className="text-xs"
+                                style={{
+                                  color: isSelected ? '#F5A623' : 'var(--text-secondary)',
+                                  fontFamily: '"Nunito Sans", "Inter", sans-serif',
+                                  fontWeight: isSelected ? '600' : '400'
+                                }}
+                              >
+                                {option.titulo}
+                              </span>
+                            </motion.label>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                }
+                
+
+                
+                return safeContent;
+              })()}
+            </div>
+            
+            {/* Botão Ler mais (quando truncado e não expandido) */}
+            {isTextTruncated && !isExpanded && (
+              <motion.button
+                onClick={handleExpand}
+                className="nopan nowheel nodrag"
+                whileHover={{ /* Efeito de hover removido */ }}
+                whileTap={{ scale: 0.98 }}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: 'var(--primary-green)',
+                  cursor: 'pointer',
+                  padding: isMicroDado ? '2px 6px' : '4px 8px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: isMicroDado ? '2px' : '4px',
+                  borderRadius: '4px',
+                  fontSize: isMicroDado ? '10px' : '12px',
+                  fontWeight: '500',
+                  marginTop: isMicroDado ? '4px' : '8px',
+                  alignSelf: 'flex-start',
+                  transition: 'all 0.2s ease'
+                }}
+              >
+                <ChevronDown size={isMicroDado ? 10 : 12} />
+                Ler mais
+              </motion.button>
+            )}
+            
+            {/* Botão Ler menos (quando expandido) */}
+            {isExpanded && (
+              <motion.button
+                onClick={handleExpand}
+                className="nopan nowheel nodrag"
+                whileHover={{ /* Efeito de hover removido */ }}
+                whileTap={{ scale: 0.98 }}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: 'var(--primary-green)',
+                  cursor: 'pointer',
+                  padding: isMicroDado ? '2px 6px' : '4px 8px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: isMicroDado ? '2px' : '4px',
+                  borderRadius: '4px',
+                  fontSize: isMicroDado ? '10px' : '12px',
+                  fontWeight: '500',
+                  marginTop: isMicroDado ? '4px' : '8px',
+                  alignSelf: 'flex-start',
+                  transition: 'all 0.2s ease'
+                }}
+              >
+                <ChevronUp size={isMicroDado ? 10 : 12} />
+                Ler menos
+              </motion.button>
+            )}
+          </>
         )}
         
         {/* Dica de markdown quando editando */}
@@ -657,11 +943,13 @@ const AdvancedCardNode = ({ data, selected, dragging }) => {
 
       {/* Toolbar de Formatação Notion-like - Renderizada via Portal */}
       {showToolbar && createPortal(
-        <AnimatePresence>
+      <AnimatePresence>
           <motion.div
             ref={toolbarRef}
             onMouseEnter={() => setIsHoveringToolbar(true)}
             onMouseLeave={() => setIsHoveringToolbar(false)}
+            onMouseDown={(e) => e.stopPropagation()}
+            onClick={(e) => e.stopPropagation()}
             className="formatting-toolbar fixed z-[9999] flex gap-1 p-2 rounded-lg border shadow-lg"
             style={{
               left: toolbarPosition.x,
@@ -684,13 +972,15 @@ const AdvancedCardNode = ({ data, selected, dragging }) => {
             ].map(({ format, icon: Icon, label }) => (
               <motion.button
                 key={format}
-                onClick={() => applyTextFormat(format)}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  applyTextFormat(format);
+                }}
+                onMouseDown={(e) => e.stopPropagation()}
                 className="p-2 rounded transition-colors"
                 style={{ color: '#A0A0A0' }}
                 whileHover={{ 
-                  backgroundColor: '#2BB24C33',
-                  color: '#2BB24C',
-                  scale: 1.05
+                  /* Efeito de hover removido */
                 }}
                 whileTap={{ scale: 0.95 }}
                 title={label}
@@ -715,13 +1005,15 @@ const AdvancedCardNode = ({ data, selected, dragging }) => {
             ].map(({ format, icon: Icon, label, size = 14 }) => (
               <motion.button
                 key={format}
-                onClick={() => applyTextFormat('formatBlock', format)}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  applyTextFormat('formatBlock', format);
+                }}
+                onMouseDown={(e) => e.stopPropagation()}
                 className="p-2 rounded transition-colors"
                 style={{ color: '#A0A0A0' }}
                 whileHover={{ 
-                  backgroundColor: '#2BB24C33',
-                  color: '#2BB24C',
-                  scale: 1.05
+                  /* Efeito de hover removido */
                 }}
                 whileTap={{ scale: 0.95 }}
                 title={label}
@@ -740,13 +1032,15 @@ const AdvancedCardNode = ({ data, selected, dragging }) => {
             
             {/* Lista */}
             <motion.button
-              onClick={() => applyTextFormat('insertUnorderedList')}
+              onClick={(e) => {
+                e.stopPropagation();
+                applyTextFormat('insertUnorderedList');
+              }}
+              onMouseDown={(e) => e.stopPropagation()}
               className="p-2 rounded transition-colors"
               style={{ color: '#A0A0A0' }}
               whileHover={{ 
-                backgroundColor: '#2BB24C33',
-                color: '#2BB24C',
-                scale: 1.05
+                /* Efeito de hover removido */
               }}
               whileTap={{ scale: 0.95 }}
               title="Lista com marcadores (-)"
@@ -756,18 +1050,18 @@ const AdvancedCardNode = ({ data, selected, dragging }) => {
             
             {/* Link */}
             <motion.button
-              onClick={() => {
+              onClick={(e) => {
+                e.stopPropagation();
                 const url = prompt('Digite a URL:');
                 if (url) {
                   applyTextFormat('createLink', url);
                 }
               }}
+              onMouseDown={(e) => e.stopPropagation()}
               className="p-2 rounded transition-colors"
               style={{ color: '#A0A0A0' }}
               whileHover={{ 
-                backgroundColor: '#2BB24C33',
-                color: '#2BB24C',
-                scale: 1.05
+                /* Efeito de hover removido */
               }}
               whileTap={{ scale: 0.95 }}
               title="Adicionar link"
@@ -777,13 +1071,15 @@ const AdvancedCardNode = ({ data, selected, dragging }) => {
             
             {/* Fechar */}
             <motion.button
-              onClick={() => setShowToolbar(false)}
+              onClick={(e) => {
+                e.stopPropagation();
+                setShowToolbar(false);
+              }}
+              onMouseDown={(e) => e.stopPropagation()}
               className="p-2 rounded transition-colors ml-2"
               style={{ color: '#A0A0A0', fontSize: '12px' }}
               whileHover={{ 
-                backgroundColor: '#FF6B6B33',
-                color: '#FF6B6B',
-                scale: 1.05
+                /* Efeito de hover removido */
               }}
               whileTap={{ scale: 0.95 }}
               title="Fechar toolbar"
@@ -793,113 +1089,107 @@ const AdvancedCardNode = ({ data, selected, dragging }) => {
           </motion.div>
         </AnimatePresence>,
         document.body
-      )}
+        )}
 
       {/* Handles de conexão do ReactFlow */}
-      <Handle
-        type="target"
-        position={Position.Top}
-        id="target"
-        style={{
-          background: '#2BB24C',
-          width: 14,
-          height: 14,
-          border: '3px solid #1a1a1a',
-          cursor: 'crosshair !important',
-          opacity: isEditing ? 0.4 : 0.9,
-          transition: 'all 0.2s ease',
-          transform: 'translateY(-2px)',
-          zIndex: 1000,
-          borderRadius: '50%',
-          boxShadow: '0 2px 8px rgba(43, 178, 76, 0.4)'
-        }}
-        className="connection-handle connection-handle-target"
-        isConnectable={!isEditing}
-      />
+      {/* Para micro-dados: apenas saída, sem entradas */}
+      {!isMicroDado && (
+        <>
+          <Handle
+            type="target"
+            position={Position.Top}
+            id="target"
+            style={{
+              background: '#2BB24C',
+              width: 14,
+              height: 14,
+              border: '3px solid #1a1a1a',
+              cursor: 'crosshair !important',
+              opacity: isEditing ? 0.4 : 0.9,
+              transition: 'all 0.2s ease',
+              transform: 'translateY(-2px)',
+              zIndex: 1000,
+              borderRadius: '50%',
+              boxShadow: '0 2px 8px rgba(43, 178, 76, 0.4)'
+            }}
+            className="connection-handle connection-handle-target"
+            isConnectable={!isEditing}
+            title="Entrada Geral"
+          />
+
+          {/* Handles de entrada especializados - Lado esquerdo */}
+          <Handle
+            type="target"
+            position={Position.Left}
+            id="dados"
+            style={{
+              background: '#4A90E2',
+              width: 12,
+              height: 12,
+              border: '2px solid #1a1a1a',
+              cursor: 'crosshair !important',
+              opacity: isEditing ? 0.4 : 0.8,
+              transform: 'translateX(-2px) translateY(-20px)',
+              zIndex: 1000,
+              borderRadius: '50%',
+              boxShadow: '0 2px 6px rgba(74, 144, 226, 0.4)'
+            }}
+            className="connection-handle connection-handle-dados"
+            isConnectable={!isEditing}
+            title="Entrada de Dados"
+          />
+          
+          <Handle
+            type="target"
+            position={Position.Left}
+            id="estrutura"
+            style={{
+              background: '#F5A623',
+              width: 12,
+              height: 12,
+              border: '2px solid #1a1a1a',
+              cursor: 'crosshair !important',
+              opacity: isEditing ? 0.4 : 0.8,
+              transform: 'translateX(-2px) translateY(20px)',
+              zIndex: 1000,
+              borderRadius: '50%',
+              boxShadow: '0 2px 6px rgba(245, 166, 35, 0.4)'
+            }}
+            className="connection-handle connection-handle-estrutura"
+            isConnectable={!isEditing}
+            title="Entrada de Estrutura"
+          />
+        </>
+      )}
       
+      {/* Handle de saída - sempre presente */}
       <Handle
         type="source"
-        position={Position.Bottom}
+        position={isMicroDado ? Position.Right : Position.Bottom}
         id="source"
         style={{
           background: '#2BB24C',
-          width: 14,
-          height: 14,
-          border: '3px solid #1a1a1a',
+          width: isMicroDado ? 10 : 14,
+          height: isMicroDado ? 10 : 14,
+          border: isMicroDado ? '2px solid #1a1a1a' : '3px solid #1a1a1a',
           cursor: 'crosshair !important',
           opacity: isEditing ? 0.4 : 0.9,
           transition: 'all 0.2s ease',
-          transform: 'translateY(2px)',
+          transform: isMicroDado ? 'translateX(1px)' : 'translateY(2px)',
           zIndex: 1000,
           borderRadius: '50%',
           boxShadow: '0 2px 8px rgba(43, 178, 76, 0.4)'
         }}
         className="connection-handle connection-handle-source"
         isConnectable={!isEditing}
+        title={isMicroDado ? "Saída de Micro-dado" : "Saída Geral"}
       />
 
-      {/* Indicadores de status melhorados */}
-      <div className="absolute bottom-2 right-2 flex items-center gap-2">
-        {/* Indicador de conteúdo */}
-        <motion.div
-          className="flex items-center gap-1"
-          initial={{ scale: 0, opacity: 0 }}
-          animate={{ scale: 1, opacity: 1 }}
-          transition={{ delay: 0.3 }}
-        >
-          {/* Contador de caracteres */}
-          {rawContent && (
-            <motion.span
-              className="text-xs px-2 py-1 rounded-full"
-              style={{
-                backgroundColor: rawContent.length > 100 ? 'var(--primary-green-transparent)' : 'var(--text-secondary)',
-                color: rawContent.length > 100 ? 'var(--primary-green)' : 'var(--text-primary)',
-                fontSize: '10px',
-                fontFamily: '"Nunito Sans", "Inter", sans-serif'
-              }}
-              initial={{ scale: 0 }}
-              animate={{ scale: 1 }}
-              transition={{ delay: 0.4 }}
-              title={`${rawContent.length} caracteres`}
-            >
-              {rawContent.length}
-            </motion.span>
-          )}
-          
-          {/* Status dot */}
-          <motion.div
-            className="w-3 h-3 rounded-full border-2 border-opacity-50"
-            style={{
-              backgroundColor: hasContent 
-                ? (rawContent && rawContent.length > 50 ? 'var(--primary-green)' : '#FFA500') 
-                : '#FF6B6B',
-              borderColor: 'var(--bg-secondary)',
-              boxShadow: hasContent ? '0 0 8px rgba(43, 178, 76, 0.3)' : '0 0 8px rgba(255, 107, 107, 0.3)'
-            }}
-            animate={{
-              scale: isEditing ? [1, 1.2, 1] : 1,
-              boxShadow: isEditing 
-                ? '0 0 12px rgba(43, 178, 76, 0.5)'
-                : hasContent 
-                  ? '0 0 8px rgba(43, 178, 76, 0.3)' 
-                  : '0 0 8px rgba(255, 107, 107, 0.3)'
-            }}
-            transition={{ 
-              duration: isEditing ? 1.5 : 0.3,
-              repeat: isEditing ? Infinity : 0
-            }}
-            title={
-              hasContent 
-                ? (rawContent && rawContent.length > 50 ? 'Conteúdo completo' : 'Conteúdo básico') 
-                : 'Conteúdo vazio'
-            }
-          />
-        </motion.div>
-      </div>
+
 
       {/* Menu de Contexto - Renderizado via Portal */}
       {showContextMenu && createPortal(
-        <AnimatePresence>
+      <AnimatePresence>
           <motion.div
             ref={contextMenuRef}
             className="context-menu fixed z-[9999] flex flex-col gap-1 p-2 rounded-lg border shadow-lg"
@@ -923,8 +1213,7 @@ const AdvancedCardNode = ({ data, selected, dragging }) => {
               className="flex items-center gap-2 px-3 py-2 rounded transition-colors text-left w-full"
               style={{ color: '#FF6B6B' }}
               whileHover={{ 
-                backgroundColor: '#FF6B6B20',
-                scale: 1.02
+                /* Efeito de hover removido */
               }}
               whileTap={{ scale: 0.98 }}
               title="Remover bloco do canvas"
@@ -937,7 +1226,7 @@ const AdvancedCardNode = ({ data, selected, dragging }) => {
           </motion.div>
         </AnimatePresence>,
         document.body
-      )}
+        )}
     </motion.div>
   );
 };

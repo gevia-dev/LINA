@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { useNodesState, useEdgesState } from '@xyflow/react';
+import { useNodesState, useEdgesState, addEdge } from '@xyflow/react';
 import { 
   serializeCanvasState, 
   deserializeCanvasState, 
@@ -22,7 +22,7 @@ export const useAdvancedCanvas = (newsData, newsId) => {
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
   
   // Estados para viewport e gestão avançada
-  const [viewport, setViewport] = useState({ x: 0, y: 0, zoom: 1 });
+  const [viewport, setViewport] = useState({ x: 0, y: 0, zoom: 0.75 });
   const [isInitialized, setIsInitialized] = useState(false);
   const [canvasLimits, setCanvasLimits] = useState({
     minZoom: 0.1,
@@ -52,7 +52,7 @@ export const useAdvancedCanvas = (newsData, newsId) => {
     fitViewOptions: {
       padding: 0.1,
       includeHiddenNodes: false,
-      maxZoom: 1.5,
+      maxZoom: 0.75,
       duration: 800
     }
   }), [canvasLimits, viewport]);
@@ -60,7 +60,7 @@ export const useAdvancedCanvas = (newsData, newsId) => {
   // Configurações de interação para prevenir conflitos
   const interactionConfig = useMemo(() => ({
     nodesDraggable: !editingNode,
-    nodesConnectable: false,
+    nodesConnectable: !editingNode,
     elementsSelectable: !editingNode,
     panOnDrag: canvasLimits.panOnDrag && !isNodeDragging && !editingNode,
     zoomOnScroll: canvasLimits.zoomOnScroll && !editingNode,
@@ -81,14 +81,15 @@ export const useAdvancedCanvas = (newsData, newsId) => {
         const canvasState = convertNewsDataToCanvasState(newsData, savedState);
         
         if (validateCanvasState(canvasState)) {
+      
           setNodes(canvasState.nodes);
           setEdges(canvasState.edges || []);
           setViewport(canvasState.viewport);
           setIsInitialized(true);
           
-          console.log('✅ Canvas inicializado com estado:', canvasState);
+      
         } else {
-          console.warn('⚠️ Estado do canvas inválido, usando padrão');
+          // Estado do canvas inválido, usando padrão
           initializeDefaultCanvas();
         }
       } catch (error) {
@@ -97,6 +98,91 @@ export const useAdvancedCanvas = (newsData, newsId) => {
       }
     }
   }, [newsData, newsId, isInitialized]);
+
+  // Função para resetar viewport
+  const resetViewport = useCallback(() => {
+    if (reactFlowInstance.current) {
+      reactFlowInstance.current.fitView({
+        padding: 0.1,
+        duration: 800
+      });
+      
+      // Aplicar zoom de 75% após o fit view
+      setTimeout(() => {
+        if (reactFlowInstance.current) {
+          reactFlowInstance.current.setViewport({
+            x: reactFlowInstance.current.getViewport().x,
+            y: reactFlowInstance.current.getViewport().y,
+            zoom: 0.75
+          }, { duration: 400 });
+        }
+      }, 850);
+    }
+  }, []);
+
+  // Fit view automático quando o canvas é inicializado
+  useEffect(() => {
+    if (isInitialized && reactFlowInstance.current) {
+      // Pequeno delay para garantir que os nodes foram renderizados
+      const timer = setTimeout(() => {
+        resetViewport();
+    
+      }, 300);
+      
+      return () => clearTimeout(timer);
+    }
+  }, [isInitialized, resetViewport]);
+
+  // Função para lidar com novas conexões
+  const onConnect = useCallback((connection) => {
+    
+    // Determinar estilo baseado no tipo de handle
+    let edgeStyle = {
+      stroke: 'rgba(255, 255, 255, 0.6)',
+      strokeWidth: 2,
+    };
+    let markerColor = 'rgba(255, 255, 255, 0.6)';
+    
+    // Estilos específicos para handles especializados
+    if (connection.sourceHandle === 'dados' || connection.targetHandle === 'dados') {
+      edgeStyle = {
+        stroke: '#4A90E2',
+        strokeWidth: 3,
+        strokeDasharray: '5, 5',
+      };
+      markerColor = '#4A90E2';
+    } else if (connection.sourceHandle === 'estrutura' || connection.targetHandle === 'estrutura') {
+      edgeStyle = {
+        stroke: '#F5A623',
+        strokeWidth: 3,
+        strokeDasharray: '10, 5',
+      };
+      markerColor = '#F5A623';
+    }
+    
+    // Estilo customizado para a nova aresta
+    const newEdge = {
+      ...connection,
+      id: `edge-${connection.source}-${connection.target}-${connection.sourceHandle || 'default'}-${connection.targetHandle || 'default'}`,
+      type: 'smoothstep',
+      animated: true,
+      style: edgeStyle,
+      markerEnd: {
+        type: 'arrowclosed',
+        color: markerColor,
+      },
+      data: {
+        sourceHandle: connection.sourceHandle,
+        targetHandle: connection.targetHandle,
+        type: connection.sourceHandle || connection.targetHandle || 'default'
+      },
+      // Adicionar atributos data para CSS targeting
+      'data-source-handle': connection.sourceHandle || 'default',
+      'data-target-handle': connection.targetHandle || 'default'
+    };
+    
+    setEdges((eds) => addEdge(newEdge, eds));
+  }, [setEdges]);
 
   // Função para inicializar canvas com valores padrão
   const initializeDefaultCanvas = useCallback(() => {
@@ -128,7 +214,7 @@ export const useAdvancedCanvas = (newsData, newsId) => {
       // Salvar no localStorage (temporário para demo)
       localStorage.setItem(savedStateKey, serializedState);
       
-      console.log('💾 Estado do canvas salvo');
+
     } catch (error) {
       console.error('❌ Erro ao salvar estado do canvas:', error);
     }
@@ -208,16 +294,6 @@ export const useAdvancedCanvas = (newsData, newsId) => {
     }
   }, []);
 
-  // Função para resetar viewport
-  const resetViewport = useCallback(() => {
-    if (reactFlowInstance.current) {
-      reactFlowInstance.current.fitView({
-        padding: 0.1,
-        duration: 800
-      });
-    }
-  }, []);
-
   // Função para centralizar em um node específico
   const focusNode = useCallback((nodeId) => {
     if (reactFlowInstance.current) {
@@ -286,16 +362,118 @@ export const useAdvancedCanvas = (newsData, newsId) => {
     );
   }, [setNodes]);
 
-  // Função para adicionar novo node ao canvas
-  const addNewNode = useCallback((content, title = 'Novo Bloco', type = 'custom') => {
-    const newNodeId = `node-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+  // Função para calcular posição inteligente para novos nodes
+  const calculateSmartPosition = useCallback(() => {
+    if (nodes.length === 0) {
+      // Se não há nodes, posicionar no centro da tela
+      return { x: 0, y: 0 };
+    }
     
-    // Calcular posição baseada no viewport atual e número de nodes existentes
-    const newNodePosition = {
-      x: viewport.x + 100 + (nodes.length * 50),
-      y: viewport.y + 100 + (nodes.length * 30)
+    // Calcular o centro dos nodes existentes
+    const centerX = nodes.reduce((sum, node) => sum + node.position.x, 0) / nodes.length;
+    const centerY = nodes.reduce((sum, node) => sum + node.position.y, 0) / nodes.length;
+    
+    // Calcular a posição do novo node em um padrão espiral
+    const angle = (nodes.length * 137.5) * (Math.PI / 180); // Ângulo dourado
+    const radius = 200 + (nodes.length * 20); // Distância crescente
+    
+    const offsetX = Math.cos(angle) * radius;
+    const offsetY = Math.sin(angle) * radius;
+    
+    let newPosition = {
+      x: centerX + offsetX,
+      y: centerY + offsetY
     };
     
+    // Garantir que o novo node esteja na área visível
+    if (reactFlowInstance.current) {
+      const viewport = reactFlowInstance.current.getViewport();
+      const container = reactFlowInstance.current.getViewport();
+      
+      // Converter coordenadas do mundo para coordenadas da tela
+      const screenX = (newPosition.x - viewport.x) * viewport.zoom;
+      const screenY = (newPosition.y - viewport.y) * viewport.zoom;
+      
+      // Se estiver muito longe da área visível, ajustar para próximo ao centro da tela
+      if (Math.abs(screenX) > 800 || Math.abs(screenY) > 600) {
+        newPosition = {
+          x: viewport.x + (Math.random() - 0.5) * 400,
+          y: viewport.y + (Math.random() - 0.5) * 300
+        };
+      }
+    }
+    
+    return newPosition;
+  }, [nodes]);
+
+  // Função para adicionar novo node ao canvas
+  const addNewNode = useCallback((nodeOrContent, title = 'Novo Bloco', type = 'custom') => {
+    
+    // Se for um objeto node completo (da biblioteca de nodes padrão)
+    if (typeof nodeOrContent === 'object' && nodeOrContent.type) {
+      const newNode = {
+        ...nodeOrContent,
+        id: nodeOrContent.id || `node-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        position: nodeOrContent.position || calculateSmartPosition(),
+        data: {
+          ...nodeOrContent.data,
+          id: nodeOrContent.id || `node-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+          isEditing: false,
+          onEdit: () => {}, // Será configurado pelo componente pai
+          onTransfer: () => {}, // Será configurado pelo componente pai
+          onEditStart: () => {}, // Será configurado pelo componente pai
+          onEditEnd: () => {}, // Será configurado pelo componente pai
+          onRemove: () => {}, // Será configurado pelo componente pai
+          onOpenModal: () => {}, // Será configurado pelo componente pai
+          animation: {
+            opacity: [0, 1],
+            scale: [0.8, 1],
+            transition: {
+              duration: 0.4,
+              ease: 'easeOut'
+            }
+          }
+        }
+      };
+      
+
+      setNodes(prevNodes => {
+        const updatedNodes = [...prevNodes, newNode];
+
+        return updatedNodes;
+      });
+      
+      // Animar o novo node
+      setTimeout(() => {
+        setNodes(prevNodes => 
+          prevNodes.map(node => 
+            node.id === newNode.id 
+              ? { ...node, data: { ...node.data, animation: null } }
+              : node
+          )
+        );
+      }, 400);
+      
+      return newNode.id;
+    }
+    
+    // Se for apenas conteúdo (compatibilidade com código existente)
+    const content = nodeOrContent;
+    const newNodeId = `node-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    
+    // Calcular posição inteligente próxima aos nodes existentes
+    const newNodePosition = calculateSmartPosition();
+    
+    // Mapear tipo para coreKey correto
+    const coreKeyMapping = {
+      'introducoes': 'Introduce',
+      'corpos_de_analise': 'corpos_de_analise',
+      'conclusoes': 'conclusoes'
+    };
+    
+    const coreKey = coreKeyMapping[type] || type;
+
+
     const newNode = {
       id: newNodeId,
       type: 'cardNode',
@@ -305,7 +483,7 @@ export const useAdvancedCanvas = (newsData, newsId) => {
         title: title,
         content: content,
         minHeight: '120px',
-        coreKey: type,
+        coreKey: coreKey,
         isEditing: false,
         hasContent: content && content.trim().length > 0,
         onEdit: () => {}, // Será configurado pelo componente pai
@@ -324,7 +502,12 @@ export const useAdvancedCanvas = (newsData, newsId) => {
       }
     };
     
-    setNodes(prevNodes => [...prevNodes, newNode]);
+
+    setNodes(prevNodes => {
+      const updatedNodes = [...prevNodes, newNode];
+
+      return updatedNodes;
+    });
     
     // Animar o novo node
     setTimeout(() => {
@@ -338,7 +521,7 @@ export const useAdvancedCanvas = (newsData, newsId) => {
     }, 400);
     
     return newNodeId;
-  }, [nodes.length, viewport, setNodes]);
+  }, [nodes, calculateSmartPosition, setNodes]);
 
   // Função para remover node do canvas
   const removeNode = useCallback((nodeId) => {
@@ -347,6 +530,54 @@ export const useAdvancedCanvas = (newsData, newsId) => {
       edge.source !== nodeId && edge.target !== nodeId
     ));
   }, [setNodes, setEdges]);
+
+  // Função para remover uma conexão específica
+  const removeEdge = useCallback((edgeId) => {
+    // Primeiro, marcar a edge para animação de remoção
+    setEdges(prevEdges => 
+      prevEdges.map(edge => 
+        edge.id === edgeId 
+          ? { ...edge, className: 'removing' }
+          : edge
+      )
+    );
+    
+    // Aguardar a animação terminar antes de remover
+    setTimeout(() => {
+      setEdges(prevEdges => prevEdges.filter(edge => edge.id !== edgeId));
+
+    }, 300);
+  }, [setEdges]);
+
+  // Função para remover todas as conexões
+  const removeAllEdges = useCallback(() => {
+    const edgeCount = edges.length;
+    setEdges([]);
+
+  }, [setEdges, edges.length]);
+
+  // Função para lidar com elementos selecionados e tecla Delete
+  const handleKeyDown = useCallback((event) => {
+    if (event.key === 'Delete' || event.key === 'Backspace') {
+      // Pegar elementos selecionados do ReactFlow
+      if (reactFlowInstance.current) {
+        const selectedNodes = reactFlowInstance.current.getNodes().filter(node => node.selected);
+        const selectedEdges = reactFlowInstance.current.getEdges().filter(edge => edge.selected);
+        
+        // Remover nodes selecionados
+        selectedNodes.forEach(node => {
+          removeNode(node.id);
+        });
+        
+        // Remover edges selecionadas
+        selectedEdges.forEach(edge => {
+          removeEdge(edge.id);
+        });
+        
+
+      }
+    }
+  }, [removeNode, removeEdge]);
 
   // Limpar animação frame ao desmontar
   useEffect(() => {
@@ -381,6 +612,7 @@ export const useAdvancedCanvas = (newsData, newsId) => {
     // Handlers do ReactFlow
     onNodesChange,
     onEdgesChange,
+    onConnect,
     onViewportChange: handleViewportChange,
     onNodeDragStart: handleNodeDragStart,
     onNodeDragStop: handleNodeDragStop,
@@ -398,6 +630,9 @@ export const useAdvancedCanvas = (newsData, newsId) => {
     saveCanvasState,
     addNewNode,
     removeNode,
+    removeEdge,
+    removeAllEdges,
+    handleKeyDown,
     
     // Setters
     setNodes,

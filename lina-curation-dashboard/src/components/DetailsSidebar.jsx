@@ -249,7 +249,7 @@ const DetailsSidebar = ({ selectedItem }) => {
           <button
             onClick={() => {
               // TODO: Implementar rota de leitura
-              console.log('Botão Ler clicado');
+          
             }}
             style={{
               flex: 1,

@@ -102,7 +102,7 @@ export const useCanvasState = (newsData) => {
           },
           onTransfer: (blockId, content) => {
             // Esta função será fornecida pelo componente pai
-            console.log('Transfer block:', blockId, content);
+        
           }
         }
       };

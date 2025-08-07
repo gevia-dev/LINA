@@ -117,7 +117,7 @@ const LinaBubbleExplorerPage = () => {
     useEffect(() => {
         const handleClusterClick = (event) => {
             const { node } = event.detail;
-            console.log('LinaBubbleExplorerPage: Navegando para cluster', node);
+        
             
             setNavigationStack([...navigationStack, currentView]);
             setCurrentView(node);
@@ -125,7 +125,7 @@ const LinaBubbleExplorerPage = () => {
 
         const handleNavigationComplete = (event) => {
             const { node } = event.detail;
-            console.log('LinaBubbleExplorerPage: Navegação completa para', node.data);
+        
         };
 
         window.addEventListener('bubbleChart:clusterClick', handleClusterClick);
@@ -276,7 +276,7 @@ const LinaBubbleExplorerPage = () => {
                         <p>Carregando Hierarquia...</p>
                     ) : (
                         <>
-                            {console.log('LinaBubbleExplorerPage: Dados para BubbleChart', { 
+                     
                                 childrenLength: currentView.children?.length,
                                 children: currentView.children 
                             })}

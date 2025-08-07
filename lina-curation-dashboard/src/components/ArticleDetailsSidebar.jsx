@@ -9,7 +9,7 @@ const ArticleDetailsSidebar = () => {
   useEffect(() => {
     const handleLeafClick = (event) => {
       const { node, path } = event.detail;
-      console.log('ArticleDetailsSidebar: Recebido evento leafClick', { node, path });
+    
       
       setSelectedArticle({
         ...node,
@@ -25,7 +25,7 @@ const ArticleDetailsSidebar = () => {
 
     const handleClusterClick = (event) => {
       const { node } = event.detail;
-      console.log('ArticleDetailsSidebar: Recebido evento clusterClick', { node });
+    
       
       // Fecha sidebar ao navegar para cluster
       if (isVisible) {
@@ -38,7 +38,7 @@ const ArticleDetailsSidebar = () => {
       
       if (isEntering && !node.children) {
         // Pré-carrega dados do artigo no hover de folhas
-        console.log('ArticleDetailsSidebar: Pré-carregando dados do artigo', node);
+    
       }
     };
 
@@ -219,7 +219,7 @@ const ArticleDetailsSidebar = () => {
       </div>
       
       {/* CSS para animações */}
-      <style jsx>{`
+      <style>{`
         @keyframes slideInRight {
           0% {
             transform: translateX(100%);

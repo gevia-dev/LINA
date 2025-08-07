@@ -12,9 +12,11 @@ import {
   ChevronLeft,
   ChevronRight,
   Maximize2,
-  Minimize2
+  Minimize2,
+  Layers
 } from 'lucide-react';
 import ContextSidebar from './ContextSidebar';
+import DefaultNodesLibrary from './DefaultNodesLibrary';
 
 /**
  * ContextLibrary - Versão modal/drawer do ContextSidebar
@@ -26,11 +28,13 @@ const ContextLibrary = ({
   newsData, 
   selectedBlock, 
   onTransferItem, 
-  onOpenCardModal 
+  onOpenCardModal,
+  onAddNode
 }) => {
   const [isExpanded, setIsExpanded] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [activeFilter, setActiveFilter] = useState('all');
+  const [activeTab, setActiveTab] = useState('context');
 
   // Efeito para desabilitar scroll do body quando modal está aberto
   useEffect(() => {
@@ -155,7 +159,7 @@ const ContextLibrary = ({
                       fontFamily: '"Nunito Sans", "Inter", sans-serif'
                     }}
                   >
-                    Biblioteca de Contexto
+                    Biblioteca
                   </h2>
                   <p 
                     className="text-sm"
@@ -164,7 +168,7 @@ const ContextLibrary = ({
                       fontFamily: '"Nunito Sans", "Inter", sans-serif'
                     }}
                   >
-                    Explore e transfira conteúdo para o canvas
+                    Explore conteúdo e nodes padrão
                   </p>
                 </div>
               </div>
@@ -208,7 +212,7 @@ const ContextLibrary = ({
               </div>
             </div>
 
-            {/* Barra de busca e filtros */}
+            {/* Abas da biblioteca */}
             <motion.div 
               className="p-4 border-b"
               style={{ 
@@ -219,64 +223,100 @@ const ContextLibrary = ({
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.2 }}
             >
-              <div className="flex gap-3">
-                {/* Campo de busca */}
-                <div className="flex-1 relative">
-                  <Search 
-                    size={18} 
-                    className="absolute left-3 top-1/2 transform -translate-y-1/2"
-                    style={{ color: 'var(--text-secondary)' }}
-                  />
-                  <input
-                    type="text"
-                    placeholder="Buscar na biblioteca..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="w-full pl-10 pr-4 py-2 rounded-lg border outline-none transition-colors"
+              <div className="flex gap-2 mb-4">
+                {[
+                  { id: 'context', label: 'Contexto', icon: FileText },
+                  { id: 'nodes', label: 'Nodes Padrão', icon: Layers }
+                ].map(({ id, label, icon: Icon }) => (
+                  <motion.button
+                    key={id}
+                    onClick={() => setActiveTab(id)}
+                    className={`px-4 py-2 rounded-lg border transition-colors flex items-center gap-2 ${
+                      activeTab === id ? 'bg-green text-white' : ''
+                    }`}
                     style={{
-                      backgroundColor: 'var(--bg-primary)',
-                      borderColor: 'var(--border-primary)',
-                      color: 'var(--text-primary)',
-                      fontFamily: '"Nunito Sans", "Inter", sans-serif'
+                      backgroundColor: activeTab === id 
+                        ? 'var(--primary-green)' 
+                        : 'var(--bg-primary)',
+                      borderColor: activeTab === id 
+                        ? 'var(--primary-green)' 
+                        : 'var(--border-primary)',
+                      color: activeTab === id 
+                        ? 'white' 
+                        : 'var(--text-secondary)',
+                      fontFamily: '"Nunito Sans", "Inter", sans-serif',
+                      fontSize: '14px'
                     }}
-                  />
-                </div>
-
-                {/* Filtros */}
-                <div className="flex gap-2">
-                  {[
-                    { id: 'all', label: 'Todos', icon: FileText },
-                    { id: 'quotes', label: 'Citações', icon: Quote },
-                    { id: 'content', label: 'Conteúdo', icon: BookOpen }
-                  ].map(({ id, label, icon: Icon }) => (
-                    <motion.button
-                      key={id}
-                      onClick={() => setActiveFilter(id)}
-                      className={`px-3 py-2 rounded-lg border transition-colors flex items-center gap-2 ${
-                        activeFilter === id ? 'bg-green text-white' : ''
-                      }`}
-                      style={{
-                        backgroundColor: activeFilter === id 
-                          ? 'var(--primary-green)' 
-                          : 'var(--bg-primary)',
-                        borderColor: activeFilter === id 
-                          ? 'var(--primary-green)' 
-                          : 'var(--border-primary)',
-                        color: activeFilter === id 
-                          ? 'white' 
-                          : 'var(--text-secondary)',
-                        fontFamily: '"Nunito Sans", "Inter", sans-serif',
-                        fontSize: '14px'
-                      }}
-                      whileHover={{ scale: 1.02 }}
-                      whileTap={{ scale: 0.98 }}
-                    >
-                      <Icon size={14} />
-                      {label}
-                    </motion.button>
-                  ))}
-                </div>
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
+                  >
+                    <Icon size={16} />
+                    {label}
+                  </motion.button>
+                ))}
               </div>
+
+              {/* Barra de busca e filtros (apenas para aba de contexto) */}
+              {activeTab === 'context' && (
+                <div className="flex gap-3">
+                  {/* Campo de busca */}
+                  <div className="flex-1 relative">
+                    <Search 
+                      size={18} 
+                      className="absolute left-3 top-1/2 transform -translate-y-1/2"
+                      style={{ color: 'var(--text-secondary)' }}
+                    />
+                    <input
+                      type="text"
+                      placeholder="Buscar na biblioteca..."
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      className="w-full pl-10 pr-4 py-2 rounded-lg border outline-none transition-colors"
+                      style={{
+                        backgroundColor: 'var(--bg-primary)',
+                        borderColor: 'var(--border-primary)',
+                        color: 'var(--text-primary)',
+                        fontFamily: '"Nunito Sans", "Inter", sans-serif'
+                      }}
+                    />
+                  </div>
+
+                  {/* Filtros */}
+                  <div className="flex gap-2">
+                    {[
+                      { id: 'all', label: 'Todos', icon: FileText },
+                      { id: 'quotes', label: 'Citações', icon: Quote },
+                      { id: 'content', label: 'Conteúdo', icon: BookOpen }
+                    ].map(({ id, label, icon: Icon }) => (
+                      <motion.button
+                        key={id}
+                        onClick={() => setActiveFilter(id)}
+                        className={`px-3 py-2 rounded-lg border transition-colors flex items-center gap-2 ${
+                          activeFilter === id ? 'bg-green text-white' : ''
+                        }`}
+                        style={{
+                          backgroundColor: activeFilter === id 
+                            ? 'var(--primary-green)' 
+                            : 'var(--bg-primary)',
+                          borderColor: activeFilter === id 
+                            ? 'var(--primary-green)' 
+                            : 'var(--border-primary)',
+                          color: activeFilter === id 
+                            ? 'white' 
+                            : 'var(--text-secondary)',
+                          fontFamily: '"Nunito Sans", "Inter", sans-serif',
+                          fontSize: '14px'
+                        }}
+                        whileHover={{ scale: 1.02 }}
+                        whileTap={{ scale: 0.98 }}
+                      >
+                        <Icon size={14} />
+                        {label}
+                      </motion.button>
+                    ))}
+                  </div>
+                </div>
+              )}
             </motion.div>
 
             {/* Conteúdo da biblioteca */}
@@ -286,15 +326,43 @@ const ContextLibrary = ({
               animate={{ opacity: 1 }}
               transition={{ delay: 0.3 }}
             >
-              <ContextSidebar
-                newsData={newsData}
-                selectedBlock={selectedBlock}
-                onTransferItem={onTransferItem}
-                onOpenCardModal={onOpenCardModal}
-                isLibraryMode={true}
-                searchTerm={searchTerm}
-                activeFilter={activeFilter}
-              />
+              <AnimatePresence mode="wait">
+                {activeTab === 'context' && (
+                  <motion.div
+                    key="context"
+                    initial={{ opacity: 0, x: 20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: -20 }}
+                    transition={{ duration: 0.3 }}
+                    className="h-full"
+                  >
+                    <ContextSidebar
+                      newsData={newsData}
+                      selectedBlock={selectedBlock}
+                      onTransferItem={onTransferItem}
+                      onOpenCardModal={onOpenCardModal}
+                      isLibraryMode={true}
+                      searchTerm={searchTerm}
+                      activeFilter={activeFilter}
+                    />
+                  </motion.div>
+                )}
+                
+                {activeTab === 'nodes' && (
+                  <motion.div
+                    key="nodes"
+                    initial={{ opacity: 0, x: 20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: -20 }}
+                    transition={{ duration: 0.3 }}
+                    className="h-full"
+                  >
+                    <DefaultNodesLibrary
+                      onAddNode={onAddNode}
+                    />
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </motion.div>
 
             {/* Footer com informações */}
@@ -310,7 +378,11 @@ const ContextLibrary = ({
             >
               <div className="flex items-center justify-between text-sm">
                 <span style={{ color: 'var(--text-secondary)' }}>
-                  Use os botões <ArrowRight size={14} className="inline mx-1" /> para transferir conteúdo
+                  {activeTab === 'context' ? (
+                    <>Use os botões <ArrowRight size={14} className="inline mx-1" /> para transferir conteúdo</>
+                  ) : (
+                    <>Clique nos nodes para adicioná-los ao canvas</>
+                  )}
                 </span>
                 <span style={{ color: 'var(--text-secondary)' }}>
                   ESC para fechar

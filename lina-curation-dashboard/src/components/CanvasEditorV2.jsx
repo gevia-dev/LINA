@@ -96,17 +96,17 @@ const CanvasEditorV2 = ({
 
   // Callback para quando conecta start (debug)
   const onConnectStart = useCallback((event, { nodeId, handleType }) => {
-    console.log('🔗 Iniciando conexão:', { nodeId, handleType });
+
   }, []);
 
   // Callback para quando conecta end (debug)
   const onConnectEnd = useCallback((event) => {
-    console.log('🔗 Finalizando conexão');
+
   }, []);
 
   // Função para lidar com novas conexões
   const onConnect = useCallback((connection) => {
-    console.log('🎯 Nova conexão tentada:', connection);
+
     
     // Validações de conexão
     if (!connection.source || !connection.target) {
@@ -151,7 +151,7 @@ const CanvasEditorV2 = ({
     };
     
     setEdges((eds) => addEdge(newEdge, eds));
-    console.log('✅ Conexão adicionada com sucesso:', newEdge);
+    
   }, [edges, setEdges]);
 
   // Função para validar conexões (evitar loops complexos)
@@ -204,7 +204,7 @@ const CanvasEditorV2 = ({
       
       const storageKey = `canvas_state_${newsId}`;
       localStorage.setItem(storageKey, JSON.stringify(canvasState));
-      console.log('Estado do canvas salvo:', storageKey);
+
     } catch (error) {
       console.warn('Erro ao salvar estado do canvas:', error);
     }
@@ -220,7 +220,7 @@ const CanvasEditorV2 = ({
       
       if (saved) {
         const canvasState = JSON.parse(saved);
-        console.log('Estado do canvas carregado:', storageKey);
+  
         return canvasState;
       }
     } catch (error) {
@@ -380,35 +380,70 @@ const CanvasEditorV2 = ({
           transform: translateY(2px) scale(1.3) !important;
         }
         
-        /* Estilos para linhas de conexão - mais visíveis */
+        /* Desabilitar hover para handles especializados */
+        .connection-handle-dados:hover,
+        .connection-handle-estrutura:hover {
+          opacity: inherit !important;
+          transform: none !important;
+          box-shadow: none !important;
+          background: inherit !important;
+        }
+        
+        /* Estilos para handles especializados - sem animações */
+        .connection-handle-dados,
+        .connection-handle-estrutura {
+          transition: none !important;
+        }
+        
+        /* Estilos para linhas de conexão - simplificados */
         .react-flow__connection-line {
           stroke: #2BB24C !important;
           stroke-width: 4 !important;
           stroke-dasharray: 8, 4 !important;
           opacity: 0.8 !important;
-          z-index: 999 !important;
-          filter: drop-shadow(0 0 6px rgba(43, 178, 76, 0.6)) !important;
         }
         
         .react-flow__edge-path {
           stroke: #2BB24C !important;
           stroke-width: 3 !important;
           opacity: 0.9 !important;
-          filter: drop-shadow(0 0 4px rgba(43, 178, 76, 0.4)) !important;
         }
         
         .react-flow__edge:hover .react-flow__edge-path {
           stroke: #22A043 !important;
           stroke-width: 4 !important;
           opacity: 1 !important;
-          filter: drop-shadow(0 0 8px rgba(34, 160, 67, 0.6)) !important;
         }
         
         .react-flow__edge-selected .react-flow__edge-path {
           stroke: #1E8E3E !important;
           stroke-width: 4 !important;
           opacity: 1 !important;
-          filter: drop-shadow(0 0 10px rgba(30, 142, 62, 0.8)) !important;
+        }
+        
+        /* Estilos para conexões especializadas */
+        .react-flow__edge[data-source-handle="dados"] .react-flow__edge-path,
+        .react-flow__edge[data-target-handle="dados"] .react-flow__edge-path {
+          stroke: #4A90E2 !important;
+          stroke-width: 3 !important;
+          stroke-dasharray: 5, 5 !important;
+        }
+        
+        .react-flow__edge[data-source-handle="estrutura"] .react-flow__edge-path,
+        .react-flow__edge[data-target-handle="estrutura"] .react-flow__edge-path {
+          stroke: #F5A623 !important;
+          stroke-width: 3 !important;
+          stroke-dasharray: 10, 5 !important;
+        }
+        
+        .react-flow__edge[data-source-handle="dados"]:hover .react-flow__edge-path,
+        .react-flow__edge[data-target-handle="dados"]:hover .react-flow__edge-path {
+          /* Removida animação de hover */
+        }
+        
+        .react-flow__edge[data-source-handle="estrutura"]:hover .react-flow__edge-path,
+        .react-flow__edge[data-target-handle="estrutura"]:hover .react-flow__edge-path {
+          /* Removida animação de hover */
         }
         
         /* Melhorar visibilidade da linha sendo arrastada */
@@ -422,7 +457,6 @@ const CanvasEditorV2 = ({
           stroke-width: 4 !important;
           stroke-dasharray: 8, 4 !important;
           opacity: 0.9 !important;
-          filter: drop-shadow(0 0 8px rgba(43, 178, 76, 0.7)) !important;
         }
 
         /* Garantir que a linha de conexão seja sempre visível */

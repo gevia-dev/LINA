@@ -128,7 +128,7 @@ const LazyImage = ({
         </div>
       )}
       
-      <style jsx>{`
+      <style>{`
         @keyframes shimmer {
           0% {
             background-position: -200px 0;

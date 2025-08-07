@@ -14,7 +14,7 @@ const DEFAULT_CANVAS_SCHEMA = {
   viewport: {
     x: 0,
     y: 0,
-    zoom: 1
+    zoom: 0.75
   },
   nodes: [],
   edges: [],
@@ -90,7 +90,7 @@ export const deserializeCanvasState = (serializedData) => {
       viewport: {
         x: data.viewport?.x || 0,
         y: data.viewport?.y || 0,
-        zoom: data.viewport?.zoom || 1
+        zoom: data.viewport?.zoom || 0.75
       },
       nodes: Array.isArray(data.nodes) ? data.nodes : [],
       edges: Array.isArray(data.edges) ? data.edges : [],
@@ -136,7 +136,7 @@ const migrateSchema = (data, fromVersion) => {
       }
     }
 
-    console.log(`Schema migrado de ${fromVersion} para ${CURRENT_SCHEMA_VERSION}`);
+
     return migratedData;
 
   } catch (error) {
@@ -153,12 +153,37 @@ const migrateSchema = (data, fromVersion) => {
  */
 export const convertNewsDataToCanvasState = (newsData, savedCanvasState = null) => {
   try {
+
+    
     // Se há estado salvo, usar ele como base
     if (savedCanvasState) {
+
       const deserializedState = deserializeCanvasState(savedCanvasState);
       
-      // Atualizar conteúdo dos nodes com dados atuais
-      const updatedNodes = deserializedState.nodes.map(node => {
+      // Filtrar apenas nodes válidos (IDs padrão: summary, body, conclusion)
+      const validNodeIds = ['summary', 'body', 'conclusion'];
+      const validNodes = deserializedState.nodes.filter(node => {
+        const isValid = validNodeIds.includes(node.id);
+        if (!isValid) {
+          // Node inválido filtrado
+        }
+        return isValid;
+      });
+      
+
+      
+      // Se não temos todos os nodes válidos, criar os padrão
+      if (validNodes.length < 3) {
+        // Nodes insuficientes, criando padrões
+        const defaultNodes = createDefaultNodes(newsData);
+        return {
+          ...deserializedState,
+          nodes: defaultNodes
+        };
+      }
+      
+      // Atualizar conteúdo dos nodes válidos com dados atuais
+      const updatedNodes = validNodes.map(node => {
         const blockData = getBlockDataFromNewsData(newsData, node.id);
         return {
           ...node,
@@ -169,18 +194,21 @@ export const convertNewsDataToCanvasState = (newsData, savedCanvasState = null) 
         };
       });
 
-      return {
+      const result = {
         ...deserializedState,
         nodes: updatedNodes
       };
+      
+
+      return result;
     }
 
     // Criar novo estado do canvas
     const nodes = createDefaultNodes(newsData);
     
-    return {
+    const result = {
       version: CURRENT_SCHEMA_VERSION,
-      viewport: { x: 0, y: 0, zoom: 1 },
+      viewport: { x: 0, y: 0, zoom: 0.75 },
       nodes: nodes,
       edges: [],
       metadata: {
@@ -189,6 +217,9 @@ export const convertNewsDataToCanvasState = (newsData, savedCanvasState = null) 
         newsId: newsData?.id || null
       }
     };
+    
+
+    return result;
 
   } catch (error) {
     console.error('Erro ao converter newsData para canvas:', error);
@@ -202,13 +233,14 @@ export const convertNewsDataToCanvasState = (newsData, savedCanvasState = null) 
  * @returns {Array} Array de nodes
  */
 const createDefaultNodes = (newsData) => {
+  
   const blockIds = ['summary', 'body', 'conclusion'];
   const blockTitles = ['Introdução', 'Corpo', 'Conclusão'];
   
-  return blockIds.map((id, index) => {
+  const nodes = blockIds.map((id, index) => {
     const blockData = getBlockDataFromNewsData(newsData, id);
     
-    return {
+    const node = {
       id: id,
       type: 'cardNode',
       position: {
@@ -221,7 +253,13 @@ const createDefaultNodes = (newsData) => {
         ...blockData
       }
     };
+    
+    
+    return node;
   });
+  
+
+  return nodes;
 };
 
 /**
@@ -232,28 +270,58 @@ const createDefaultNodes = (newsData) => {
  */
 const getBlockDataFromNewsData = (newsData, blockId) => {
   try {
+
+    
     const coreStructure = newsData?.core_structure 
       ? JSON.parse(newsData.core_structure) 
       : {};
+      
 
-    const contentMap = {
-      'summary': coreStructure.Introduce || 'Clique para selecionar, clique novamente para editar a introdução da notícia...',
-      'body': coreStructure.corpos_de_analise || 'Clique para selecionar, clique novamente para editar o corpo da notícia...',
-      'conclusion': coreStructure.conclusoes || 'Clique para selecionar, clique novamente para editar a conclusão...'
+
+    const getContentAsString = (data) => {
+      if (typeof data === 'string') {
+        return data;
+      }
+      if (Array.isArray(data)) {
+        const result = data.join('\n');
+        return result;
+      }
+      if (typeof data === 'object' && data !== null) {
+        const result = JSON.stringify(data, null, 2);
+        return result;
+      }
+      return '';
     };
 
+    const contentMap = {
+      'summary': getContentAsString(coreStructure.Introduce) || 'Clique para selecionar, clique novamente para editar a introdução da notícia...',
+      'body': getContentAsString(coreStructure.corpos_de_analise) || 'Clique para selecionar, clique novamente para editar o corpo da notícia...',
+      'conclusion': getContentAsString(coreStructure.conclusoes) || 'Clique para selecionar, clique novamente para editar a conclusão...'
+    };
+
+
+    
     const content = contentMap[blockId] || '';
     const hasContent = content && 
       !content.includes('Clique para selecionar') && 
       !content.includes('Clique novamente para editar');
 
-    return {
+    const coreKeyMap = {
+      'summary': 'Introduce',
+      'body': 'corpos_de_analise', 
+      'conclusion': 'conclusoes'
+    };
+    
+    const result = {
       content: content,
       hasContent: hasContent,
       minHeight: blockId === 'body' ? '120px' : '80px',
-      coreKey: blockId === 'summary' ? 'Introduce' : 
-               blockId === 'body' ? 'corpos_de_analise' : 'conclusoes'
+      coreKey: coreKeyMap[blockId] || null
     };
+    
+
+    
+    return result;
 
   } catch (error) {
     console.error('Erro ao extrair dados do bloco:', error);
@@ -330,6 +398,28 @@ export const validateCanvasState = (canvasState) => {
   }
 };
 
+/**
+ * Limpa o estado salvo do canvas do localStorage
+ * @param {string} newsId - ID da notícia (opcional)
+ */
+export const clearCanvasState = (newsId = null) => {
+  try {
+    if (newsId) {
+      const savedStateKey = `canvas-state-${newsId}`;
+      localStorage.removeItem(savedStateKey);
+
+    } else {
+      // Limpar todos os estados de canvas
+      const keys = Object.keys(localStorage);
+      const canvasKeys = keys.filter(key => key.startsWith('canvas-state-'));
+      canvasKeys.forEach(key => localStorage.removeItem(key));
+
+    }
+  } catch (error) {
+    console.error('❌ Erro ao limpar estado do canvas:', error);
+  }
+};
+
 export { CURRENT_SCHEMA_VERSION };
 
 export default {
@@ -338,5 +428,6 @@ export default {
   convertNewsDataToCanvasState,
   convertCanvasStateToNewsData,
   validateCanvasState,
+  clearCanvasState,
   CURRENT_SCHEMA_VERSION
 };

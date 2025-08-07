@@ -362,7 +362,7 @@ const CardModal = ({ isOpen, onClose, cardData, onSave, allCards = [], currentCa
         </motion.div>
 
         {/* Estilos para CSS variables */}
-        <style jsx>{`
+        <style>{`
           :root {
             --primary-green: #2BB24C;
             --primary-green-transparent: rgba(43, 178, 76, 0.3);

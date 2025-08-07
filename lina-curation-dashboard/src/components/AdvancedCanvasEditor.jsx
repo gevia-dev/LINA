@@ -8,12 +8,13 @@ import {
   ConnectionLineType
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { CheckSquare, Maximize2, RotateCcw, ZoomIn, ZoomOut, Move, Library } from 'lucide-react';
+import { CheckSquare, Maximize2, RotateCcw, ZoomIn, ZoomOut, Move, Library, Unlink } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 // Importar componentes customizados
 import AdvancedCardNode from './AdvancedCardNode';
 import ContextLibrary from './ContextLibrary';
+import NodeModal from './NodeModal';
 import { useAdvancedCanvas } from '../hooks/useAdvancedCanvas';
 
 // Tipos de nodes customizados
@@ -44,9 +45,11 @@ const AdvancedCanvasEditor = ({
   const [showControls, setShowControls] = useState(true);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isLibraryOpen, setIsLibraryOpen] = useState(false);
+  const [isNodeModalOpen, setIsNodeModalOpen] = useState(false);
+  const [nodeModalData, setNodeModalData] = useState(null);
   const [canvasStats, setCanvasStats] = useState({
     nodeCount: 0,
-    zoom: 1,
+    zoom: 0.75,
     position: { x: 0, y: 0 }
   });
 
@@ -66,6 +69,7 @@ const AdvancedCanvasEditor = ({
     canvasContainer,
     onNodesChange,
     onEdgesChange,
+    onConnect,
     onViewportChange,
     onNodeDragStart,
     onNodeDragStop,
@@ -78,6 +82,9 @@ const AdvancedCanvasEditor = ({
     animateNodes,
     addNewNode,
     removeNode,
+    removeEdge,
+    removeAllEdges,
+    handleKeyDown,
     setCanvasLimits
   } = useAdvancedCanvas(newsData, newsId);
 
@@ -92,6 +99,24 @@ const AdvancedCanvasEditor = ({
       onNodeEditStart(blockId);
     }
   }, [editingNode, onNodeEditStart, onNodeEditEnd]);
+
+  // Função para abrir modal de node
+  const handleOpenNodeModal = useCallback((modalData) => {
+    setNodeModalData(modalData);
+    setIsNodeModalOpen(true);
+  }, []);
+
+  // Função para fechar modal de node
+  const handleCloseNodeModal = useCallback(() => {
+    setIsNodeModalOpen(false);
+    setNodeModalData(null);
+  }, []);
+
+  // Função para salvar conteúdo do node
+  const handleSaveNodeContent = useCallback((nodeData, newContent) => {
+    updateNodeContent(nodeData.itemId, newContent);
+    handleCloseNodeModal();
+  }, [updateNodeContent, handleCloseNodeModal]);
 
   // Função para transferir bloco
   const handleTransferBlock = useCallback((blockId, content) => {
@@ -113,7 +138,18 @@ const AdvancedCanvasEditor = ({
     setTimeout(() => {
       animateNodes('slideUp');
     }, 100);
-  }, [animateNodes]);
+    
+    // Fit view automático na inicialização
+    setTimeout(() => {
+      if (instance && nodes.length > 0) {
+        instance.fitView({
+          padding: 0.1,
+          duration: 800,
+          includeHiddenNodes: false
+        });
+      }
+    }, 200);
+  }, [animateNodes, nodes.length]);
 
   // Atualizar nodes com callbacks corretos
   const nodesWithCallbacks = nodes.map(node => ({
@@ -125,6 +161,8 @@ const AdvancedCanvasEditor = ({
       onEditStart: onNodeEditStart,
       onEditEnd: onNodeEditEnd,
       onRemove: handleRemoveNode,
+      onOpenModal: handleOpenNodeModal,
+      onUpdateContent: updateNodeContent,
       isEditing: editingNode === node.id
     }
   }));
@@ -178,6 +216,21 @@ const AdvancedCanvasEditor = ({
     setIsLibraryOpen(false);
   }, []);
 
+  // Função para remover todas as conexões com confirmação
+  const handleRemoveAllConnections = useCallback(() => {
+    if (edges.length === 0) {
+      return;
+    }
+    
+    const confirmed = window.confirm(
+      `Tem certeza que deseja remover todas as ${edges.length} conexão${edges.length !== 1 ? 'ões' : ''}? Esta ação não pode ser desfeita.`
+    );
+    
+    if (confirmed) {
+      removeAllEdges();
+    }
+  }, [edges.length, removeAllEdges]);
+
   // Função para lidar com transferência de item da biblioteca (lógica aditiva)
   const handleTransferFromLibrary = useCallback((blockId, content) => {
     // Extrair informações do blockId para determinar o tipo e título
@@ -223,10 +276,11 @@ const AdvancedCanvasEditor = ({
 
   // Atalhos de teclado
   useEffect(() => {
-    const handleKeyDown = (e) => {
-      // Não processar atalhos durante edição
-      if (editingNode) return;
+    const handleKeyDownLocal = (e) => {
+      // Não processar alguns atalhos durante edição
+      if (editingNode && (e.ctrlKey || e.metaKey)) return;
 
+      // Atalhos com Ctrl/Cmd
       if (e.ctrlKey || e.metaKey) {
         switch (e.key) {
           case '0':
@@ -256,12 +310,19 @@ const AdvancedCanvasEditor = ({
       // Escape para sair da edição
       if (e.key === 'Escape' && editingNode) {
         onNodeEditEnd();
+        return;
+      }
+
+      // Delete/Backspace para remover elementos selecionados (quando não editando)
+      if ((e.key === 'Delete' || e.key === 'Backspace') && !editingNode) {
+        e.preventDefault();
+        handleKeyDown(e);
       }
     };
 
-    document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [editingNode, handleFitView, handleZoomIn, handleZoomOut, toggleFullscreen, openLibrary, onNodeEditEnd]);
+    document.addEventListener('keydown', handleKeyDownLocal);
+    return () => document.removeEventListener('keydown', handleKeyDownLocal);
+  }, [editingNode, handleFitView, handleZoomIn, handleZoomOut, toggleFullscreen, openLibrary, onNodeEditEnd, handleKeyDown]);
 
   return (
     <div 
@@ -361,8 +422,7 @@ const AdvancedCanvasEditor = ({
         }
         
         .react-flow__controls button:hover {
-          background: var(--primary-green-transparent);
-          color: var(--primary-green);
+          /* Efeito de hover removido */
         }
         
         .react-flow__controls button:last-child {
@@ -378,6 +438,122 @@ const AdvancedCanvasEditor = ({
         
         .react-flow__node {
           background: transparent;
+        }
+
+        /* Estilos para conexões e handles */
+        .connection-handle {
+          z-index: 1000 !important;
+          cursor: crosshair !important;
+          pointer-events: auto !important;
+        }
+        
+
+        
+        .connection-handle-target:hover {
+          transform: translateY(-2px) scale(1.3) !important;
+        }
+        
+        .connection-handle-source:hover {
+          transform: translateY(2px) scale(1.3) !important;
+        }
+        
+        /* Handles específicos para estrutura e dados */
+        .connection-handle-target:hover {
+          opacity: 1 !important;
+          transform: scale(1.2) !important;
+          box-shadow: 0 0 0 3px rgba(43, 178, 76, 0.3) !important;
+          background: #22A043 !important;
+        }
+        
+        /* Estilos para linhas de conexão - melhorados para cliques */
+        .react-flow__connection-line {
+          stroke: rgba(255, 255, 255, 0.6) !important;
+          stroke-width: 4 !important;
+          stroke-dasharray: 8, 4 !important;
+          opacity: 0.8 !important;
+        }
+        
+        .react-flow__edge-path {
+          stroke: rgba(255, 255, 255, 0.6) !important;
+          stroke-width: 3 !important;
+          opacity: 0.9 !important;
+          transition: all 0.2s ease !important;
+          cursor: pointer !important;
+        }
+        
+        .react-flow__edge:hover .react-flow__edge-path {
+          stroke: rgba(255, 255, 255, 0.9) !important;
+          stroke-width: 5 !important;
+          opacity: 1 !important;
+          filter: drop-shadow(0 0 4px rgba(255, 255, 255, 0.3)) !important;
+        }
+        
+        .react-flow__edge-selected .react-flow__edge-path {
+          stroke: rgba(255, 255, 255, 1) !important;
+          stroke-width: 4 !important;
+          opacity: 1 !important;
+        }
+        
+        /* Melhorar seleção de edges */
+        .react-flow__edge {
+          cursor: pointer !important;
+          stroke-width: 12 !important;
+          stroke: transparent !important;
+        }
+        
+        .react-flow__edge:hover {
+          stroke: rgba(255, 255, 255, 0.2) !important;
+        }
+        
+        .react-flow__edge.selected {
+          stroke: rgba(255, 255, 255, 0.3) !important;
+        }
+        
+        .react-flow__edge-path {
+          pointer-events: stroke !important;
+        }
+        
+        /* Adicionar tooltip visual para indicar que é clicável */
+        .react-flow__edge::before {
+          content: "🗑️";
+          position: absolute;
+          top: -20px;
+          left: 50%;
+          transform: translateX(-50%);
+          background: rgba(0, 0, 0, 0.8);
+          color: white;
+          padding: 2px 6px;
+          border-radius: 4px;
+          font-size: 10px;
+          opacity: 0;
+          transition: opacity 0.2s ease;
+          pointer-events: none;
+          z-index: 1000;
+        }
+        
+        .react-flow__edge:hover::before {
+          opacity: 1;
+        }
+        
+        /* Animação para conexão sendo removida */
+        .react-flow__edge.removing .react-flow__edge-path {
+          animation: removeEdge 0.3s ease-out forwards;
+        }
+        
+        @keyframes removeEdge {
+          0% {
+            opacity: 1;
+            stroke-width: 3;
+          }
+          50% {
+            opacity: 0.5;
+            stroke-width: 6;
+            stroke: #FF6B6B;
+          }
+          100% {
+            opacity: 0;
+            stroke-width: 0;
+          }
         }
 
         /* Fullscreen styles */
@@ -488,15 +664,30 @@ const AdvancedCanvasEditor = ({
           edges={edges}
           onNodesChange={onNodesChange}
           onEdgesChange={onEdgesChange}
+          onConnect={onConnect}
+          onEdgeClick={(event, edge) => {
+            event.preventDefault();
+            event.stopPropagation();
+            
+            // Remover conexão diretamente sem confirmação
+            removeEdge(edge.id);
+          }}
           onViewportChange={onViewportChange}
           onNodeDragStart={onNodeDragStart}
           onNodeDragStop={onNodeDragStop}
           onInit={onInit}
           nodeTypes={nodeTypes}
           connectionLineType={ConnectionLineType.SmoothStep}
+          selectNodesOnDrag={false}
+          multiSelectionKeyCode="Shift"
           {...viewportConfig}
           {...interactionConfig}
           attributionPosition="bottom-left"
+          connectionLineStyle={{
+            stroke: 'rgba(255, 255, 255, 0.6)',
+            strokeWidth: 3,
+            strokeDasharray: '8, 4'
+          }}
         >
           <Background 
             variant="dots" 
@@ -575,11 +766,24 @@ const AdvancedCanvasEditor = ({
                 </div>
                 <div>Zoom: {Math.round(canvasStats.zoom * 100)}%</div>
                 <div>Blocos: {canvasStats.nodeCount}</div>
+                <div>Conexões: {edges.length}</div>
                 {editingNode && (
                   <div style={{ color: 'var(--primary-green)' }}>
                     🖊️ Editando: {editingNode}
                   </div>
                 )}
+                <div style={{ fontSize: '11px', marginTop: '4px', opacity: 0.8 }}>
+                  💡 Arraste das bolinhas verdes para conectar
+                </div>
+                <div style={{ fontSize: '11px', opacity: 0.8 }}>
+                  🔵 Azul: Dados | 🟠 Laranja: Estrutura
+                </div>
+                <div style={{ fontSize: '11px', opacity: 0.8 }}>
+                  🗑️ Delete: remover selecionados
+                </div>
+                <div style={{ fontSize: '11px', opacity: 0.8 }}>
+                  🖱️ Clique nas linhas para remover conexões
+                </div>
               </div>
 
               {/* Controles avançados */}
@@ -589,26 +793,52 @@ const AdvancedCanvasEditor = ({
                   { action: handleZoomIn, icon: ZoomIn, label: 'Zoom In (Ctrl/Cmd + +)' },
                   { action: handleZoomOut, icon: ZoomOut, label: 'Zoom Out (Ctrl/Cmd + -)' },
                   { action: handleFitView, icon: RotateCcw, label: 'Fit View (Ctrl/Cmd + 0)' },
-                  { action: toggleFullscreen, icon: Maximize2, label: 'Fullscreen (Ctrl/Cmd + F)' }
-                ].map(({ action, icon: Icon, label, primary }, index) => (
+                  { action: toggleFullscreen, icon: Maximize2, label: 'Fullscreen (Ctrl/Cmd + F)' },
+                  { 
+                    action: handleRemoveAllConnections, 
+                    icon: Unlink, 
+                    label: `Remover Todas as Conexões (${edges.length})`, 
+                    danger: true,
+                    disabled: edges.length === 0
+                  }
+                ].map(({ action, icon: Icon, label, primary, danger, disabled }, index) => (
                   <motion.button
                     key={label}
-                    onClick={action}
+                    onClick={disabled ? undefined : action}
+                    disabled={disabled}
                     className="p-2 rounded flex items-center justify-center transition-all duration-200"
                     style={{
-                      backgroundColor: primary ? 'var(--primary-green-transparent)' : 'var(--bg-secondary)',
-                      border: `1px solid ${primary ? 'var(--primary-green)' : 'var(--border-primary)'}`,
-                      color: primary ? 'var(--primary-green)' : 'var(--text-secondary)'
+                      backgroundColor: disabled 
+                        ? 'var(--bg-primary)' 
+                        : danger 
+                          ? '#FF6B6B20' 
+                          : primary 
+                            ? 'var(--primary-green-transparent)' 
+                            : 'var(--bg-secondary)',
+                      border: `1px solid ${disabled 
+                        ? 'var(--border-primary)' 
+                        : danger 
+                          ? '#FF6B6B' 
+                          : primary 
+                            ? 'var(--primary-green)' 
+                            : 'var(--border-primary)'}`,
+                      color: disabled 
+                        ? 'var(--text-secondary)' 
+                        : danger 
+                          ? '#FF6B6B' 
+                          : primary 
+                            ? 'var(--primary-green)' 
+                            : 'var(--text-secondary)',
+                      cursor: disabled ? 'not-allowed' : 'pointer',
+                      opacity: disabled ? 0.5 : 1
                     }}
-                    whileHover={{
-                      backgroundColor: primary ? 'var(--primary-green)' : 'var(--primary-green-transparent)',
-                      color: primary ? 'white' : 'var(--primary-green)',
-                      scale: 1.05
+                    whileHover={disabled ? {} : {
+                      /* Efeito de hover removido */
                     }}
-                    whileTap={{ scale: 0.95 }}
+                    whileTap={disabled ? {} : { scale: 0.95 }}
                     title={label}
                     initial={{ opacity: 0, scale: 0.8 }}
-                    animate={{ opacity: 1, scale: 1 }}
+                    animate={{ opacity: disabled ? 0.5 : 1, scale: 1 }}
                     transition={{ delay: 0.3 + index * 0.1 }}
                   >
                     <Icon size={16} />
@@ -653,6 +883,15 @@ const AdvancedCanvasEditor = ({
         selectedBlock={selectedBlock}
         onTransferItem={handleTransferFromLibrary}
         onOpenCardModal={onOpenCardModal}
+        onAddNode={addNewNode}
+      />
+
+      {/* Modal de Node */}
+      <NodeModal
+        isOpen={isNodeModalOpen}
+        onClose={handleCloseNodeModal}
+        nodeData={nodeModalData}
+        onSave={handleSaveNodeContent}
       />
     </div>
   );

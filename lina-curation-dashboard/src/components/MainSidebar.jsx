@@ -21,7 +21,7 @@ const MainSidebar = () => {
     if (savedState !== null) {
       const collapsed = JSON.parse(savedState);
       setIsCollapsed(collapsed);
-      console.log('Sidebar initial state:', collapsed);
+    
     } else {
       // Estado padrão: colapsado
       setIsCollapsed(true);
@@ -80,7 +80,7 @@ const MainSidebar = () => {
   const toggleCollapse = () => {
     const newState = !isCollapsed;
     setIsCollapsed(newState);
-    console.log('Sidebar collapsed:', newState);
+
   };
 
   // Função para gerar iniciais do nome
@@ -218,7 +218,7 @@ const MainSidebar = () => {
   return (
     <>
       {/* CSS para animações */}
-      <style jsx>{`
+      <style>{`
         @keyframes pulse {
           0%, 100% { transform: scale(1); opacity: 1; }
           50% { transform: scale(1.2); opacity: 0.7; }

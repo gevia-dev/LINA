@@ -218,7 +218,7 @@ const BubbleChart = ({ data }) => {
   const processedHierarchy = useMemo(() => {
     if (!data || data.length === 0) return null;
     
-    console.log('BubbleChart: Processando hierarquia (memoizado)', { dataLength: data.length });
+
     
     // Filtra dados inválidos
     const validData = data.filter(d => d && (d.llm_title || d.id));
@@ -249,7 +249,7 @@ const BubbleChart = ({ data }) => {
     const nodesToRender = packedRoot.children || [];
     
     // Debug: verificar estrutura dos dados
-    console.log('BubbleChart: Estrutura dos dados', {
+    console.log({
       packedRoot: {
         hasChildren: !!packedRoot.children,
         childrenCount: packedRoot.children ? packedRoot.children.length : 0
@@ -262,14 +262,7 @@ const BubbleChart = ({ data }) => {
       }))
     });
     
-    console.log('BubbleChart: Nós para renderizar', { 
-      totalChildren: nodesToRender.length,
-      sampleNodes: nodesToRender.slice(0, 3).map(n => ({
-        title: n.data.llm_title,
-        hasChildren: !!n.children,
-        radius: n.r
-      }))
-    });
+
     
     return {
       root: packedRoot,
@@ -283,7 +276,7 @@ const BubbleChart = ({ data }) => {
   const zoomToNode = useCallback((node) => {
     if (isTransitioning) return;
     
-    console.log('BubbleChart: Iniciando zoom para nó', node);
+
     
     setIsTransitioning(true);
     setFocusedNode(node);
@@ -299,7 +292,7 @@ const BubbleChart = ({ data }) => {
       height: (node.r * 2) + (padding * 2)
     };
     
-    console.log('BubbleChart: Novo viewBox', newViewBox);
+
     
     // Fade out dos nós atuais
     svg.selectAll('.node-group')
@@ -313,12 +306,12 @@ const BubbleChart = ({ data }) => {
       .ease(d3.easeCubicInOut)
       .attr('viewBox', `${newViewBox.x} ${newViewBox.y} ${newViewBox.width} ${newViewBox.height}`)
       .on('start', () => {
-        console.log('BubbleChart: Iniciando animação de zoom');
+
         // Desabilitar interações durante animação
         svg.style('pointer-events', 'none');
       })
       .on('end', () => {
-        console.log('BubbleChart: Animação de zoom concluída');
+
         // Re-habilitar interações
         svg.style('pointer-events', 'auto');
         setIsTransitioning(false);
@@ -358,23 +351,13 @@ const BubbleChart = ({ data }) => {
 
   useEffect(() => {
     if (!processedHierarchy || !svgRef.current) {
-      console.log('BubbleChart: Hierarquia não processada ou SVG não disponível');
+
       return;
     }
 
     const { nodes, colorScale, validDataLength } = processedHierarchy;
     
-    console.log('BubbleChart: Renderizando com hierarquia memoizada', { 
-      validDataLength,
-      nodesLength: nodes.length,
-      sampleNodes: nodes.slice(0, 3).map(n => ({
-        title: n.data.llm_title,
-        hasChildren: !!n.children,
-        childrenCount: n.children ? n.children.length : 0,
-        radius: n.r,
-        depth: n.depth
-      }))
-    });
+
 
     const svg = d3.select(svgRef.current);
     svg.selectAll('*').remove(); // Limpa o SVG anterior
@@ -409,27 +392,22 @@ const BubbleChart = ({ data }) => {
       .on('click', (event, d) => {
         if (isTransitioning) return; // Desabilita cliques durante transição
         
-        console.log('BubbleChart: Clique detectado no nó', d);
+
         
         // Determina tipo do nó e emite evento apropriado
         const hasChildren = d.children && d.children.length > 0;
         const hasDataChildren = d.data && d.data.children && d.data.children.length > 0;
-        console.log('BubbleChart: Nó tem filhos?', { 
-          hasChildren, 
-          hasDataChildren, 
-          children: d.children,
-          dataChildren: d.data?.children 
-        });
+
         
         if (hasChildren || hasDataChildren) {
           // É um cluster - emite evento de cluster e inicia zoom
           event.stopPropagation();
-          console.log('BubbleChart: Clique em cluster, iniciando zoom');
+
           dispatchNodeEvent('bubbleChart:clusterClick', d);
           zoomToNode(d); // Usar zoom animado em vez de callback direto
         } else {
           // É uma folha (notícia individual) - emite evento de folha
-          console.log('BubbleChart: Clique em folha');
+
           dispatchNodeEvent('bubbleChart:leafClick', d);
         }
       })
@@ -712,7 +690,7 @@ const BubbleChart = ({ data }) => {
       )}
       
       {/* CSS para animações */}
-      <style jsx>{`
+      <style>{`
         @keyframes spin {
           0% { transform: rotate(0deg); }
           100% { transform: rotate(360deg); }
