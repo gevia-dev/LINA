@@ -151,6 +151,53 @@ export const fetchNewsFromLinaNews = async (page = 0, limit = 50) => {
 };
 
 /**
+ * Busca notícias diretamente da tabela lina_news.
+ * completed = false: itens pendentes (final_text IS NULL)
+ * completed = true: itens concluídos (final_text NOT NULL)
+ */
+export const fetchLinaNews = async (page = 0, limit = 50, { completed = false } = {}) => {
+  const from = page * limit;
+  const to = from + limit - 1;
+
+  let query = supabase
+    .from('lina_news')
+    .select('id, created_at, title, link, structured_summary, macro_tag, sub_tag, category, news_id', { count: 'exact' })
+    .order('created_at', { ascending: false })
+    .range(from, to);
+
+  // Pendente vs concluído baseado em final_text
+  if (completed) {
+    query = query.not('final_text', 'is', null);
+  } else {
+    query = query.is('final_text', null);
+  }
+
+  const { data, error, count } = await query;
+
+  if (error) {
+    console.error('Error fetching lina_news:', error);
+    throw new Error(error.message);
+  }
+
+  // Mapear campos para compatibilidade com o feed existente
+  const mapped = (data || []).map(item => ({
+    ...item,
+    // Compatibilidade com UI existente
+    macro_categoria: item.macro_tag
+  }));
+
+  return { data: mapped, error: null, count };
+};
+
+export const fetchLinaNewsPending = async (page = 0, limit = 50) => {
+  return fetchLinaNews(page, limit, { completed: false });
+};
+
+export const fetchLinaNewsCompleted = async (page = 0, limit = 50) => {
+  return fetchLinaNews(page, limit, { completed: true });
+};
+
+/**
  * Busca a hierarquia dos tópicos e eventos da Lina.
  */
 export const fetchLinaHierarchy = async () => {

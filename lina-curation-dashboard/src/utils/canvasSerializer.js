@@ -14,7 +14,7 @@ const DEFAULT_CANVAS_SCHEMA = {
   viewport: {
     x: 0,
     y: 0,
-    zoom: 0.75
+    zoom: 1
   },
   nodes: [],
   edges: [],
@@ -85,21 +85,21 @@ export const deserializeCanvasState = (serializedData) => {
     }
 
     // Validar estrutura mínima
-    return {
-      version: data.version || CURRENT_SCHEMA_VERSION,
-      viewport: {
-        x: data.viewport?.x || 0,
-        y: data.viewport?.y || 0,
-        zoom: data.viewport?.zoom || 0.75
-      },
-      nodes: Array.isArray(data.nodes) ? data.nodes : [],
-      edges: Array.isArray(data.edges) ? data.edges : [],
-      metadata: {
-        createdAt: data.metadata?.createdAt || new Date().toISOString(),
-        updatedAt: data.metadata?.updatedAt || new Date().toISOString(),
-        newsId: data.metadata?.newsId || null
-      }
-    };
+      return {
+        version: data.version || CURRENT_SCHEMA_VERSION,
+        viewport: {
+          x: data.viewport?.x || 0,
+          y: data.viewport?.y || 0,
+          zoom: data.viewport?.zoom || 1
+        },
+        nodes: Array.isArray(data.nodes) ? data.nodes : [],
+        edges: Array.isArray(data.edges) ? data.edges : [],
+        metadata: {
+          createdAt: data.metadata?.createdAt || new Date().toISOString(),
+          updatedAt: data.metadata?.updatedAt || new Date().toISOString(),
+          newsId: data.metadata?.newsId || null
+        }
+      };
 
   } catch (error) {
     console.error('Erro ao desserializar estado do canvas:', error);
@@ -185,8 +185,17 @@ export const convertNewsDataToCanvasState = (newsData, savedCanvasState = null) 
       // Atualizar conteúdo dos nodes válidos com dados atuais
       const updatedNodes = validNodes.map(node => {
         const blockData = getBlockDataFromNewsData(newsData, node.id);
+        // Migrar tipo antigo 'cardNode' para novos tipos
+        let migratedType = node.type;
+        if (node.type === 'cardNode') {
+          const inferredCoreKey = blockData.coreKey;
+          migratedType = (inferredCoreKey === 'micro_estrutura' || (typeof inferredCoreKey === 'string' && inferredCoreKey.startsWith('micro_'))) 
+            ? 'dataNode' 
+            : 'textSegmentNode';
+        }
         return {
           ...node,
+          type: migratedType,
           data: {
             ...node.data,
             ...blockData
@@ -213,7 +222,7 @@ export const convertNewsDataToCanvasState = (newsData, savedCanvasState = null) 
             source: 'conclusion',
             target: monitorNode.id,
             sourceHandle: 'source',
-            targetHandle: 'target',
+            targetHandle: 'monitor-input',
             type: 'default',
             animated: true,
             style: {
@@ -236,60 +245,13 @@ export const convertNewsDataToCanvasState = (newsData, savedCanvasState = null) 
       return result;
     }
 
-    // Criar novo estado do canvas
+    // Criar novo estado do canvas (apenas os 3 nodes principais por padrão)
     const nodes = createDefaultNodes(newsData);
-    
-    // Adicionar MonitorNode e conexão com conclusão
-    const monitorNode = {
-      id: `monitor-${Date.now()}`,
-      type: 'monitorNode',
-      position: { x: 400, y: 100 }, // Posicionado próximo aos nodes padrão
-      data: {
-        title: 'Monitor',
-        displayMode: 'structured',
-        autoRefresh: true,
-        showHeaders: true,
-        hasContent: false,
-        isEditing: false,
-        metadata: {
-          createdAt: new Date().toISOString(),
-          nodeType: 'monitor',
-          isDefault: true
-        }
-      },
-      style: {
-        width: 500,
-        height: 800
-      }
-    };
-    
-    nodes.push(monitorNode);
-    
-    // Criar conexão automática entre conclusão e monitor
-    const conclusionNode = nodes.find(node => node.id === 'conclusion');
     const edges = [];
-    
-    if (conclusionNode) {
-      const monitorEdge = {
-        id: `edge-conclusion-monitor-default`,
-        source: 'conclusion',
-        target: monitorNode.id,
-        sourceHandle: 'source',
-        targetHandle: 'target',
-        type: 'default',
-        animated: true,
-        style: {
-          stroke: 'rgba(255, 255, 255, 0.7)',
-          strokeWidth: 2,
-        }
-      };
-      
-      edges.push(monitorEdge);
-    }
     
     const result = {
       version: CURRENT_SCHEMA_VERSION,
-      viewport: { x: 0, y: 0, zoom: 0.75 },
+      viewport: { x: 0, y: 0, zoom: 1 },
       nodes: nodes,
       edges: edges,
       metadata: {
@@ -323,7 +285,7 @@ const createDefaultNodes = (newsData) => {
     
     const node = {
       id: id,
-      type: 'cardNode',
+      type: 'textSegmentNode',
       position: {
         x: 100, // Manter todos na mesma coluna
         y: 100 + index * 250 // Espaçamento vertical progressivo

@@ -16,7 +16,7 @@ import {
   Layers
 } from 'lucide-react';
 import ContextSidebar from './ContextSidebar';
-import DefaultNodesLibrary from './DefaultNodesLibrary';
+import DefaultNodesLibrary from './advancedCanvas/DefaultNodesLibrary';
 
 /**
  * ContextLibrary - Versão modal/drawer do ContextSidebar

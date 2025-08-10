@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams } from 'react-router-dom';
 import CanvasEditorV2 from './CanvasEditorV2';
 import ContextSidebar from './ContextSidebar';
-import CardModal from './CardModal';
+import CardModal from './advancedCanvas/modals/CardModal';
 import supabase from '../lib/supabaseClient.js';
 
 /**

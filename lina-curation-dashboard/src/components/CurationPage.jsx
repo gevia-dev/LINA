@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams } from 'react-router-dom';
-import AdvancedCanvasEditor from './AdvancedCanvasEditor';
+import AdvancedCanvasEditor from './advancedCanvas/AdvancedCanvasEditor';
 import CardModal from './CardModal';
 import supabase from '../lib/supabaseClient.js';
 

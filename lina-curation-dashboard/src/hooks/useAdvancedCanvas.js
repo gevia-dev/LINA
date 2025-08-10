@@ -80,7 +80,7 @@ export const useAdvancedCanvas = (newsData, newsId) => {
         
         if (validateCanvasState(canvasState)) {
           // Verificar se o MonitorNode existe no estado carregado
-          const monitorNodeExists = canvasState.nodes.some(node => node.type === 'monitorNode');
+      const monitorNodeExists = canvasState.nodes.some(node => node.type === 'monitorNode');
           
           if (!monitorNodeExists) {
             // Adicionar MonitorNode se não existir
@@ -110,14 +110,14 @@ export const useAdvancedCanvas = (newsData, newsId) => {
             canvasState.nodes.push(monitorNode);
             
             // Criar conexão automática entre conclusão e monitor
-            const conclusionNode = canvasState.nodes.find(node => node.id === 'conclusion');
+          const conclusionNode = canvasState.nodes.find(node => node.id === 'conclusion');
             if (conclusionNode) {
               const monitorEdge = {
                 id: `edge-conclusion-monitor-default`,
                 source: 'conclusion',
                 target: monitorNode.id,
                 sourceHandle: 'source',
-                targetHandle: 'target',
+                targetHandle: 'monitor-input',
                 type: 'default',
                 animated: true,
                 style: {
@@ -337,7 +337,7 @@ export const useAdvancedCanvas = (newsData, newsId) => {
           source: 'conclusion',
           target: monitorNode.id,
           sourceHandle: 'source',
-          targetHandle: 'target',
+          targetHandle: 'monitor-input',
           type: 'default',
           animated: true,
           style: {
@@ -621,10 +621,16 @@ export const useAdvancedCanvas = (newsData, newsId) => {
     
     const coreKey = coreKeyMapping[type] || type;
 
+    // Determinar o node.type com base no coreKey
+    let nodeType = 'textSegmentNode';
+    if (coreKey === 'micro_estrutura' || (typeof coreKey === 'string' && coreKey.startsWith('micro_'))) {
+      nodeType = 'dataNode';
+    }
+
 
     const newNode = {
       id: newNodeId,
-      type: 'cardNode',
+      type: nodeType,
       position: newNodePosition,
       data: {
         id: newNodeId,

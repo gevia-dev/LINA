@@ -30,7 +30,7 @@ const DefaultNodesLibrary = ({ onAddNode }) => {
         type: 'monitorNode', // Tipo especial
         data: {
           title: 'Monitor',
-          displayMode: 'combined',
+          displayMode: 'structured',
           autoRefresh: true,
           showHeaders: true,
           hasContent: false,
@@ -56,7 +56,7 @@ const DefaultNodesLibrary = ({ onAddNode }) => {
       icon: Layers,
       color: '#F5A623', // Laranja para estrutura
       template: {
-        type: 'cardNode',
+        type: 'dataNode',
         data: {
           title: 'Estrutura',
           content: '## Estrutura\n\nOrganize aqui a estrutura do seu conteúdo...',
@@ -64,7 +64,6 @@ const DefaultNodesLibrary = ({ onAddNode }) => {
           coreKey: 'micro_estrutura', // Para ter estilo de microdado
           hasContent: true,
           isEditing: false,
-          isStructureNode: true, // Flag especial para identificar node de estrutura
           structureType: 'continua', // Tipo de estrutura padrão
           metadata: {
             createdAt: new Date().toISOString(),
@@ -74,8 +73,8 @@ const DefaultNodesLibrary = ({ onAddNode }) => {
         },
         position: { x: 0, y: 0 },
         style: {
-          width: 245, // 70% da largura padrão (350px)
-          height: 110 // Altura ajustada para radio buttons
+           width: 245,
+           height: 110
         }
       }
     }

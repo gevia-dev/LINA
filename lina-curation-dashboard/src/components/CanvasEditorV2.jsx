@@ -15,12 +15,12 @@ import { CheckSquare } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 // Importar componentes customizados
-import AdvancedCardNode from './AdvancedCardNode';
+import CardNode from './CardNode';
 import { useCanvasState } from '../hooks/useCanvasState';
 
 // Tipos de nodes customizados
 const nodeTypes = {
-  cardNode: AdvancedCardNode,
+  cardNode: CardNode,
 };
 
 const CanvasEditorV2 = ({ 
@@ -642,6 +642,8 @@ const CanvasEditorV2 = ({
               }}
             >
               <div>Canvas Interativo V2</div>
+              <div>Arraste os blocos para reorganizar</div>
+              <div>Clique para selecionar, duplo clique para editar</div>
               <div>🎯 Enter: editar | Delete: remover | Esc: sair</div>
               <div>🔗 Arraste das bolinhas verdes para conectar blocos</div>
               <div>🖱️ Cursor crosshair = área conectável</div>

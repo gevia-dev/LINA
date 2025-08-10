@@ -17,6 +17,11 @@ const DetailsSidebar = ({ selectedItem }) => {
         navigate(`/news/${selectedItem.lina_news_id}`);
         return;
       }
+      // Quando o item já é da tabela lina_news, navegar usando o próprio id
+      if (Object.prototype.hasOwnProperty.call(selectedItem, 'news_id')) {
+        navigate(`/news/${selectedItem.id}`);
+        return;
+      }
       
       // Caso contrário, buscar na tabela lina_news usando o news_id
       const linaNews = await fetchLinaNewsByNewsId(selectedItem.id);

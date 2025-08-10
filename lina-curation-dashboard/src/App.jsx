@@ -9,12 +9,6 @@ import MainSidebar from './components/MainSidebar';
 // Páginas
 import Login from './pages/Login';
 import CurationFeed from './pages/CurationFeed';
-import CurationPage from './components/CurationPage';
-import LinaExplorerPage from './components/LinaExplorerPage';
-import LinaBubbleExplorerPage from './pages/LinaBubbleExplorerPage'; // Importe a nova página
-
-// Componentes placeholder
-const UploadPage = () => <div className="text-white">Página de Upload</div>;
 
 // Layout com sidebar
 const LayoutWithSidebar = ({ children }) => (
@@ -37,42 +31,6 @@ function App() {
               <ProtectedRoute>
                 <LayoutWithSidebar>
                   <CurationFeed />
-                </LayoutWithSidebar>
-              </ProtectedRoute>
-            } />
-            <Route path="/news/:id" element={
-              <ProtectedRoute>
-                <LayoutWithSidebar>
-                  <CurationPage />
-                </LayoutWithSidebar>
-              </ProtectedRoute>
-            } />
-            <Route path="/curation" element={
-              <ProtectedRoute>
-                <LayoutWithSidebar>
-                  <CurationPage />
-                </LayoutWithSidebar>
-              </ProtectedRoute>
-            } />
-            <Route path="/explorer" element={
-              <ProtectedRoute>
-                <LayoutWithSidebar>
-                  <LinaExplorerPage />
-                </LayoutWithSidebar>
-              </ProtectedRoute>
-            } />
-            {/* Adicione a nova rota */}
-            <Route path="/bubble-explorer" element={
-              <ProtectedRoute>
-                <LayoutWithSidebar>
-                  <LinaBubbleExplorerPage />
-                </LayoutWithSidebar>
-              </ProtectedRoute>
-            } />
-            <Route path="/upload" element={
-              <ProtectedRoute>
-                <LayoutWithSidebar>
-                  <UploadPage />
                 </LayoutWithSidebar>
               </ProtectedRoute>
             } />

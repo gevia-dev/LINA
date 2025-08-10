@@ -1,5 +1,5 @@
-import React, { useState, useRef } from 'react';
-import { FileText, Database, ChevronDown, ChevronUp, ArrowRight } from 'lucide-react';
+import React, { useState, useRef, useEffect } from 'react';
+import { Database, ChevronDown, ChevronUp, ArrowRight } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 const ContextSidebar = ({ 
@@ -11,7 +11,7 @@ const ContextSidebar = ({
   searchTerm = '', 
   activeFilter = 'all' 
 }) => {
-  const [activeTab, setActiveTab] = useState('complete');
+  const [activeTab, setActiveTab] = useState('micro');
   const [expandedItems, setExpandedItems] = useState({});
   
   // Ref para container de scroll
@@ -22,18 +22,68 @@ const ContextSidebar = ({
     return category.replace(/_/g, ' ');
   };
 
-  // Função para fazer parse seguro do JSON
-  const safeJsonParse = (jsonString) => {
+  // Função para fazer parse seguro do JSON (aceita string ou objeto)
+  const safeJsonParse = (input) => {
+    // Tenta normalizar strings "quase JSON" e camadas de stringificação
+    const normalizeString = (s) => {
+      if (typeof s !== 'string') return s;
+      let normalized = s.trim();
+      // Remover lixo antes/depois das chaves
+      const first = normalized.indexOf('{');
+      const last = normalized.lastIndexOf('}');
+      if (first !== -1 && last !== -1 && last > first) {
+        normalized = normalized.slice(first, last + 1);
+      }
+      // Normalizar aspas curvas
+      normalized = normalized
+        .replace(/[“”]/g, '"')
+        .replace(/[‘’]/g, "'");
+      return normalized;
+    };
     try {
-      return JSON.parse(jsonString);
+      if (!input) {
+        // Em render inicial pode vir vazio
+        return null;
+      }
+      // Caso especial: String objeto (ex.: new String('...'))
+      if (typeof input === 'object') {
+        const tag = Object.prototype.toString.call(input);
+        if (tag === '[object String]') {
+          input = String(input.valueOf());
+        } else {
+          // Se não é String-objeto, retornar como está (já é objeto JSON)
+          return input;
+        }
+      }
+      // Se for string, tentar múltiplas tentativas de parse
+      if (typeof input === 'string') {
+        let current = normalizeString(input);
+        for (let i = 0; i < 3; i += 1) {
+          try {
+            const parsed = JSON.parse(current);
+            if (typeof parsed === 'string') {
+              current = normalizeString(parsed);
+              continue;
+            }
+            return parsed;
+          } catch (e) {
+            // Tenta corrigir vírgulas finais simples
+            current = normalizeString(current.replace(/,\s*}/g, '}').replace(/,\s*]/g, ']'));
+          }
+        }
+        return null;
+      }
+      return null;
     } catch (error) {
-      console.error('Erro ao fazer parse do JSON:', error);
       return null;
     }
   };
 
+  // Removidos logs iniciais
+  useEffect(() => {}, [newsData]);
+
   // Função para truncar texto
-  const truncateText = (text, maxLength = 250) => {
+  const truncateText = (text, maxLength = 200) => {
     if (text.length <= maxLength) return text;
     return text.substring(0, maxLength) + '...';
   };
@@ -52,6 +102,77 @@ const ContextSidebar = ({
       onTransferItem(itemId, content);
     }
   };
+
+  // Pré-parse do core_quotes
+
+  // Caminho 1: tente JSON.parse direto; se falhar, parser tolerante
+  let coreQuotesParsed = null;
+  try {
+    const raw = newsData?.core_quotes;
+    if (typeof raw === 'string' || Object.prototype.toString.call(raw) === '[object String]') {
+      coreQuotesParsed = JSON.parse(String(raw.valueOf()));
+    } else {
+      coreQuotesParsed = raw || null;
+    }
+  } catch (e) {
+    coreQuotesParsed = safeJsonParse(newsData?.core_quotes);
+  }
+
+  // Normalização: lida com stringificação dupla e filhos em string
+  const normalizeCoreQuotesInternal = (core) => {
+    if (!core) return null;
+    let root = core;
+
+    // Caso edge: objeto com único campo string contendo todo o JSON
+    const rootKeys = Object.keys(root || {});
+    if (typeof root === 'object' && rootKeys.length === 1 && typeof root[rootKeys[0]] === 'string') {
+      const parsed = safeJsonParse(root[rootKeys[0]]);
+      if (parsed && typeof parsed === 'object') {
+        root = parsed;
+      }
+    }
+
+    // Percorrer pais
+    const result = {};
+    Object.entries(root || {}).forEach(([parentKey, childValue]) => {
+      let childObj = childValue;
+      // Se o filho veio como string, tentar parsear
+      if (typeof childObj === 'string') {
+        const parsed = safeJsonParse(childObj);
+        if (parsed) childObj = parsed;
+      }
+      // Se não é objeto, ignorar
+      if (!childObj || typeof childObj !== 'object') return;
+
+      const childEntries = {};
+      Object.entries(childObj).forEach(([childKey, items]) => {
+        let list = items;
+        if (typeof list === 'string') {
+          const parsedList = safeJsonParse(list);
+          if (parsedList) list = parsedList;
+        }
+        // Se veio objeto único, transformar em array
+        if (list && !Array.isArray(list) && typeof list === 'object') {
+          // Se parecer um mapa de itens, transformar em array de valores
+          const values = Object.values(list);
+          if (values.length && values.every(v => typeof v === 'object' || typeof v === 'string')) {
+            list = values;
+          } else {
+            list = [list];
+          }
+        }
+        // Garantir array
+        if (!Array.isArray(list)) list = [];
+        childEntries[childKey] = list;
+      });
+      result[parentKey] = childEntries;
+    });
+
+    return result;
+  };
+
+  const normalizedCoreQuotes = normalizeCoreQuotesInternal(coreQuotesParsed);
+  const hasCoreObject = normalizedCoreQuotes && typeof normalizedCoreQuotes === 'object' && Object.keys(normalizedCoreQuotes).length > 0;
 
   // Função para abrir modal do card
   const handleCardClick = (content, type, section = null, category = null, index = 0) => {
@@ -79,37 +200,38 @@ const ContextSidebar = ({
           }));
         }
       } else if (type === 'micro') {
-        // Para micro dados, coletar todos os cards da categoria atual
-        const coreQuotes = safeJsonParse(newsData?.core_quotes);
-        if (coreQuotes && coreQuotes[category]) {
-          const quotes = Array.isArray(coreQuotes[category]) ? coreQuotes[category] : [coreQuotes[category]];
-          allCardsData = quotes.map((quote, idx) => ({
-            content: quote,
-            type: 'micro',
-            category,
-            itemId: `micro-${category}-${idx}`
-          }));
+        // Para micro dados, coletar todos os cards da subcategoria atual (parent::child)
+        const coreQuotes = normalizedCoreQuotes;
+        if (coreQuotes && typeof coreQuotes === 'object' && typeof category === 'string') {
+          const [parentKey, childKey] = category.split('::');
+          const list = coreQuotes?.[parentKey]?.[childKey];
+          if (Array.isArray(list)) {
+            allCardsData = list.map((item, idx) => ({
+              content: typeof item === 'string' ? item : (item.frase_completa || item.titulo_frase || ''),
+              type: 'micro',
+              category,
+              itemId: `micro-${parentKey}::${childKey}-${idx}`
+            }));
+          }
         }
       }
       
       // Coletar todos os micro dados para o carrossel (apenas quando necessário)
       let microDataArray = [];
-      const allCoreQuotes = safeJsonParse(newsData?.core_quotes);
-      if (allCoreQuotes) {
-        Object.entries(allCoreQuotes).forEach(([category, quotes]) => {
-          if (Array.isArray(quotes)) {
-            quotes.forEach((quote, idx) => {
-              microDataArray.push({
-                content: quote,
-                category,
-                itemId: `micro-${category}-${idx}`
-              });
-            });
-          } else {
-            microDataArray.push({
-              content: quotes,
-              category,
-              itemId: `micro-${category}-0`
+      const allCoreQuotes = normalizedCoreQuotes;
+      if (allCoreQuotes && typeof allCoreQuotes === 'object') {
+        Object.entries(allCoreQuotes).forEach(([parentKey, childObj]) => {
+          if (childObj && typeof childObj === 'object') {
+            Object.entries(childObj).forEach(([childKey, list]) => {
+              if (Array.isArray(list)) {
+                list.forEach((item, idx) => {
+                  microDataArray.push({
+                    content: typeof item === 'string' ? item : (item.frase_completa || item.titulo_frase || ''),
+                    category: `${parentKey}::${childKey}`,
+                    itemId: `micro-${parentKey}::${childKey}-${idx}`
+                  });
+                });
+              }
             });
           }
         });
@@ -132,18 +254,6 @@ const ContextSidebar = ({
         <div className="mb-6">
           <div className="flex border-b border-[#333333]">
             <button
-              onClick={() => setActiveTab('complete')}
-              className={`flex items-center gap-2 px-4 py-3 border-b-2 transition-colors text-sm font-medium ${
-                activeTab === 'complete'
-                  ? 'border-[#2BB24C] text-[#2BB24C]'
-                  : 'border-transparent text-[#A0A0A0] hover:text-[#E0E0E0]'
-              }`}
-            >
-              <FileText size={16} />
-              <span>Dados Completos</span>
-            </button>
-            
-            <button
               onClick={() => setActiveTab('micro')}
               className={`flex items-center gap-2 px-4 py-3 border-b-2 transition-colors text-sm font-medium ${
                 activeTab === 'micro'
@@ -152,7 +262,7 @@ const ContextSidebar = ({
               }`}
             >
               <Database size={16} />
-              <span>Micro Dados</span>
+              <span>Dados</span>
             </button>
           </div>
           {selectedBlock && (
@@ -172,382 +282,151 @@ const ContextSidebar = ({
         ref={scrollContainerRef}
         className="px-10 flex-1 overflow-y-auto"
       >
-        {/* Aba Dados Completos */}
-        {activeTab === 'complete' && (
-          <div className="space-y-6 pt-4">
-            {newsData && newsData.variant_structure ? (
-              (() => {
-                const variantData = safeJsonParse(newsData.variant_structure);
-                if (!variantData || typeof variantData !== 'object') {
-                  return (
-                    <p className="text-[#A0A0A0] text-sm">
-                      Estrutura de dados inválida ou não encontrada.
-                    </p>
-                  );
-                }
-                
-                const sections = [
-                  { key: 'introducoes', title: 'Introduções', blockId: 'summary' },
-                  { key: 'corpos_de_analise', title: 'Corpos de Análise', blockId: 'body' },
-                  { key: 'conclusoes', title: 'Conclusões', blockId: 'conclusion' }
-                ];
-                
-                // Sempre mostrar todas as seções
-                const filteredSections = sections;
-                
-                const renderedSections = filteredSections.map((section) => {
-                  const sectionData = variantData[section.key];
-                  if (!Array.isArray(sectionData) || sectionData.length === 0) {
-                    return null;
-                  }
-                  
-                  return (
-                    <div key={section.key} className="space-y-3 mb-8">
-                      <div className="flex items-center gap-3 mb-4">
-                        <h3 className="text-[#E0E0E0] font-bold text-base uppercase tracking-wider">
-                          {section.title}
-                        </h3>
-                        <div className="flex-1 h-px bg-gradient-to-r from-[#2BB24C] to-transparent"></div>
-                      </div>
-                      <AnimatePresence>
-                        {sectionData.map((item, index) => {
-                          const text = typeof item === 'string' ? item : (item.text || item.content || 'Sem conteúdo');
-                          const itemId = `complete-${section.key}-${index}`;
-                          const isExpanded = expandedItems[itemId];
-                          const shouldTruncate = text.length > 250;
-                          
-                          return (
-                            <motion.div
-                              key={index}
-                              initial={{ opacity: 0, y: 20, scale: 0.95 }}
-                              animate={{ opacity: 1, y: 0, scale: 1 }}
-                              exit={{ opacity: 0, y: -20, scale: 0.95 }}
-                              transition={{ 
-                                duration: 0.3, 
-                                ease: "easeOut",
-                                delay: index * 0.05 
-                              }}
-                              whileHover={{ 
-                                scale: 1.02,
-                                y: -2,
-                                transition: { duration: 0.2 }
-                              }}
-                              className="group"
-                            >
-                              <div 
-                                className="p-5 rounded-lg bg-[#1E1E1E] border border-[#333333] relative overflow-hidden hover:border-[#2BB24C50] transition-all duration-200 cursor-pointer min-h-[120px]"
-                                onClick={() => handleCardClick(text, 'complete', section.key, null, index)}
-                              >
-                                {/* Botão de expandir/recolher */}
-                                {shouldTruncate && (
-                                  <button
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      toggleExpansion(itemId);
-                                    }}
-                                    className="absolute top-3 right-3 p-2 rounded-full border text-[#A0A0A0] transition-all duration-300 hover:scale-110 z-10"
-                                    style={{
-                                      borderColor: 'var(--primary-green-transparent)',
-                                      backgroundColor: 'transparent'
-                                    }}
-                                    title={isExpanded ? "Recolher" : "Expandir"}
-                                  >
-                                    <motion.div
-                                      animate={{ rotate: isExpanded ? 180 : 0 }}
-                                      transition={{ duration: 0.2 }}
-                                    >
-                                      <ChevronDown size={16} />
-                                    </motion.div>
-                                  </button>
-                                )}
-                                
-                                {/* Botão de transferência */}
-                                <motion.button
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleTransferItem(itemId, text);
-                                  }}
-                                  className="absolute bottom-3 right-3 p-2 rounded-full border text-[#A0A0A0] opacity-0 group-hover:opacity-100 transition-all duration-300 hover:scale-110 z-10"
-                                  style={{
-                                    borderColor: 'var(--primary-green-transparent)',
-                                    backgroundColor: 'transparent'
-                                  }}
-                                  whileHover={{ 
-                                    scale: 1.1,
-                                    backgroundColor: 'var(--primary-green)',
-                                    color: 'white'
-                                  }}
-                                  whileTap={{ scale: 0.95 }}
-                                  initial={{ scale: 0.8 }}
-                                  animate={{ scale: 1 }}
-                                  transition={{ duration: 0.2 }}
-                                >
-                                  <ArrowRight size={16} />
-                                </motion.button>
-                                
-                                {/* Efeito de brilho no hover */}
-                                <motion.div
-                                  className="absolute inset-0 bg-gradient-to-r from-transparent via-[#2BB24C10] to-transparent"
-                                  initial={{ x: '-100%' }}
-                                  whileHover={{ x: '100%' }}
-                                  transition={{ duration: 0.6, ease: "easeInOut" }}
-                                />
-                                
-                                <p className="text-[#E0E0E0] text-base leading-relaxed pr-12 relative z-5">
-                                  {shouldTruncate && !isExpanded ? truncateText(text) : text}
-                                </p>
-                              </div>
-                            </motion.div>
-                          );
-                        })}
-                      </AnimatePresence>
-                    </div>
-                  );
-                }).filter(Boolean);
-                
-                // Se um bloco específico foi selecionado mas não há dados, mostrar mensagem
-                if (selectedBlock && renderedSections.length === 0) {
-                  const selectedSection = sections.find(s => s.blockId === selectedBlock);
-                  return (
-                    <motion.p 
-                      className="text-[#A0A0A0] text-sm"
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      transition={{ duration: 0.3 }}
-                    >
-                      Nenhum dado disponível para {selectedSection?.title.toLowerCase()}.
-                    </motion.p>
-                  );
-                }
-                
+        {/* (Aba "Dados Completos" removida) */}
 
-                
-                return renderedSections;
-              })()
-            ) : (
-              <motion.p 
-                className="text-[#A0A0A0] text-sm"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ duration: 0.3 }}
-              >
-                Nenhum dado completo disponível.
-              </motion.p>
-            )}
-          </div>
-        )}
-
-        {/* Aba Micro Dados */}
+        {/* Aba Dados (antes Micro Dados) */}
         {activeTab === 'micro' && (
           <div className="space-y-6 pt-4">
-            {newsData && newsData.core_quotes ? (
+            {hasCoreObject ? (
               (() => {
-                const coreQuotes = safeJsonParse(newsData.core_quotes);
-                if (!coreQuotes || typeof coreQuotes !== 'object') {
-                  return (
-                    <motion.p 
-                      className="text-[#A0A0A0] text-sm"
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      transition={{ duration: 0.3 }}
-                    >
-                      Micro dados inválidos ou não encontrados.
-                    </motion.p>
-                  );
-                }
-                
-                return Object.entries(coreQuotes).map(([category, quotes], categoryIndex) => (
-                  <motion.div 
-                    key={category}
+                const coreQuotes = normalizedCoreQuotes;
+                // Nova estrutura: { parentKey: { childKey: [ { titulo_frase, frase_completa, categoria_funcional }, ... ] } }
+                return Object.entries(coreQuotes).map(([parentKey, childObj], parentIndex) => (
+                  <motion.div
+                    key={parentKey}
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.3, delay: categoryIndex * 0.1 }}
+                    transition={{ duration: 0.3, delay: parentIndex * 0.05 }}
                   >
-                    <div className="flex items-center gap-3 mb-4">
-                      <h3 className="text-[#E0E0E0] font-bold text-base uppercase tracking-wider">
-                        {formatCategory(category)}
+                    {/* Divisória: chave pai */}
+                    <div className="flex items-center gap-3 mb-2 mt-6">
+                      <h3 className="text-[#E0E0E0] font-bold text-sm uppercase tracking-wider">
+                        {formatCategory(parentKey)}
                       </h3>
                       <div className="flex-1 h-px bg-gradient-to-r from-[#2BB24C] to-transparent"></div>
                     </div>
-                    <div className="space-y-3 mb-8">
-                      <AnimatePresence>
-                        {Array.isArray(quotes) ? quotes.map((quote, index) => {
-                          const itemId = `micro-${category}-${index}`;
-                          const isExpanded = expandedItems[itemId];
-                          const shouldTruncate = quote.length > 250;
+                    
+                    {/* Pastas por chave filha (colapsadas por padrão) */}
+                    {childObj && typeof childObj === 'object' && Object.entries(childObj).map(([childKey, items], childIndex) => {
+                      const folderId = `folder-${parentKey}-${childKey}`;
+                      const isFolderOpen = !!expandedItems[folderId];
+                      const itemsCount = Array.isArray(items) ? items.length : 0;
+                      return (
+                        <div key={`${parentKey}-${childKey}`} className="mb-4">
+                          {/* Cabeçalho da pasta */}
+                          <button
+                            onClick={() => toggleExpansion(folderId)}
+                            className="w-full flex items-center justify-between px-3 py-2 rounded-md border hover:border-[#2BB24C80] transition-colors"
+                            style={{
+                              backgroundColor: '#1E1E1E',
+                              borderColor: '#333333',
+                              color: '#E0E0E0'
+                            }}
+                          >
+                            <div className="flex items-center gap-2 text-sm">
+                              <span className="inline-flex items-center justify-center w-5 h-5 rounded-sm border" style={{ borderColor: 'var(--primary-green-transparent)' }}>
+                                {isFolderOpen ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                              </span>
+                              <span className="uppercase tracking-wide">{formatCategory(childKey)}</span>
+                            </div>
+                            <span className="text-xs text-[#A0A0A0]">{itemsCount} itens</span>
+                          </button>
                           
-                          return (
-                            <motion.div
-                              key={index}
-                              initial={{ opacity: 0, y: 20, scale: 0.95 }}
-                              animate={{ opacity: 1, y: 0, scale: 1 }}
-                              exit={{ opacity: 0, y: -20, scale: 0.95 }}
-                              transition={{ 
-                                duration: 0.3, 
-                                ease: "easeOut",
-                                delay: index * 0.05 
-                              }}
-                              whileHover={{ 
-                                scale: 1.02,
-                                y: -2,
-                                transition: { duration: 0.2 }
-                              }}
-                              className="group"
-                            >
-                              <div 
-                                className="p-5 rounded-lg bg-[#1E1E1E] border border-[#333333] text-[#E0E0E0] text-base relative overflow-hidden hover:border-[#2BB24C50] transition-all duration-200 cursor-pointer min-h-[120px]"
-                                onClick={() => handleCardClick(quote, 'micro', null, category, index)}
+                          {/* Conteúdo da pasta */}
+                          <AnimatePresence>
+                            {isFolderOpen && Array.isArray(items) && (
+                              <motion.div
+                                initial={{ opacity: 0, y: 8 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                exit={{ opacity: 0, y: -8 }}
+                                className="mt-3 space-y-3"
                               >
-                                {/* Botão de expandir/recolher */}
-                                {shouldTruncate && (
-                                  <button
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      toggleExpansion(itemId);
-                                    }}
-                                    className="absolute top-3 right-3 p-2 rounded-full border text-[#A0A0A0] transition-all duration-300 hover:scale-110 z-10"
-                                    style={{
-                                      borderColor: 'var(--primary-green-transparent)',
-                                      backgroundColor: 'transparent'
-                                    }}
-                                    title={isExpanded ? "Recolher" : "Expandir"}
-                                  >
+                                {items.map((item, index) => {
+                                  const title = item?.titulo_frase || 'Sem título';
+                                  const phrase = item?.frase_completa || '';
+                                  const tag = item?.categoria_funcional || '';
+                                  const itemId = `micro-${parentKey}::${childKey}-${index}`;
+                                  const isExpanded = !!expandedItems[itemId];
+                                  const shouldTruncate = phrase.length > 200;
+                                  const categoryKey = `${parentKey}::${childKey}`;
+                                  
+                                  return (
                                     <motion.div
-                                      animate={{ rotate: isExpanded ? 180 : 0 }}
-                                      transition={{ duration: 0.2 }}
+                                      key={itemId}
+                                      initial={{ opacity: 0, y: 12, scale: 0.98 }}
+                                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                                      exit={{ opacity: 0, y: -12, scale: 0.98 }}
+                                      transition={{ duration: 0.25, ease: 'easeOut' }}
+                                      className="group"
                                     >
-                                      <ChevronDown size={16} />
+                                      <div
+                                        className="p-4 rounded-lg bg-[#1A1A1A] border border-[#333333] relative overflow-hidden hover:border-[#2BB24C50] transition-all duration-200 cursor-pointer"
+                                        onDoubleClick={() => handleCardClick(phrase, 'micro', null, categoryKey, index)}
+                                      >
+                                        {/* Botão de expandir/recolher subtexto */}
+                                        {shouldTruncate && (
+                                          <button
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              toggleExpansion(itemId);
+                                            }}
+                                            className="absolute top-3 right-3 p-2 rounded-full border text-[#A0A0A0] transition-all duration-300 hover:scale-110 z-10"
+                                            style={{
+                                              borderColor: 'var(--primary-green-transparent)',
+                                              backgroundColor: 'transparent'
+                                            }}
+                                            title={isExpanded ? 'Recolher' : 'Expandir'}
+                                          >
+                                            <motion.div animate={{ rotate: isExpanded ? 180 : 0 }} transition={{ duration: 0.2 }}>
+                                              <ChevronDown size={16} />
+                                            </motion.div>
+                                          </button>
+                                        )}
+                                        
+                                        {/* Botão de transferência */}
+                                        <motion.button
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleTransferItem(itemId, phrase);
+                                          }}
+                                          className="absolute bottom-3 right-3 p-2 rounded-full border text-[#A0A0A0] opacity-0 group-hover:opacity-100 transition-all duration-300 hover:scale-110 z-10"
+                                          style={{
+                                            borderColor: 'var(--primary-green-transparent)',
+                                            backgroundColor: 'transparent'
+                                          }}
+                                          whileHover={{ scale: 1.1, backgroundColor: 'var(--primary-green)', color: 'white' }}
+                                          whileTap={{ scale: 0.95 }}
+                                          initial={{ scale: 0.8 }}
+                                          animate={{ scale: 1 }}
+                                          transition={{ duration: 0.2 }}
+                                        >
+                                          <ArrowRight size={16} />
+                                        </motion.button>
+                                        
+                                        {/* Conteúdo do card */}
+                                        <div className="pr-12">
+                                          <div className="flex items-center justify-between gap-3 mb-1">
+                                            <p className="text-[#E0E0E0] text-sm font-semibold leading-snug">{title}</p>
+                                            {tag && (
+                                              <span className="text-xs px-2 py-0.5 rounded-full border" style={{ borderColor: 'var(--primary-green-transparent)', color: '#A0A0A0' }}>
+                                                {tag}
+                                              </span>
+                                            )}
+                                          </div>
+                                          <p className="text-[#CFCFCF] text-sm leading-relaxed">
+                                            {shouldTruncate && !isExpanded ? truncateText(phrase, 200) : phrase}
+                                          </p>
+                                        </div>
+                                      </div>
                                     </motion.div>
-                                  </button>
-                                )}
-                                
-                                {/* Botão de transferência */}
-                                <motion.button
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleTransferItem(itemId, quote);
-                                  }}
-                                  className="absolute bottom-3 right-3 p-2 rounded-full border text-[#A0A0A0] opacity-0 group-hover:opacity-100 transition-all duration-300 hover:scale-110 z-10"
-                                  style={{
-                                    borderColor: 'var(--primary-green-transparent)',
-                                    backgroundColor: 'transparent'
-                                  }}
-                                  whileHover={{ 
-                                    scale: 1.1,
-                                    backgroundColor: 'var(--primary-green)',
-                                    color: 'white'
-                                  }}
-                                  whileTap={{ scale: 0.95 }}
-                                  initial={{ scale: 0.8 }}
-                                  animate={{ scale: 1 }}
-                                  transition={{ duration: 0.2 }}
-                                >
-                                  <ArrowRight size={16} />
-                                </motion.button>
-                                
-                                {/* Efeito de brilho no hover */}
-                                <motion.div
-                                  className="absolute inset-0 bg-gradient-to-r from-transparent via-[#2BB24C10] to-transparent"
-                                  initial={{ x: '-100%' }}
-                                  whileHover={{ x: '100%' }}
-                                  transition={{ duration: 0.6, ease: "easeInOut" }}
-                                />
-                                
-                                <div className="pr-12 relative z-5">
-                                  {shouldTruncate && !isExpanded ? truncateText(quote) : quote}
-                                </div>
-                              </div>
-                            </motion.div>
-                          );
-                        }) : (() => {
-                          const itemId = `micro-${category}-single`;
-                          const isExpanded = expandedItems[itemId];
-                          const shouldTruncate = quotes.length > 250;
-                          
-                          return (
-                            <motion.div
-                              initial={{ opacity: 0, y: 20, scale: 0.95 }}
-                              animate={{ opacity: 1, y: 0, scale: 1 }}
-                              exit={{ opacity: 0, y: -20, scale: 0.95 }}
-                              transition={{ 
-                                duration: 0.3, 
-                                ease: "easeOut"
-                              }}
-                              whileHover={{ 
-                                scale: 1.02,
-                                y: -2,
-                                transition: { duration: 0.2 }
-                              }}
-                              className="group"
-                            >
-                              <div 
-                                className="p-5 rounded-lg bg-[#1E1E1E] border border-[#333333] text-[#E0E0E0] text-base relative overflow-hidden hover:border-[#2BB24C50] transition-all duration-200 cursor-pointer min-h-[120px]"
-                                onClick={() => handleCardClick(quotes, 'micro', null, category, 0)}
-                              >
-                                {/* Botão de expandir/recolher */}
-                                {shouldTruncate && (
-                                  <button
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      toggleExpansion(itemId);
-                                    }}
-                                    className="absolute top-3 right-3 p-2 rounded-full border text-[#A0A0A0] transition-all duration-300 hover:scale-110 z-10"
-                                    style={{
-                                      borderColor: 'var(--primary-green-transparent)',
-                                      backgroundColor: 'transparent'
-                                    }}
-                                    title={isExpanded ? "Recolher" : "Expandir"}
-                                  >
-                                    <motion.div
-                                      animate={{ rotate: isExpanded ? 180 : 0 }}
-                                      transition={{ duration: 0.2 }}
-                                    >
-                                      <ChevronDown size={14} />
-                                    </motion.div>
-                                  </button>
-                                )}
-                                
-                                {/* Botão de transferência */}
-                                <motion.button
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleTransferItem(itemId, quotes);
-                                  }}
-                                  className="absolute bottom-3 right-3 p-2 rounded-full border text-[#A0A0A0] opacity-0 group-hover:opacity-100 transition-all duration-300 hover:scale-110 z-10"
-                                  style={{
-                                    borderColor: 'var(--primary-green-transparent)',
-                                    backgroundColor: 'transparent'
-                                  }}
-                                  whileHover={{ 
-                                    scale: 1.1,
-                                    backgroundColor: 'var(--primary-green)',
-                                    color: 'white'
-                                  }}
-                                  whileTap={{ scale: 0.95 }}
-                                  initial={{ scale: 0.8 }}
-                                  animate={{ scale: 1 }}
-                                  transition={{ duration: 0.2 }}
-                                >
-                                  <ArrowRight size={16} />
-                                </motion.button>
-                                
-                                {/* Efeito de brilho no hover */}
-                                <motion.div
-                                  className="absolute inset-0 bg-gradient-to-r from-transparent via-[#2BB24C10] to-transparent"
-                                  initial={{ x: '-100%' }}
-                                  whileHover={{ x: '100%' }}
-                                  transition={{ duration: 0.6, ease: "easeInOut" }}
-                                />
-                                
-                                <div className="pr-12 relative z-5">
-                                  {shouldTruncate && !isExpanded ? truncateText(quotes) : quotes}
-                                </div>
-                              </div>
-                            </motion.div>
-                          );
-                        })()}
-                      </AnimatePresence>
-                    </div>
+                                  );
+                                })}
+                              </motion.div>
+                            )}
+                          </AnimatePresence>
+                        </div>
+                      );
+                    })}
                   </motion.div>
                 ));
               })()
@@ -558,7 +437,7 @@ const ContextSidebar = ({
                 animate={{ opacity: 1 }}
                 transition={{ duration: 0.3 }}
               >
-                Nenhum micro dado disponível.
+                Nenhum dado disponível.
               </motion.p>
             )}
           </div>

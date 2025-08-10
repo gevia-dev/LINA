@@ -12,15 +12,17 @@ import { CheckSquare, Maximize2, RotateCcw, Library } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 // Importar componentes customizados
-import AdvancedCardNode from './AdvancedCardNode';
-import MonitorNode from './MonitorNode';
+import TextSegmentNode from './nodes/TextSegmentNode';
+import DataNode from './nodes/DataNode';
+import MonitorNode from './nodes/MonitorNode';
 import ContextLibrary from './ContextLibrary';
-import CardModal from './CardModal';
-import { useAdvancedCanvas } from '../hooks/useAdvancedCanvas';
+import CardModal from './modals/CardModal';
+import { useAdvancedCanvas } from '../../hooks/useAdvancedCanvas';
 
 // Tipos de nodes customizados
 const nodeTypes = {
-  cardNode: AdvancedCardNode,
+  textSegmentNode: TextSegmentNode,
+  dataNode: DataNode,
   monitorNode: MonitorNode,
 };
 
@@ -171,37 +173,39 @@ const AdvancedCanvasEditor = ({
         }));
       }
     } else if (type === 'micro' && category && newsData?.core_quotes) {
-      // Para micro dados, coletar todos os cards da categoria atual
+      // Para micro dados, coletar todos os cards da subcategoria atual (parent::child)
+      console.log("!!!!!!!!!!!!!CORE QUOTES: \n", newsData.coreQuotes)
       const coreQuotes = safeJsonParse(newsData.core_quotes);
-      if (coreQuotes && coreQuotes[category]) {
-        const quotes = Array.isArray(coreQuotes[category]) ? coreQuotes[category] : [coreQuotes[category]];
-        allCardsData = quotes.map((quote, idx) => ({
-          content: quote,
-          type: 'micro',
-          category,
-          itemId: `micro-${category}-${idx}`
-        }));
+      if (coreQuotes && typeof coreQuotes === 'object') {
+        const [parentKey, childKey] = String(category).split('::');
+        const list = coreQuotes?.[parentKey]?.[childKey];
+        if (Array.isArray(list)) {
+          allCardsData = list.map((item, idx) => ({
+            content: typeof item === 'string' ? item : (item.frase_completa || item.titulo_frase || ''),
+            type: 'micro',
+            category,
+            itemId: `micro-${parentKey}::${childKey}-${idx}`
+          }));
+        }
       }
     }
     
     // Coletar todos os micro dados para o carrossel (apenas quando necessário)
     if (type === 'complete' && newsData?.core_quotes) {
       const allCoreQuotes = safeJsonParse(newsData.core_quotes);
-      if (allCoreQuotes) {
-        Object.entries(allCoreQuotes).forEach(([cat, quotes]) => {
-          if (Array.isArray(quotes)) {
-            quotes.forEach((quote, idx) => {
-              microDataArray.push({
-                content: quote,
-                category: cat,
-                itemId: `micro-${cat}-${idx}`
-              });
-            });
-          } else {
-            microDataArray.push({
-              content: quotes,
-              category: cat,
-              itemId: `micro-${cat}-0`
+      if (allCoreQuotes && typeof allCoreQuotes === 'object') {
+        Object.entries(allCoreQuotes).forEach(([parentKey, childObj]) => {
+          if (childObj && typeof childObj === 'object') {
+            Object.entries(childObj).forEach(([childKey, list]) => {
+              if (Array.isArray(list)) {
+                list.forEach((item, idx) => {
+                  microDataArray.push({
+                    content: typeof item === 'string' ? item : (item.frase_completa || item.titulo_frase || ''),
+                    category: `${parentKey}::${childKey}`,
+                    itemId: `micro-${parentKey}::${childKey}-${idx}`
+                  });
+                });
+              }
             });
           }
         });
@@ -893,6 +897,8 @@ const AdvancedCanvasEditor = ({
           <MiniMap 
             position="bottom-right"
             nodeColor={(node) => {
+              if (node.type === 'dataNode') return '#4A90E2';
+              if (node.type === 'monitorNode') return '#2BB24C';
               if (node.data?.isEditing) return '#2BB24C';
               if (node.data?.hasContent) return '#2BB24C80';
               return '#A0A0A0';
@@ -1003,3 +1009,6 @@ const AdvancedCanvasEditor = ({
 };
 
 export default AdvancedCanvasEditor;
+
+
+

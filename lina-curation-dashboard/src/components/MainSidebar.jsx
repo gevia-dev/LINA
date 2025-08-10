@@ -1,7 +1,7 @@
 // src/components/MainSidebar.jsx
 
 import React, { useState, useEffect } from 'react';
-import { Plus, FileText, Network, Droplets, Settings, LogOut, ChevronLeft, ChevronRight } from 'lucide-react';
+import { FileText, LogOut, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useNavigate, useLocation, NavLink } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../context/AuthContext';
@@ -60,14 +60,10 @@ const MainSidebar = () => {
   };
 
   const mainItems = [
-    { name: 'Feed', icon: FileText, path: '/feed', shortcut: 'Alt+1' },
-    { name: 'Create', icon: Plus, path: '/curation', shortcut: 'Alt+2' }
+    { name: 'Feed', icon: FileText, path: '/feed', shortcut: 'Alt+1' }
   ];
 
-  const toolsItems = [
-    { name: 'Explorer', icon: Network, path: '/explorer', shortcut: 'Alt+3' },
-    { name: 'Bubbles', icon: Droplets, path: '/bubble-explorer', shortcut: 'Alt+4' }
-  ];
+  const toolsItems = [];
 
   const handleLogout = async () => {
     try {

@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion';
 import { Toaster } from 'react-hot-toast';
 import { Grid3X3, List, Loader2, X } from 'lucide-react';
-import { fetchNews, fetchNewsFromLinaNews, fetchCompletedNews, fetchCompletedNewsFromLinaNews } from '../services/contentApi';
+import { fetchLinaNewsPending, fetchLinaNewsCompleted } from '../services/contentApi';
 import FeedItem from '../components/FeedItem';
 import FeedItemSkeleton from '../components/FeedItemSkeleton';
 import DetailsSidebar from '../components/DetailsSidebar';
@@ -16,7 +16,7 @@ const CurationFeed = () => {
   const [selectedNews, setSelectedNews] = useState(null);
   const [sidebarVisible, setSidebarVisible] = useState(false);
   const [filterCategory, setFilterCategory] = useState('all');
-  const [filterLinaNews, setFilterLinaNews] = useState(false);
+  // Feed utiliza exclusivamente lina_news
   const [activeTab, setActiveTab] = useState('pending'); // 'pending' ou 'completed'
   const [readItems, setReadItems] = useState(new Set());
   const [visibleItemsCount, setVisibleItemsCount] = useState(20);
@@ -32,19 +32,9 @@ const CurationFeed = () => {
       
       let result;
       if (activeTab === 'completed') {
-        // Carrega notícias concluídas (isDone == true)
-        if (filterLinaNews) {
-          result = await fetchCompletedNewsFromLinaNews(0, 100);
-        } else {
-          result = await fetchCompletedNews(0, 100);
-        }
+        result = await fetchLinaNewsCompleted(0, 100);
       } else {
-        // Carrega notícias pendentes (isDone == false) - comportamento original
-        if (filterLinaNews) {
-          result = await fetchNewsFromLinaNews(0, 100);
-        } else {
-          result = await fetchNews(0, 100);
-        }
+        result = await fetchLinaNewsPending(0, 100);
       }
       
       if (result.data) {
@@ -60,7 +50,7 @@ const CurationFeed = () => {
 
   useEffect(() => {
     loadNews();
-  }, [filterLinaNews, activeTab]); // Recarrega quando o filtro ou aba ativa muda
+  }, [activeTab]); // Recarrega quando a aba ativa muda
 
   // Filtrar notícias baseado nos filtros selecionados (exceto lina_news que já é filtrado no carregamento)
   const filteredNews = newsItems.filter(item => {
@@ -122,7 +112,7 @@ const CurationFeed = () => {
   // Reset visible items when filters change
   useEffect(() => {
     setVisibleItemsCount(20);
-  }, [filterCategory, filterLinaNews, activeTab]);
+  }, [filterCategory, activeTab]);
 
   // Listener para ESC key
   useEffect(() => {
@@ -283,36 +273,7 @@ const CurationFeed = () => {
               </motion.button>
             </div>
 
-            {/* Filtro temporário para lina_news */}
-            <label 
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px',
-                color: 'var(--text-primary)',
-                fontFamily: 'Inter',
-                fontSize: '13px',
-                fontWeight: '400',
-                cursor: 'pointer',
-                padding: '8px 12px',
-                backgroundColor: 'var(--bg-secondary)',
-                border: '1px solid var(--border-primary)',
-                borderRadius: '6px',
-                height: '32px',
-                whiteSpace: 'nowrap'
-              }}
-            >
-              <input
-                type="checkbox"
-                checked={filterLinaNews}
-                onChange={(e) => setFilterLinaNews(e.target.checked)}
-                style={{
-                  accentColor: 'var(--primary-green)',
-                  cursor: 'pointer'
-                }}
-              />
-              Filtrar Lina
-            </label>
+            {/* Feed já utiliza lina_news por padrão */}
 
             {/* Filtro de categorias no canto direito */}
             <select

@@ -7,13 +7,13 @@ const CardModal = ({ isOpen, onClose, cardData, onSave, allCards = [], currentCa
   const [hasChanges, setHasChanges] = useState(false);
   const [currentCategoryIndex, setCurrentCategoryIndex] = useState(0);
 
-  // Organizar micro dados por categoria
+  // Organizar micro dados por categoria (parent::child => exibir como Parent / Child)
   const microDataByCategory = microData.reduce((acc, item) => {
-    const category = item.category || 'Sem Categoria';
-    if (!acc[category]) {
-      acc[category] = [];
-    }
-    acc[category].push(item);
+    const raw = item.category || 'Sem Categoria';
+    const [parent, child] = String(raw).split('::');
+    const label = child ? `${parent.replace(/_/g, ' ')} / ${child.replace(/_/g, ' ')}` : parent.replace(/_/g, ' ');
+    if (!acc[label]) acc[label] = [];
+    acc[label].push(item);
     return acc;
   }, {});
 
@@ -199,7 +199,11 @@ const CardModal = ({ isOpen, onClose, cardData, onSave, allCards = [], currentCa
                    Editar Conteúdo
                  </h2>
                  <p className="text-[#A0A0A0] text-sm mt-1">
-                   {cardData.category || 'Dados Completos'}
+                  {(() => {
+                    if (!cardData.category) return 'Dados Completos';
+                    const [p,c] = String(cardData.category).split('::');
+                    return c ? `${p.replace(/_/g,' ')} / ${c.replace(/_/g,' ')}` : p.replace(/_/g,' ');
+                  })()}
                    {cardData.section && ` - ${cardData.section}`}
                    {allCards.length > 1 && ` (${currentCardIndex + 1} de ${allCards.length})`}
                  </p>
@@ -264,7 +268,7 @@ const CardModal = ({ isOpen, onClose, cardData, onSave, allCards = [], currentCa
                   {shouldShowMicroData && (
                     <div>
                       <h3 className="text-[#A0A0A0] text-sm font-semibold mb-3 uppercase tracking-wider">
-                        Micro Dados
+                        Dados
                       </h3>
                       <div className="flex flex-col">
                         {/* Category Navigation */}
@@ -288,7 +292,7 @@ const CardModal = ({ isOpen, onClose, cardData, onSave, allCards = [], currentCa
                               {currentCategory.replace(/_/g, ' ')}
                             </div>
                             <div className="text-[#A0A0A0] text-xs">
-                              Categoria {currentCategoryIndex + 1} de {categoryKeys.length} • {currentCategoryData.length} micro dados
+                              Categoria {currentCategoryIndex + 1} de {categoryKeys.length} • {currentCategoryData.length} itens
                             </div>
                           </div>
                           
