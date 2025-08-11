@@ -42,6 +42,29 @@ const CardModal = ({ isOpen, onClose, cardData, onSave, allCards = [], currentCa
     }
   }, [editedContent, cardData?.content]);
 
+  // Heurística para identificar placeholders/lorem
+  const isPlaceholderContent = (text) => {
+    if (!text) return true;
+    const normalized = String(text).trim().toLowerCase();
+    return (
+      normalized.startsWith('lorem ipsum') ||
+      normalized.includes('clique para selecionar') ||
+      normalized.includes('clique novamente para editar')
+    );
+  };
+
+  // Inserir texto de um card de dados na área de edição
+  const handleInsertFromDataCard = (contentToInsert) => {
+    const current = editedContent || '';
+    if (isPlaceholderContent(current)) {
+      setEditedContent(contentToInsert || '');
+      return;
+    }
+    const needsGap = current.length > 0 && !/\n\n$/.test(current);
+    const separator = needsGap ? '\n\n' : '';
+    setEditedContent(`${current}${separator}${contentToInsert || ''}`);
+  };
+
   const handleSave = () => {
     if (onSave && hasChanges) {
       onSave(cardData, editedContent);
@@ -316,7 +339,9 @@ const CardModal = ({ isOpen, onClose, cardData, onSave, allCards = [], currentCa
                           {currentCategoryData.map((item, index) => (
                             <div 
                               key={item.itemId || index} 
-                              className="bg-[#1A1A1A] border border-[#333333] rounded-lg p-3 min-h-[80px] flex flex-col"
+                              className="bg-[#1A1A1A] border border-[#333333] rounded-lg p-3 min-h-[80px] flex flex-col cursor-pointer hover:border-[#2BB24C50] transition-colors"
+                              onClick={() => handleInsertFromDataCard(item.content)}
+                              title="Clique para adicionar à área de edição"
                             >
                               <div className="text-[#E0E0E0] text-xs leading-relaxed flex-1 overflow-hidden">
                                 <div className="line-clamp-4 break-words">

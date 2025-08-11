@@ -11,7 +11,6 @@ import Login from './pages/Login';
 import CurationFeed from './pages/CurationFeed';
 import LinaExplorerPage from './components/LinaExplorerPage';
 import LinaBubbleExplorerPage from './pages/LinaBubbleExplorerPage';
-import CurationPageWithCanvas from './components/CurationPageWithCanvas';
 import CurationPage from './components/CurationPage';
 
 // Layout com sidebar
@@ -48,8 +47,17 @@ function App() {
                 <LinaBubbleExplorerPage />
               </LayoutWithSidebar>
             } />
-            <Route path="/news/:id" element={<CurationPage />} />
-            <Route path="/curation/:id" element={<CurationPage />} />
+            {/* Advanced Canvas com sidebar visível */}
+            <Route path="/news/:id" element={
+              <LayoutWithSidebar>
+                <CurationPage />
+              </LayoutWithSidebar>
+            } />
+            <Route path="/curation/:id" element={
+              <LayoutWithSidebar>
+                <CurationPage />
+              </LayoutWithSidebar>
+            } />
             <Route path="/" element={<Navigate to="/feed" replace />} />
           </Routes>
         </main>
