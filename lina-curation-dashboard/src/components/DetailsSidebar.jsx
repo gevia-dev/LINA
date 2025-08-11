@@ -253,8 +253,8 @@ const DetailsSidebar = ({ selectedItem }) => {
           {/* Botão Ler */}
           <button
             onClick={() => {
-              // TODO: Implementar rota de leitura
-          
+              const event = new CustomEvent('open-news-reader', { detail: { item: selectedItem } });
+              window.dispatchEvent(event);
             }}
             style={{
               flex: 1,

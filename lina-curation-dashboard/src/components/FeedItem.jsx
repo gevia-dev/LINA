@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
-import { Bookmark, Share2, Clock, Sparkles, BookmarkCheck, ChevronDown, ChevronUp } from 'lucide-react';
+import { Bookmark, CheckCircle2, Clock, Sparkles, BookmarkCheck, ChevronDown, ChevronUp } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import SourceAvatar from './SourceAvatar';
 import LazyImage from './LazyImage';
@@ -101,25 +101,13 @@ const FeedItem = ({ item, isSelected, onClick, onMarkAsRead, index = 0, isCompac
     });
   };
 
-  const handleShare = (e) => {
+  const handlePublishToggle = async (e) => {
     e.stopPropagation();
-    if (navigator.share) {
-      navigator.share({
-        title: item.title,
-        url: item.url || window.location.href
-      });
-    } else {
-      navigator.clipboard.writeText(item.url || window.location.href);
-      toast.success('Link copiado para a área de transferência!', {
-        duration: 2000,
-        position: 'bottom-right',
-        style: {
-          background: 'var(--bg-secondary)',
-          color: 'var(--text-primary)',
-          border: '1px solid var(--border-primary)',
-          fontSize: '12px'
-        }
-      });
+    try {
+      const event = new CustomEvent('toggle-news-published', { detail: { item } });
+      window.dispatchEvent(event);
+    } catch (err) {
+      console.error(err);
     }
   };
 
@@ -449,22 +437,22 @@ const FeedItem = ({ item, isSelected, onClick, onMarkAsRead, index = 0, isCompac
                 </motion.button>
                 
                 <motion.button
-                  onClick={handleShare}
+                  onClick={handlePublishToggle}
                   whileHover={{ scale: 1.1 }}
                   whileTap={{ scale: 0.9 }}
                   style={{
                     background: 'none',
                     border: 'none',
-                    color: '#A0A0A0',
+                    color: 'var(--text-secondary)',
                     cursor: 'pointer',
                     padding: '4px',
                     display: 'flex',
                     alignItems: 'center',
                     borderRadius: '4px'
                   }}
-                  title="Compartilhar notícia"
+                  title="Marcar como publicado"
                 >
-                  <Share2 size={14} />
+                  <CheckCircle2 size={14} />
                 </motion.button>
               </div>
             </div>

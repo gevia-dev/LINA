@@ -6,8 +6,10 @@ import { fetchLinaNewsPending, fetchLinaNewsCompleted } from '../services/conten
 import FeedItem from '../components/FeedItem';
 import FeedItemSkeleton from '../components/FeedItemSkeleton';
 import DetailsSidebar from '../components/DetailsSidebar';
+import NewsReaderPanel from '../components/NewsReaderPanel';
 import { groupNewsByDate } from '../utils/dateHelpers';
 import { useViewMode } from '../hooks/useViewMode';
+import { setLinaNewsPublished } from '../services/contentApi';
 
 const CurationFeed = () => {
   const [newsItems, setNewsItems] = useState([]);
@@ -15,6 +17,7 @@ const CurationFeed = () => {
   const [error, setError] = useState(null);
   const [selectedNews, setSelectedNews] = useState(null);
   const [sidebarVisible, setSidebarVisible] = useState(false);
+  const [readerItem, setReaderItem] = useState(null);
   const [filterCategory, setFilterCategory] = useState('all');
   // Feed utiliza exclusivamente lina_news
   const [activeTab, setActiveTab] = useState('pending'); // 'pending' ou 'completed'
@@ -79,6 +82,33 @@ const CurationFeed = () => {
   useEffect(() => {
     const savedReadItems = JSON.parse(localStorage.getItem('readNewsItems') || '[]');
     setReadItems(new Set(savedReadItems));
+  }, []);
+
+  // Listener para abrir o leitor notion-like via evento customizado
+  useEffect(() => {
+    const openReader = (e) => {
+      const item = e.detail?.item;
+      if (item) setReaderItem(item);
+    };
+    window.addEventListener('open-news-reader', openReader);
+    return () => window.removeEventListener('open-news-reader', openReader);
+  }, []);
+
+  // Listener para toggle de publicado
+  useEffect(() => {
+    const togglePublished = async (e) => {
+      const item = e.detail?.item;
+      if (!item) return;
+      try {
+        const linaId = item.id;
+        await setLinaNewsPublished(linaId, true);
+        setNewsItems(prev => prev.map(n => n.id === linaId ? { ...n, isPublished: true } : n));
+      } catch (err) {
+        console.error('Erro ao marcar como publicado:', err);
+      }
+    };
+    window.addEventListener('toggle-news-published', togglePublished);
+    return () => window.removeEventListener('toggle-news-published', togglePublished);
   }, []);
 
   // Função para carregar mais itens quando fazer scroll
@@ -614,6 +644,9 @@ const CurationFeed = () => {
           to { opacity: 1; }
         }
       `}</style>
+      {readerItem && (
+        <NewsReaderPanel item={readerItem} onClose={() => setReaderItem(null)} />
+      )}
     </div>
   );
 };

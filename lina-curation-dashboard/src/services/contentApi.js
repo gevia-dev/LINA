@@ -159,34 +159,55 @@ export const fetchLinaNews = async (page = 0, limit = 50, { completed = false } 
   const from = page * limit;
   const to = from + limit - 1;
 
-  let query = supabase
-    .from('lina_news')
-    .select('id, created_at, title, link, structured_summary, macro_tag, sub_tag, category, news_id', { count: 'exact' })
-    .order('created_at', { ascending: false })
-    .range(from, to);
+  // Primeiro, tenta filtrar por isPublished (se a coluna existir)
+  try {
+    const { data, error, count } = await supabase
+      .from('lina_news')
+      .select('id, created_at, title, link, structured_summary, final_text, original_full_content, macro_tag, sub_tag, category, news_id, isPublished', { count: 'exact' })
+      .eq('isPublished', completed)
+      .order('created_at', { ascending: false })
+      .range(from, to);
 
-  // Pendente vs concluído baseado em final_text
-  if (completed) {
-    query = query.not('final_text', 'is', null);
-  } else {
-    query = query.is('final_text', null);
+    if (error) throw error;
+
+    const mapped = (data || []).map(item => ({
+      ...item,
+      macro_categoria: item.macro_tag
+    }));
+
+    return { data: mapped, error: null, count };
+  } catch (err) {
+    // Fallback: se a coluna isPublished não existir, usar final_text como proxy (antigo comportamento)
+    const message = String(err?.message || '').toLowerCase();
+    if (!message.includes('ispublished')) {
+      console.warn('Fallback para final_text pois ocorreu erro ao usar isPublished:', err);
+    }
+
+    let query = supabase
+      .from('lina_news')
+      .select('id, created_at, title, link, structured_summary, final_text, original_full_content, macro_tag, sub_tag, category, news_id', { count: 'exact' })
+      .order('created_at', { ascending: false })
+      .range(from, to);
+
+    if (completed) {
+      query = query.not('final_text', 'is', null);
+    } else {
+      query = query.is('final_text', null);
+    }
+
+    const { data, error, count } = await query;
+    if (error) {
+      console.error('Error fetching lina_news (fallback final_text):', error);
+      throw new Error(error.message);
+    }
+
+    const mapped = (data || []).map(item => ({
+      ...item,
+      macro_categoria: item.macro_tag
+    }));
+
+    return { data: mapped, error: null, count };
   }
-
-  const { data, error, count } = await query;
-
-  if (error) {
-    console.error('Error fetching lina_news:', error);
-    throw new Error(error.message);
-  }
-
-  // Mapear campos para compatibilidade com o feed existente
-  const mapped = (data || []).map(item => ({
-    ...item,
-    // Compatibilidade com UI existente
-    macro_categoria: item.macro_tag
-  }));
-
-  return { data: mapped, error: null, count };
 };
 
 export const fetchLinaNewsPending = async (page = 0, limit = 50) => {
@@ -195,6 +216,25 @@ export const fetchLinaNewsPending = async (page = 0, limit = 50) => {
 
 export const fetchLinaNewsCompleted = async (page = 0, limit = 50) => {
   return fetchLinaNews(page, limit, { completed: true });
+};
+
+/**
+ * Atualiza o campo isPublished na tabela lina_news
+ */
+export const setLinaNewsPublished = async (linaNewsId, isPublished = true) => {
+  const { data, error } = await supabase
+    .from('lina_news')
+    .update({ isPublished })
+    .eq('id', linaNewsId)
+    .select('id, isPublished')
+    .single();
+
+  if (error) {
+    console.error('Erro ao atualizar isPublished em lina_news:', error);
+    throw new Error(error.message);
+  }
+
+  return data;
 };
 
 /**
