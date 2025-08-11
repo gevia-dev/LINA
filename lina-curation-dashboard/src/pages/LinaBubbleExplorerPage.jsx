@@ -275,13 +275,7 @@ const LinaBubbleExplorerPage = () => {
                     {loadingHierarchy ? (
                         <p>Carregando Hierarquia...</p>
                     ) : (
-                        <>
-                     
-                                childrenLength: currentView.children?.length,
-                                children: currentView.children 
-                            })}
-                            <BubbleChart data={currentView.children || []} />
-                        </>
+                        <BubbleChart data={currentView.children || []} />
                     )}
                 </div>
             </div>

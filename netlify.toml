@@ -3,13 +3,8 @@ base = "lina-curation-dashboard"
 command = "pnpm run build"
 publish = "dist"
 
-# Só redireciona a rota /feed e suas subrotas para o index.html
+# SPA fallback global: qualquer rota deve servir index.html
 [[redirects]]
-from = "/feed"
-to = "/index.html"
-status = 200
-
-[[redirects]]
-from = "/feed/*"
+from = "/*"
 to = "/index.html"
 status = 200

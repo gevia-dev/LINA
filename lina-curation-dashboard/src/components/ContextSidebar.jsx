@@ -17,9 +17,9 @@ const ContextSidebar = ({
   // Ref para container de scroll
   const scrollContainerRef = useRef(null);
 
-  // Função para formatar categorias
+  // Função para formatar rótulos exibidos (substitui underline por espaço)
   const formatCategory = (category) => {
-    return category.replace(/_/g, ' ');
+    return String(category).replace(/_/g, ' ');
   };
 
   // Função para fazer parse seguro do JSON (aceita string ou objeto)
@@ -342,7 +342,7 @@ const ContextSidebar = ({
                                 className="mt-3 space-y-3"
                               >
                                 {items.map((item, index) => {
-                                  const title = item?.titulo_frase || 'Sem título';
+                                  const title = formatCategory(item?.titulo_frase || 'Sem título');
                                   const phrase = item?.frase_completa || '';
                                   const tag = item?.categoria_funcional || '';
                                   const itemId = `micro-${parentKey}::${childKey}-${index}`;

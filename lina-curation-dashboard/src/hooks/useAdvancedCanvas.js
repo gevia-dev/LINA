@@ -112,19 +112,31 @@ export const useAdvancedCanvas = (newsData, newsId) => {
             // Criar conexão automática entre conclusão e monitor
           const conclusionNode = canvasState.nodes.find(node => node.id === 'conclusion');
             if (conclusionNode) {
-              const monitorEdge = {
-                id: `edge-conclusion-monitor-default`,
-                source: 'conclusion',
-                target: monitorNode.id,
-                sourceHandle: 'source',
-                targetHandle: 'monitor-input',
-                type: 'default',
-                animated: true,
-                style: {
-                  stroke: 'rgba(255, 255, 255, 0.7)',
-                  strokeWidth: 2,
-                }
-              };
+            // Escolher handle disponível no node de conclusão
+            const sourceHandleId = (() => {
+              const node = canvasState.nodes.find(n => n.id === 'conclusion');
+              if (!node) return null;
+              if (node.type === 'textSegmentNode') return 'source';
+              if (node.type === 'dataNode') {
+                const isStructure = node.data?.isStructureNode || node.data?.coreKey === 'micro_estrutura';
+                return isStructure ? 'estrutura-output' : 'micro-output';
+              }
+              return null;
+            })();
+
+            const monitorEdge = {
+              id: `edge-conclusion-monitor-default`,
+              source: 'conclusion',
+              target: monitorNode.id,
+              ...(sourceHandleId ? { sourceHandle: sourceHandleId } : {}),
+              targetHandle: 'monitor-input',
+              type: 'default',
+              animated: true,
+              style: {
+                stroke: 'rgba(255, 255, 255, 0.7)',
+                strokeWidth: 2,
+              }
+            };
               
               if (!canvasState.edges) {
                 canvasState.edges = [];
@@ -332,11 +344,22 @@ export const useAdvancedCanvas = (newsData, newsId) => {
       // Criar conexão automática entre conclusão e monitor
       const conclusionNode = defaultState.nodes.find(node => node.id === 'conclusion');
       if (conclusionNode) {
+        const sourceHandleId = (() => {
+          const node = defaultState.nodes.find(n => n.id === 'conclusion');
+          if (!node) return null;
+          if (node.type === 'textSegmentNode') return 'source';
+          if (node.type === 'dataNode') {
+            const isStructure = node.data?.isStructureNode || node.data?.coreKey === 'micro_estrutura';
+            return isStructure ? 'estrutura-output' : 'micro-output';
+          }
+          return null;
+        })();
+
         const monitorEdge = {
           id: `edge-conclusion-monitor-default`,
           source: 'conclusion',
           target: monitorNode.id,
-          sourceHandle: 'source',
+          ...(sourceHandleId ? { sourceHandle: sourceHandleId } : {}),
           targetHandle: 'monitor-input',
           type: 'default',
           animated: true,
