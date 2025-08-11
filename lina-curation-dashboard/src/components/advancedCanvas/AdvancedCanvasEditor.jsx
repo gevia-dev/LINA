@@ -361,8 +361,16 @@ const AdvancedCanvasEditor = ({
           type = section;
       }
     } else if (blockId.startsWith('micro-')) {
-      const category = blockId.split('-')[1];
-      title = `Citação - ${category.charAt(0).toUpperCase() + category.slice(1)}`;
+      // Ex.: blockId = "micro-parent::child-3" → usamos apenas o child para exibição
+      const category = blockId.split('-')[1]; // parent::child
+      const [_, childKey] = String(category).split('::');
+      const rawLabel = (childKey || category || '').replace(/_/g, ' ').trim();
+      const formattedLabel = rawLabel
+        ? rawLabel.charAt(0).toUpperCase() + rawLabel.slice(1)
+        : 'Citação';
+      // Exibir apenas o nome amigável da subcategoria
+      title = formattedLabel;
+      // type mantém a referência completa parent::child para o coreKey
       type = `micro_${category}`;
     }
     

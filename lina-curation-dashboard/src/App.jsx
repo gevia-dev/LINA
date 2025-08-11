@@ -3,12 +3,16 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
-import ProtectedRoute from './components/ProtectedRoute';
 import MainSidebar from './components/MainSidebar';
+import ProtectedRoute from './components/ProtectedRoute';
 
 // Páginas
 import Login from './pages/Login';
 import CurationFeed from './pages/CurationFeed';
+import LinaExplorerPage from './components/LinaExplorerPage';
+import LinaBubbleExplorerPage from './pages/LinaBubbleExplorerPage';
+import CurationPageWithCanvas from './components/CurationPageWithCanvas';
+import CurationPage from './components/CurationPage';
 
 // Layout com sidebar
 const LayoutWithSidebar = ({ children }) => (
@@ -34,8 +38,19 @@ function App() {
                 </LayoutWithSidebar>
               </ProtectedRoute>
             } />
+            <Route path="/explorer" element={
+              <LayoutWithSidebar>
+                <LinaExplorerPage />
+              </LayoutWithSidebar>
+            } />
+            <Route path="/bubble-explorer" element={
+              <LayoutWithSidebar>
+                <LinaBubbleExplorerPage />
+              </LayoutWithSidebar>
+            } />
+            <Route path="/news/:id" element={<CurationPage />} />
+            <Route path="/curation/:id" element={<CurationPage />} />
             <Route path="/" element={<Navigate to="/feed" replace />} />
-            <Route path="*" element={<Navigate to="/feed" />} />
           </Routes>
         </main>
       </Router>

@@ -217,11 +217,22 @@ export const convertNewsDataToCanvasState = (newsData, savedCanvasState = null) 
         
         if (!existingConnection) {
           // Criar conexão automática entre conclusão e monitor
+          const sourceHandleId = (() => {
+            const node = updatedNodes.find(n => n.id === 'conclusion');
+            if (!node) return null;
+            if (node.type === 'textSegmentNode') return 'source';
+            if (node.type === 'dataNode') {
+              const isStructure = node.data?.isStructureNode || node.data?.coreKey === 'micro_estrutura';
+              return isStructure ? 'estrutura-output' : 'micro-output';
+            }
+            return null;
+          })();
+
           const monitorEdge = {
             id: `edge-conclusion-monitor-default`,
             source: 'conclusion',
             target: monitorNode.id,
-            sourceHandle: 'source',
+            ...(sourceHandleId ? { sourceHandle: sourceHandleId } : {}),
             targetHandle: 'monitor-input',
             type: 'default',
             animated: true,
@@ -336,16 +347,30 @@ const getBlockDataFromNewsData = (newsData, blockId) => {
       return '';
     };
 
-    const contentMap = {
-      'summary': getContentAsString(coreStructure.Introduce) || 'Clique para selecionar, clique novamente para editar a introdução da notícia...',
-      'body': getContentAsString(coreStructure.corpos_de_analise) || 'Clique para selecionar, clique novamente para editar o corpo da notícia...',
-      'conclusion': getContentAsString(coreStructure.conclusoes) || 'Clique para selecionar, clique novamente para editar a conclusão...'
+    const introduceStr = getContentAsString(coreStructure.Introduce).trim();
+    const bodyStr = getContentAsString(coreStructure.corpos_de_analise).trim();
+    const conclusionStr = getContentAsString(coreStructure.conclusoes).trim();
+
+    const hasAnyCoreContent = Boolean(introduceStr || bodyStr || conclusionStr);
+
+    const loremIntro = 'Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer at arcu euismod, fermentum mi vitae, ultricies nunc. Praesent molestie, urna id pulvinar varius, velit arcu tincidunt elit, a cursus nisl lacus id leo.';
+    const loremBody = 'Lorem ipsum dolor sit amet, consectetur adipiscing elit. Cras in sem sit amet justo gravida dapibus. Sed fermentum, ipsum a interdum volutpat, lectus neque pharetra velit, ut dignissim nisl ipsum non augue. Curabitur eu efficitur lorem. Vivamus dictum, turpis quis porta malesuada, augue ipsum tempor nunc, sed tristique velit justo a sapien.';
+    const loremConclusion = 'Lorem ipsum dolor sit amet, consectetur adipiscing elit. Donec nec nisi sed neque ullamcorper imperdiet. Conclusão provisória para orientar a edição do texto.';
+
+    const contentMap = hasAnyCoreContent ? {
+      'summary': introduceStr || 'Clique para selecionar, clique novamente para editar a introdução da notícia...',
+      'body': bodyStr || 'Clique para selecionar, clique novamente para editar o corpo da notícia...',
+      'conclusion': conclusionStr || 'Clique para selecionar, clique novamente para editar a conclusão...'
+    } : {
+      'summary': loremIntro,
+      'body': loremBody,
+      'conclusion': loremConclusion
     };
 
 
     
     const content = contentMap[blockId] || '';
-    const hasContent = content && 
+    const hasContent = Boolean(content) && 
       !content.includes('Clique para selecionar') && 
       !content.includes('Clique novamente para editar');
 
