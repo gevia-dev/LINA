@@ -163,7 +163,7 @@ export const fetchLinaNews = async (page = 0, limit = 50, { completed = false } 
   try {
     const { data, error, count } = await supabase
       .from('lina_news')
-      .select('id, created_at, title, link, structured_summary, final_text, original_full_content, macro_tag, sub_tag, category, news_id, isPublished', { count: 'exact' })
+      .select('id, created_at, title, link, structured_summary, final_text, original_full_content, macro_tag, sub_tag, category, news_id, isPublished, wellness_data, entities_data', { count: 'exact' })
       .eq('isPublished', completed)
       .order('created_at', { ascending: false })
       .range(from, to);
@@ -185,7 +185,7 @@ export const fetchLinaNews = async (page = 0, limit = 50, { completed = false } 
 
     let query = supabase
       .from('lina_news')
-      .select('id, created_at, title, link, structured_summary, final_text, original_full_content, macro_tag, sub_tag, category, news_id', { count: 'exact' })
+      .select('id, created_at, title, link, structured_summary, final_text, original_full_content, macro_tag, sub_tag, category, news_id, wellness_data, entities_data', { count: 'exact' })
       .order('created_at', { ascending: false })
       .range(from, to);
 

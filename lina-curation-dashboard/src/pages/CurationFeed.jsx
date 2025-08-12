@@ -11,6 +11,44 @@ import { groupNewsByDate } from '../utils/dateHelpers';
 import { useViewMode } from '../hooks/useViewMode';
 import { setLinaNewsPublished } from '../services/contentApi';
 
+// Dados de exemplo para teste
+const sampleWellnessItem = {
+  id: 1,
+  title: "Vacinas de Herpes e VSR Seriam Aliadas Contra Demência Aponta Estudo",
+  link: "https://www1.folha.uol.com.br/equilibrioesaude/2025/08/vacinas-de-herpes-e-vsr-seriam-aliadas-contra-demencia-aponta-estudo.shtml",
+  created_at: "2025-08-11T16:01:00Z",
+  wellness_data: JSON.stringify({
+    wellness_focus: {
+      topline_summary: "A study from Oxford shows that vaccines for VZV and VSR, featuring the AS01 adjuvant, reduce dementia risk by minimizing amyloid plaques in the brain, advancing preventive health measures for longevity.",
+      categoria_wellness: "Longevity Science"
+    },
+    relevance_market_trends: {
+      relevancia_mercado: "This research emphasizes how vaccine adjuvants can extend beyond infection prevention to influence cognitive health and aging.",
+      impacto_futuro: "Such findings may drive more integrated health tech solutions for anti-aging. Future innovations could personalize vaccines for enhanced longevity outcomes."
+    },
+    metadata: {
+      subsetores_impactados: "Longevity Science, Medical Innovation",
+      oportunidades_identificadas: "This opens avenues for investment in adjuvant technologies and vaccine development for brain health. Partnerships in biotechnology could accelerate anti-dementia products"
+    }
+  }),
+  entities_data: JSON.stringify({
+    entidade_principal: {
+      nome: "AS01 Adjuvante"
+    },
+    entidades_complementares: [
+      { nome: "Varicela-Zóster" },
+      { nome: "Universidade de Oxford" },
+      { nome: "NPJ Vaccine" },
+      { nome: "TriNetx" },
+      { nome: "Livia Almeida" }
+    ]
+  }),
+  structured_summary: JSON.stringify({
+    motivo_ou_consequencia: "A pesquisa demonstra que vacinas existentes podem ter benefícios inesperados na prevenção de demência.",
+    resumo_vetorial: "Estudo da Universidade de Oxford revela que vacinas contra herpes e VSR podem reduzir significativamente o risco de demência."
+  })
+};
+
 const CurationFeed = () => {
   const [newsItems, setNewsItems] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -568,7 +606,7 @@ const CurationFeed = () => {
             top: 0,
             right: 0,
             bottom: 0,
-            width: '60%',
+            width: '85%',
             backgroundColor: 'var(--bg-secondary)',
             borderLeft: '1px solid var(--border-primary)',
           zIndex: 1001,
@@ -606,30 +644,53 @@ const CurationFeed = () => {
           >
             Detalhes da Notícia
           </h2>
-          <button
-            onClick={closeSidebar}
-            aria-label="Fechar detalhes da notícia"
-            style={{
-              background: 'none',
-              border: 'none',
-              color: 'var(--text-secondary)',
-              cursor: 'pointer',
-              padding: '8px',
-              borderRadius: '6px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              transition: 'all 0.2s ease'
-            }}
-            onMouseEnter={(e) => {
-              e.target.style.color = 'var(--text-primary)';
-            }}
-            onMouseLeave={(e) => {
-              e.target.style.color = 'var(--text-secondary)';
-            }}
-          >
-            <X size={20} />
-          </button>
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+            {/* Botão de teste para dados de exemplo */}
+            <button
+              onClick={() => {
+                setSelectedNews(sampleWellnessItem);
+                setSidebarVisible(true);
+              }}
+              style={{
+                background: '#2BB24C',
+                border: 'none',
+                color: 'white',
+                padding: '6px 12px',
+                borderRadius: '4px',
+                fontSize: '12px',
+                cursor: 'pointer',
+                fontFamily: 'Inter',
+                fontWeight: '500'
+              }}
+              title="Carregar dados de exemplo para teste"
+            >
+              Teste
+            </button>
+            <button
+              onClick={closeSidebar}
+              aria-label="Fechar detalhes da notícia"
+              style={{
+                background: 'none',
+                border: 'none',
+                color: 'var(--text-secondary)',
+                cursor: 'pointer',
+                padding: '8px',
+                borderRadius: '6px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                transition: 'all 0.2s ease'
+              }}
+              onMouseEnter={(e) => {
+                e.target.style.color = 'var(--text-primary)';
+              }}
+              onMouseLeave={(e) => {
+                e.target.style.color = 'var(--text-secondary)';
+              }}
+            >
+              <X size={20} />
+            </button>
+          </div>
         </div>
 
         {/* Container para conteúdo da sidebar */}

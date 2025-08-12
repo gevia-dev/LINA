@@ -45,8 +45,9 @@ const DetailsSidebar = ({ selectedItem }) => {
     return null;
   }
 
-  const DetailItem = ({ label, children }) => (
-    <div style={{ marginBottom: '16px' }}> {/* Múltiplo de 8px */}
+  // Função para renderizar seções com estilo consistente
+  const DetailSection = ({ label, children, hasBackground = false }) => (
+    <div style={{ marginBottom: '24px' }}>
       <h3 
         style={{ 
           color: '#A0A0A0',
@@ -55,17 +56,24 @@ const DetailsSidebar = ({ selectedItem }) => {
           fontSize: '12px',
           textTransform: 'uppercase',
           letterSpacing: '0.5px',
-          marginBottom: '8px'
+          marginBottom: '12px'
         }}
       >
         {label}
       </h3>
       <div 
         style={{ 
-          color: '#E0E0E0', // Text Primary do style guide
+          color: 'var(--text-primary)',
           fontFamily: 'Inter',
-          fontSize: '14px', // Corpo do Texto do style guide
-          fontWeight: '400' // Regular (400) do style guide
+          fontSize: '14px',
+          fontWeight: '400',
+          lineHeight: '1.8',
+          ...(hasBackground && {
+            backgroundColor: '#2A2A2A',
+            border: '1px solid #333333',
+            borderRadius: '6px',
+            padding: '20px'
+          })
         }}
       >
         {children}
@@ -73,14 +81,16 @@ const DetailsSidebar = ({ selectedItem }) => {
     </div>
   );
 
-  // Função para renderizar entidades em grid de 4 por linha
-  const renderEntities = (entities) => {
-    if (!entities || !Array.isArray(entities) || entities.length === 0) return null;
+  // Função para renderizar entidades como botões/tags
+  const renderWellnessEntities = (entities) => {
+    if (!entities || !Array.isArray(entities) || entities.length === 0) {
+      return <div style={{ color: '#A0A0A0', fontStyle: 'italic' }}>Nenhuma entidade disponível</div>;
+    }
     
     return (
       <div style={{
         display: 'grid',
-        gridTemplateColumns: 'repeat(4, 1fr)',
+        gridTemplateColumns: 'repeat(3, 1fr)',
         gap: '8px'
       }}>
         {entities.map((entidade, index) => (
@@ -96,11 +106,21 @@ const DetailsSidebar = ({ selectedItem }) => {
               fontFamily: 'Inter',
               fontWeight: '500',
               textAlign: 'center',
+              cursor: 'pointer',
+              transition: 'all 0.2s ease',
               overflow: 'hidden',
               textOverflow: 'ellipsis',
               whiteSpace: 'nowrap'
             }}
             title={entidade.trim()}
+            onMouseEnter={(e) => {
+              e.target.style.backgroundColor = '#333333';
+              e.target.style.transform = 'translateY(-2px)';
+            }}
+            onMouseLeave={(e) => {
+              e.target.style.backgroundColor = '#2A2A2A';
+              e.target.style.transform = 'translateY(0)';
+            }}
           >
             {entidade.trim()}
           </div>
@@ -109,7 +129,27 @@ const DetailsSidebar = ({ selectedItem }) => {
     );
   };
 
-  // Extrair dados do structured_summary
+  // Extrair dados do wellness_data
+  const getWellnessData = () => {
+    try {
+      return selectedItem.wellness_data ? JSON.parse(selectedItem.wellness_data) : null;
+    } catch (error) {
+      console.error('Erro ao fazer parse do wellness_data:', error);
+      return null;
+    }
+  };
+
+  // Extrair dados do entities_data
+  const getEntitiesData = () => {
+    try {
+      return selectedItem.entities_data ? JSON.parse(selectedItem.entities_data) : null;
+    } catch (error) {
+      console.error('Erro ao fazer parse do entities_data:', error);
+      return null;
+    }
+  };
+
+  // Extrair dados do structured_summary (mantido para compatibilidade)
   const getStructuredData = () => {
     try {
       return selectedItem.structured_summary ? JSON.parse(selectedItem.structured_summary) : null;
@@ -119,14 +159,37 @@ const DetailsSidebar = ({ selectedItem }) => {
     }
   };
 
+  const wellnessData = getWellnessData();
+  const entitiesData = getEntitiesData();
   const structuredData = getStructuredData();
+
+  // Preparar lista de entidades combinando principal e complementares
+  const getAllEntityNames = () => {
+    const names = [];
+    
+    if (entitiesData?.entidade_principal?.nome) {
+      names.push(entitiesData.entidade_principal.nome);
+    }
+    
+    if (entitiesData?.entidades_complementares && Array.isArray(entitiesData.entidades_complementares)) {
+      entitiesData.entidades_complementares.forEach(ent => {
+        if (ent.nome) names.push(ent.nome);
+      });
+    }
+    
+    return names;
+  };
+
+  const entityNames = getAllEntityNames();
 
   return (
     <div style={{ 
       display: 'flex', 
       flexDirection: 'column', 
       height: '100%',
-      position: 'relative'
+      position: 'relative',
+      backgroundColor: 'var(--bg-secondary)',
+      color: 'var(--text-primary)'
     }}>
       {/* Conteúdo principal */}
       <div style={{ 
@@ -135,104 +198,143 @@ const DetailsSidebar = ({ selectedItem }) => {
         overflowY: 'auto'
       }}>
         
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
           
-          {/* 1. Link para notícia original - sem card/background */}
-          {selectedItem.link && (
-            <DetailItem label="Fonte">
-              <a 
-                href={selectedItem.link}
-                target="_blank"
-                rel="noopener noreferrer"
-                style={{
-                  color: '#2BB24C',
-                  textDecoration: 'none',
-                  fontSize: '13px',
-                  fontFamily: 'Inter',
-                  fontWeight: '400',
-                  lineHeight: '1.4',
-                  display: 'block',
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  whiteSpace: 'nowrap'
-                }}
-                title={selectedItem.link}
-              >
-                {selectedItem.link}
-              </a>
-            </DetailItem>
-          )}
-          
-          {/* 2. Título da notícia - sem card/background */}
-          <DetailItem label="Título">
-            <div style={{
-              color: '#E0E0E0',
-              fontSize: '13px',
-              fontFamily: 'Inter',
-              fontWeight: '400',
-              lineHeight: '1.4',
-              display: 'block',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap'
-            }}>
-              {selectedItem.title || 'Sem título'}
+          {/* TOP SECTION - Topline Summary (ESQUERDA) e Título/Link (DIREITA) */}
+          <div style={{ 
+            display: 'grid', 
+            gridTemplateColumns: '1fr 1fr', 
+            gap: '24px',
+            alignItems: 'start'
+          }}>
+            
+            {/* ESQUERDA - Topline Summary */}
+            <div>
+              {wellnessData?.wellness_focus?.topline_summary && (
+                <DetailSection label="topline_summary" hasBackground={true}>
+                  {wellnessData.wellness_focus.topline_summary}
+                </DetailSection>
+              )}
             </div>
-            {selectedItem.created_at && (
-              <div style={{
-                fontFamily: 'Monaco, Menlo, Consolas, monospace',
-                fontSize: '11px',
-                color: '#A0A0A0',
-                marginTop: '4px'
-              }}>
-                {new Date(selectedItem.created_at).toLocaleDateString('pt-BR', {
-                  day: '2-digit',
-                  month: '2-digit',
-                  year: 'numeric',
-                  hour: '2-digit',
-                  minute: '2-digit'
-                })}
-              </div>
-            )}
-          </DetailItem>
-          
-          {/* 3. Motivo ou consequência */}
-          {structuredData?.motivo_ou_consequencia && (
-            <DetailItem label="Motivo / Consequência">
-              <div style={{
-                backgroundColor: '#2A2A2A',
-                border: '1px solid #333333',
-                borderRadius: '6px',
-                padding: '12px',
-                lineHeight: '1.6'
-              }}>
-                {structuredData.motivo_ou_consequencia}
-              </div>
-            </DetailItem>
-          )}
-          
-          {/* 4. Entidades - 4 cards por linha, mesma cor dos outros */}
-          {structuredData?.quem && (
-            <DetailItem label="Entidades">
-              {renderEntities(structuredData.quem)}
-            </DetailItem>
-          )}
-          
-          {/* 5. Resumo */}
-          {structuredData?.resumo_vetorial && (
-            <DetailItem label="Resumo">
-              <div style={{
-                backgroundColor: '#2A2A2A',
-                border: '1px solid #333333',
-                borderRadius: '6px',
-                padding: '12px',
-                lineHeight: '1.6'
-              }}>
-                {structuredData.resumo_vetorial}
-              </div>
-            </DetailItem>
-          )}
-          
+            
+            {/* DIREITA - Título e Link */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              
+              {/* Título */}
+              <DetailSection label="Titulo">
+                {selectedItem.title || 'Sem título disponível'}
+              </DetailSection>
+              
+              {/* Link */}
+              {selectedItem.link && (
+                <DetailSection label="Link">
+                  <a 
+                    href={selectedItem.link}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{
+                      color: '#2BB24C',
+                      textDecoration: 'none',
+                      fontSize: '14px',
+                      fontFamily: 'Inter',
+                      fontWeight: '400',
+                      lineHeight: '1.4',
+                      display: 'block',
+                      wordBreak: 'break-all'
+                    }}
+                    title={selectedItem.link}
+                  >
+                    {selectedItem.link}
+                  </a>
+                </DetailSection>
+              )}
+            </div>
+          </div>
+
+          {/* MIDDLE SECTION (2 colunas lado a lado - SEM BACKGROUND) */}
+          <div style={{ 
+            display: 'grid', 
+            gridTemplateColumns: '1fr 1fr', 
+            gap: '24px'
+          }}>
+            
+            {/* ESQUERDA - Categoria Wellness (sem background) */}
+            <div>
+              {wellnessData?.wellness_focus?.categoria_wellness && (
+                <DetailSection label="categoria_wellness" hasBackground={false}>
+                  {wellnessData.wellness_focus.categoria_wellness}
+                </DetailSection>
+              )}
+            </div>
+            
+            {/* DIREITA - Subsetores Impactados (sem background) */}
+            <div>
+              {wellnessData?.metadata?.subsetores_impactados && (
+                <DetailSection label="subsetores_impactados" hasBackground={false}>
+                  {wellnessData.metadata.subsetores_impactados}
+                </DetailSection>
+              )}
+            </div>
+          </div>
+
+          {/* BOTTOM SECTIONS - Relevância de Mercado e Entities Data (grid 2x2) */}
+          <div style={{ 
+            display: 'grid', 
+            gridTemplateColumns: '1fr 1fr', 
+            gap: '24px'
+          }}>
+            
+            {/* ESQUERDA - Relevância de Mercado */}
+            <div>
+              {wellnessData?.relevance_market_trends?.relevancia_mercado && (
+                <DetailSection label="relevancia_mercado" hasBackground={true}>
+                  {wellnessData.relevance_market_trends.relevancia_mercado}
+                </DetailSection>
+              )}
+            </div>
+            
+            {/* DIREITA - Entities Data (ocupa metade do espaço) */}
+            <div>
+              <DetailSection label="entities_data">
+                {renderWellnessEntities(entityNames)}
+              </DetailSection>
+            </div>
+          </div>
+
+          {/* BOTTOM SECTIONS - Impacto Futuro, Oportunidades e Motivo/Consequência */}
+          <div style={{ 
+            display: 'grid', 
+            gridTemplateColumns: '1fr 1fr 1fr', 
+            gap: '24px'
+          }}>
+            
+            {/* ESQUERDA - Impacto Futuro */}
+            <div>
+              {wellnessData?.relevance_market_trends?.impacto_futuro && (
+                <DetailSection label="Impacto_futuro" hasBackground={true}>
+                  {wellnessData.relevance_market_trends.impacto_futuro}
+                </DetailSection>
+              )}
+            </div>
+            
+            {/* MEIO - Oportunidades Identificadas */}
+            <div>
+              {wellnessData?.metadata?.oportunidades_identificadas && (
+                <DetailSection label="Oportunidades_identificadas" hasBackground={true}>
+                  {wellnessData.metadata.oportunidades_identificadas}
+                </DetailSection>
+              )}
+            </div>
+            
+            {/* DIREITA - Motivo / Consequência */}
+            <div>
+              {structuredData?.motivo_ou_consequencia && (
+                <DetailSection label="Motivo / Consequência" hasBackground={true}>
+                  {structuredData.motivo_ou_consequencia}
+                </DetailSection>
+              )}
+            </div>
+          </div>
 
         </div>
       </div>
@@ -287,46 +389,46 @@ const DetailsSidebar = ({ selectedItem }) => {
             Ler
           </button>
 
-                     {/* Botão Criar */}
-           <button
-             onClick={handleCreateNews}
-             disabled={isLoading}
-             style={{
-               flex: 1,
-               padding: '14px 20px',
-               backgroundColor: isLoading ? '#666666' : '#2A2A2A',
-               color: '#E0E0E0',
-               border: isLoading ? '1px solid #666666' : '1px solid var(--primary-green-transparent)',
-               borderRadius: '8px',
-               fontFamily: 'Inter',
-               fontSize: '14px',
-               fontWeight: '500',
-               cursor: isLoading ? 'not-allowed' : 'pointer',
-               display: 'flex',
-               alignItems: 'center',
-               justifyContent: 'center',
-               gap: '8px',
-               transition: 'all 0.2s ease',
-               opacity: isLoading ? 0.7 : 1
-             }}
-             onMouseEnter={(e) => {
-               if (!isLoading) {
-                 e.target.style.backgroundColor = '#333333';
-                 e.target.style.borderColor = 'var(--primary-green)';
-                 e.target.style.transform = 'translateY(-1px)';
-               }
-             }}
-             onMouseLeave={(e) => {
-               if (!isLoading) {
-                 e.target.style.backgroundColor = '#2A2A2A';
-                 e.target.style.borderColor = 'var(--primary-green-transparent)';
-                 e.target.style.transform = 'translateY(0)';
-               }
-             }}
-           >
-                           <Sparkles size={16} />
-              {isLoading ? 'Buscando...' : 'Criar'}
-           </button>
+          {/* Botão Criar */}
+          <button
+            onClick={handleCreateNews}
+            disabled={isLoading}
+            style={{
+              flex: 1,
+              padding: '14px 20px',
+              backgroundColor: isLoading ? '#666666' : '#2A2A2A',
+              color: '#E0E0E0',
+              border: isLoading ? '1px solid #666666' : '1px solid var(--primary-green-transparent)',
+              borderRadius: '8px',
+              fontFamily: 'Inter',
+              fontSize: '14px',
+              fontWeight: '500',
+              cursor: isLoading ? 'not-allowed' : 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '8px',
+              transition: 'all 0.2s ease',
+              opacity: isLoading ? 0.7 : 1
+            }}
+            onMouseEnter={(e) => {
+              if (!isLoading) {
+                e.target.style.backgroundColor = '#333333';
+                e.target.style.borderColor = 'var(--primary-green)';
+                e.target.style.transform = 'translateY(-1px)';
+              }
+            }}
+            onMouseLeave={(e) => {
+              if (!isLoading) {
+                e.target.style.backgroundColor = '#2A2A2A';
+                e.target.style.borderColor = 'var(--primary-green-transparent)';
+                e.target.style.transform = 'translateY(0)';
+              }
+            }}
+          >
+            <Sparkles size={16} />
+            {isLoading ? 'Buscando...' : 'Criar'}
+          </button>
         </div>
       </div>
     </div>
