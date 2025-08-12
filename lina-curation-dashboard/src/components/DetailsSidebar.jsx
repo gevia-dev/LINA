@@ -53,8 +53,7 @@ const DetailsSidebar = ({ selectedItem }) => {
           color: '#A0A0A0',
           fontFamily: 'Inter',
           fontWeight: '500',
-          fontSize: '12px',
-          textTransform: 'uppercase',
+          fontSize: '14px',
           letterSpacing: '0.5px',
           marginBottom: '12px'
         }}
@@ -211,7 +210,7 @@ const DetailsSidebar = ({ selectedItem }) => {
             {/* ESQUERDA - Topline Summary */}
             <div>
               {wellnessData?.wellness_focus?.topline_summary && (
-                <DetailSection label="topline_summary" hasBackground={true}>
+                <DetailSection label="O que aconteceu?" hasBackground={true}>
                   {wellnessData.wellness_focus.topline_summary}
                 </DetailSection>
               )}
@@ -258,20 +257,34 @@ const DetailsSidebar = ({ selectedItem }) => {
             gap: '24px'
           }}>
             
-            {/* ESQUERDA - Categoria Wellness (sem background) */}
+            {/* ESQUERDA - Tipo da noticia (provido por entities_data) */}
             <div>
-              {wellnessData?.wellness_focus?.categoria_wellness && (
-                <DetailSection label="categoria_wellness" hasBackground={false}>
-                  {wellnessData.wellness_focus.categoria_wellness}
+              {(entitiesData?.analise_entidades?.resumo_analise?.tipo_noticia || entitiesData?.resumo_analise?.tipo_noticia) && (
+                <DetailSection label="Tipo da noticia" hasBackground={false}>
+                  <div style={{ 
+                    fontSize: '18px', 
+                    fontWeight: '600',
+                    color: 'var(--text-primary)',
+                    lineHeight: '1.4'
+                  }}>
+                    {entitiesData?.analise_entidades?.resumo_analise?.tipo_noticia || entitiesData?.resumo_analise?.tipo_noticia}
+                  </div>
                 </DetailSection>
               )}
             </div>
             
-            {/* DIREITA - Subsetores Impactados (sem background) */}
+            {/* DIREITA - Setores impactados (sem background, fonte maior) */}
             <div>
               {wellnessData?.metadata?.subsetores_impactados && (
-                <DetailSection label="subsetores_impactados" hasBackground={false}>
-                  {wellnessData.metadata.subsetores_impactados}
+                <DetailSection label="Setores impactados" hasBackground={false}>
+                  <div style={{ 
+                    fontSize: '18px', 
+                    fontWeight: '600',
+                    color: 'var(--text-primary)',
+                    lineHeight: '1.4'
+                  }}>
+                    {wellnessData.metadata.subsetores_impactados}
+                  </div>
                 </DetailSection>
               )}
             </div>
@@ -287,7 +300,7 @@ const DetailsSidebar = ({ selectedItem }) => {
             {/* ESQUERDA - Relevância de Mercado */}
             <div>
               {wellnessData?.relevance_market_trends?.relevancia_mercado && (
-                <DetailSection label="relevancia_mercado" hasBackground={true}>
+                <DetailSection label="Por que isso importa?" hasBackground={true}>
                   {wellnessData.relevance_market_trends.relevancia_mercado}
                 </DetailSection>
               )}
@@ -295,7 +308,7 @@ const DetailsSidebar = ({ selectedItem }) => {
             
             {/* DIREITA - Entities Data (ocupa metade do espaço) */}
             <div>
-              <DetailSection label="entities_data">
+              <DetailSection label="Entidades identificadas">
                 {renderWellnessEntities(entityNames)}
               </DetailSection>
             </div>
@@ -308,11 +321,11 @@ const DetailsSidebar = ({ selectedItem }) => {
             gap: '24px'
           }}>
             
-            {/* ESQUERDA - Impacto Futuro */}
+            {/* ESQUERDA - Motivo / Consequência */}
             <div>
-              {wellnessData?.relevance_market_trends?.impacto_futuro && (
-                <DetailSection label="Impacto_futuro" hasBackground={true}>
-                  {wellnessData.relevance_market_trends.impacto_futuro}
+              {structuredData?.motivo_ou_consequencia && (
+                <DetailSection label="Motivo / Consequência" hasBackground={true}>
+                  {structuredData.motivo_ou_consequencia}
                 </DetailSection>
               )}
             </div>
@@ -320,17 +333,17 @@ const DetailsSidebar = ({ selectedItem }) => {
             {/* MEIO - Oportunidades Identificadas */}
             <div>
               {wellnessData?.metadata?.oportunidades_identificadas && (
-                <DetailSection label="Oportunidades_identificadas" hasBackground={true}>
+                <DetailSection label="Possiveis oportunidades" hasBackground={true}>
                   {wellnessData.metadata.oportunidades_identificadas}
                 </DetailSection>
               )}
             </div>
             
-            {/* DIREITA - Motivo / Consequência */}
+            {/* DIREITA - Impacto Futuro */}
             <div>
-              {structuredData?.motivo_ou_consequencia && (
-                <DetailSection label="Motivo / Consequência" hasBackground={true}>
-                  {structuredData.motivo_ou_consequencia}
+              {wellnessData?.relevance_market_trends?.impacto_futuro && (
+                <DetailSection label="Impacto futuro" hasBackground={true}>
+                  {wellnessData.relevance_market_trends.impacto_futuro}
                 </DetailSection>
               )}
             </div>
