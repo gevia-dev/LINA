@@ -2,10 +2,23 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Sparkles } from 'lucide-react';
 import { fetchLinaNewsByNewsId } from '../services/contentApi';
+import EntitiesModal from './EntitiesModal';
+import CoreQuotesModal from './CoreQuotesModal';
 
 const DetailsSidebar = ({ selectedItem }) => {
   const navigate = useNavigate();
   const [isLoading, setIsLoading] = useState(false);
+  const [isEntitiesModalOpen, setIsEntitiesModalOpen] = useState(false);
+  const [entitiesModalIndex, setEntitiesModalIndex] = useState(0);
+  const [isQuotesModalOpen, setIsQuotesModalOpen] = useState(false);
+  const [quotesForSection, setQuotesForSection] = useState([]);
+  const [quotesModalTitle, setQuotesModalTitle] = useState('Citações');
+
+  // Garantir que o modal de entidades não permaneça aberto ao trocar de notícia
+  React.useEffect(() => {
+    setIsEntitiesModalOpen(false);
+    setEntitiesModalIndex(0);
+  }, [selectedItem?.id]);
 
   const handleCreateNews = async () => {
     if (!selectedItem?.id) return;
@@ -81,7 +94,7 @@ const DetailsSidebar = ({ selectedItem }) => {
   );
 
   // Função para renderizar entidades como botões/tags
-  const renderWellnessEntities = (entities) => {
+  const renderWellnessEntities = (entities, onEntityClick) => {
     if (!entities || !Array.isArray(entities) || entities.length === 0) {
       return <div style={{ color: '#A0A0A0', fontStyle: 'italic' }}>Nenhuma entidade disponível</div>;
     }
@@ -90,36 +103,39 @@ const DetailsSidebar = ({ selectedItem }) => {
       <div style={{
         display: 'grid',
         gridTemplateColumns: 'repeat(3, 1fr)',
-        gap: '8px'
+        gap: '12px'
       }}>
         {entities.map((entidade, index) => (
           <div 
             key={index}
             style={{
-              padding: '6px 8px',
+              padding: '10px 12px',
               backgroundColor: '#2A2A2A',
-              border: '1px solid #333333',
-              borderRadius: '6px',
-              fontSize: '11px',
+              border: '1px solid #444444',
+              borderRadius: '10px',
+              fontSize: '13px',
               color: '#E0E0E0',
               fontFamily: 'Inter',
-              fontWeight: '500',
+              fontWeight: 600,
               textAlign: 'center',
               cursor: 'pointer',
-              transition: 'all 0.2s ease',
+              transition: 'all 0.18s ease',
               overflow: 'hidden',
               textOverflow: 'ellipsis',
               whiteSpace: 'nowrap'
             }}
             title={entidade.trim()}
             onMouseEnter={(e) => {
-              e.target.style.backgroundColor = '#333333';
-              e.target.style.transform = 'translateY(-2px)';
+              e.target.style.backgroundColor = '#3A3A3A';
+              e.target.style.borderColor = '#666666';
+              e.target.style.transform = 'translateY(-2px) scale(1.03)';
             }}
             onMouseLeave={(e) => {
               e.target.style.backgroundColor = '#2A2A2A';
-              e.target.style.transform = 'translateY(0)';
+              e.target.style.borderColor = '#444444';
+              e.target.style.transform = 'translateY(0) scale(1)';
             }}
+            onClick={() => onEntityClick && onEntityClick(index)}
           >
             {entidade.trim()}
           </div>
@@ -158,9 +174,20 @@ const DetailsSidebar = ({ selectedItem }) => {
     }
   };
 
+  // Extrair core_quotes
+  const getCoreQuotes = () => {
+    try {
+      return selectedItem.core_quotes ? JSON.parse(selectedItem.core_quotes) : null;
+    } catch (error) {
+      console.error('Erro ao fazer parse do core_quotes:', error);
+      return null;
+    }
+  };
+
   const wellnessData = getWellnessData();
   const entitiesData = getEntitiesData();
   const structuredData = getStructuredData();
+  const coreQuotes = getCoreQuotes();
 
   // Preparar lista de entidades combinando principal e complementares
   const getAllEntityNames = () => {
@@ -179,7 +206,36 @@ const DetailsSidebar = ({ selectedItem }) => {
     return names;
   };
 
+  const buildEntitiesList = () => {
+    const list = [];
+    if (entitiesData?.entidade_principal) {
+      list.push({
+        type: 'principal',
+        name: entitiesData.entidade_principal.nome || 'Entidade principal',
+        o_que_e: entitiesData.entidade_principal.o_que_e || '',
+        relevancia_noticia: entitiesData.entidade_principal.relevancia_noticia || '',
+        contexto_essencial: entitiesData.entidade_principal.contexto_essencial || '',
+      });
+    }
+    if (Array.isArray(entitiesData?.entidades_complementares)) {
+      entitiesData.entidades_complementares.forEach((e) => {
+        list.push({
+          type: 'complementar',
+          name: e.nome || 'Entidade',
+          o_que_e: e.o_que_e || '',
+          papel_noticia: e.papel_noticia || '',
+        });
+      });
+    }
+    return list;
+  };
+
   const entityNames = getAllEntityNames();
+
+  const openEntitiesModalAt = (index) => {
+    setEntitiesModalIndex(index);
+    setIsEntitiesModalOpen(true);
+  };
 
   return (
     <div style={{ 
@@ -211,7 +267,26 @@ const DetailsSidebar = ({ selectedItem }) => {
             <div>
               {wellnessData?.wellness_focus?.topline_summary && (
                 <DetailSection label="O que aconteceu?" hasBackground={true}>
-                  {wellnessData.wellness_focus.topline_summary}
+                  <div
+                    onClick={() => {
+                      // filtrar core_quotes categoria funcional: Fato_Central
+                      try {
+                        const bucket = coreQuotes?.search_quotes || {};
+                        const allLists = Object.values(bucket).flat();
+                        const filtered = allLists.filter((item) => item?.categoria_funcional === 'Fato_Central');
+                        setQuotesForSection(filtered || []);
+                        setQuotesModalTitle('O que aconteceu? • Fato Central');
+                        setIsQuotesModalOpen(true);
+                      } catch (e) {
+                        setQuotesForSection([]);
+                        setIsQuotesModalOpen(true);
+                      }
+                    }}
+                    style={{ cursor: 'pointer' }}
+                    title="Clique para ver exemplos de citações deste bloco"
+                  >
+                    {wellnessData.wellness_focus.topline_summary}
+                  </div>
                 </DetailSection>
               )}
             </div>
@@ -309,7 +384,7 @@ const DetailsSidebar = ({ selectedItem }) => {
             {/* DIREITA - Entities Data (ocupa metade do espaço) */}
             <div>
               <DetailSection label="Entidades identificadas">
-                {renderWellnessEntities(entityNames)}
+                {renderWellnessEntities(entityNames, openEntitiesModalAt)}
               </DetailSection>
             </div>
           </div>
@@ -330,7 +405,7 @@ const DetailsSidebar = ({ selectedItem }) => {
               )}
             </div>
             
-            {/* MEIO - Oportunidades Identificadas */}
+            {/* MEIO - Possiveis oportunidades */}
             <div>
               {wellnessData?.metadata?.oportunidades_identificadas && (
                 <DetailSection label="Possiveis oportunidades" hasBackground={true}>
@@ -444,6 +519,21 @@ const DetailsSidebar = ({ selectedItem }) => {
           </button>
         </div>
       </div>
+
+      {/* Modal de Entidades */}
+      <EntitiesModal
+        isOpen={isEntitiesModalOpen}
+        onClose={() => setIsEntitiesModalOpen(false)}
+        entitiesList={buildEntitiesList()}
+        initialIndex={entitiesModalIndex}
+      />
+
+      <CoreQuotesModal
+        isOpen={isQuotesModalOpen}
+        onClose={() => setIsQuotesModalOpen(false)}
+        quotes={quotesForSection}
+        title={quotesModalTitle}
+      />
     </div>
   );
 };
