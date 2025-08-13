@@ -3,7 +3,7 @@ base = "lina-curation-dashboard"
 command = "pnpm run build"
 publish = "dist"
 
-# SPA fallback global: qualquer rota deve servir index.html
+# SPA fallback: redireciona quaisquer rotas do app para o index.html
 [[redirects]]
 from = "/*"
 to = "/index.html"

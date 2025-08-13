@@ -13,10 +13,12 @@ import {
   ChevronRight,
   Maximize2,
   Minimize2,
-  Layers
+  Layers,
+  Eye
 } from 'lucide-react';
 import ContextSidebar from '../ContextSidebar';
 import DefaultNodesLibrary from './DefaultNodesLibrary';
+import CanvasLibraryView from './CanvasLibraryView';
 
 /**
  * ContextLibrary - Versão modal/drawer do ContextSidebar
@@ -61,8 +63,8 @@ const ContextLibrary = ({
   };
 
   const toggleExpanded = () => setIsExpanded((v) => !v);
-  const modalWidth = isExpanded ? 'w-full' : 'w-1/2';
-  const modalMaxWidth = isExpanded ? 'max-w-none' : 'max-w-2xl';
+  // Largura padrão minimizada ~75vw
+  const modalWidthStyle = isExpanded ? '100vw' : '75vw';
 
   return (
     <AnimatePresence mode="wait">
@@ -70,8 +72,8 @@ const ContextLibrary = ({
         <motion.div className="fixed inset-0 z-50 flex items-center justify-end" variants={overlayVariants} initial="hidden" animate="visible" exit="hidden">
           <motion.div className="absolute inset-0 bg-black bg-opacity-50 backdrop-blur-sm" onClick={onClose} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} />
           <motion.div
-            className={`relative ${modalWidth} ${modalMaxWidth} h-full flex flex-col`}
-            style={{ backgroundColor: 'var(--bg-primary)', borderLeft: '1px solid var(--border-primary)' }}
+            className={`relative h-full flex flex-col`}
+            style={{ width: modalWidthStyle, maxWidth: 'none', backgroundColor: 'var(--bg-primary)', borderLeft: '1px solid var(--border-primary)' }}
             variants={modalVariants}
             initial="hidden"
             animate="visible"
@@ -102,7 +104,8 @@ const ContextLibrary = ({
               <div className="flex gap-2 mb-4">
                 {[
                   { id: 'context', label: 'Contexto', icon: FileText },
-                  { id: 'nodes', label: 'Nodes Padrão', icon: Layers }
+                  { id: 'nodes', label: 'Nodes Padrão', icon: Layers },
+                  { id: 'canvas', label: 'Canvas', icon: Eye }
                 ].map(({ id, label, icon: Icon }) => (
                   <motion.button
                     key={id}
@@ -186,17 +189,26 @@ const ContextLibrary = ({
                     <DefaultNodesLibrary onAddNode={onAddNode} />
                   </motion.div>
                 )}
+                {activeTab === 'canvas' && (
+                  <motion.div key="canvas" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} transition={{ duration: 0.3 }} className="h-full">
+                    <CanvasLibraryView
+                      newsData={newsData}
+                      onTransferItem={onTransferItem}
+                      onOpenCardModal={onOpenCardModal}
+                    />
+                  </motion.div>
+                )}
               </AnimatePresence>
             </motion.div>
 
             <motion.div className="p-4 border-t" style={{ backgroundColor: 'var(--bg-secondary)', borderColor: 'var(--border-primary)' }} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4 }}>
               <div className="flex items-center justify-between text-sm">
                 <span style={{ color: 'var(--text-secondary)' }}>
-                  {activeTab === 'context' ? (
-                    <>Use os botões <ArrowRight size={14} className="inline mx-1" /> para transferir conteúdo</>
-                  ) : (
-                    <>Clique nos nodes para adicioná-los ao canvas</>
-                  )}
+                  {activeTab === 'context' && (<>
+                    Use os botões <ArrowRight size={14} className="inline mx-1" /> para transferir conteúdo
+                  </>)}
+                  {activeTab === 'nodes' && (<>Clique nos nodes para adicioná-los ao canvas</>)}
+                  {activeTab === 'canvas' && (<>Visualização hierárquica em canvas (transferência via botão em cada item)</>)}
                 </span>
                 <span style={{ color: 'var(--text-secondary)' }}>ESC para fechar</span>
               </div>

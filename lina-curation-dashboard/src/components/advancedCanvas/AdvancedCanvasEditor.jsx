@@ -8,7 +8,7 @@ import {
   ConnectionLineType
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { CheckSquare, Maximize2, RotateCcw, Library } from 'lucide-react';
+import { CheckSquare, Maximize2, RotateCcw, Library, FileText } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 // Importar componentes customizados
@@ -17,6 +17,7 @@ import DataNode from './nodes/DataNode';
 import MonitorNode from './nodes/MonitorNode';
 import ContextLibrary from './ContextLibrary';
 import CardModal from './modals/CardModal';
+import NotionLikePage from './NotionLikePage';
 import { useAdvancedCanvas } from '../../hooks/useAdvancedCanvas';
 
 // Tipos de nodes customizados
@@ -49,6 +50,7 @@ const AdvancedCanvasEditor = ({
   const [showControls, setShowControls] = useState(true);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isLibraryOpen, setIsLibraryOpen] = useState(false);
+  const [isNotionPageOpen, setIsNotionPageOpen] = useState(false);
   const [isNodeModalOpen, setIsNodeModalOpen] = useState(false);
   const [nodeModalData, setNodeModalData] = useState(null);
   const [canvasStats, setCanvasStats] = useState({
@@ -335,6 +337,14 @@ const AdvancedCanvasEditor = ({
     setIsLibraryOpen(false);
   }, []);
 
+  const openNotionPage = useCallback(() => {
+    setIsNotionPageOpen(true);
+  }, []);
+
+  const closeNotionPage = useCallback(() => {
+    setIsNotionPageOpen(false);
+  }, []);
+
   // Função para lidar com transferência de item da biblioteca (lógica aditiva)
   const handleTransferFromLibrary = useCallback((blockId, content) => {
     // Extrair informações do blockId para determinar o tipo e título
@@ -406,6 +416,10 @@ const AdvancedCanvasEditor = ({
             e.preventDefault();
             openLibrary();
             break;
+          case 'n':
+            e.preventDefault();
+            openNotionPage();
+            break;
         }
       }
 
@@ -418,7 +432,7 @@ const AdvancedCanvasEditor = ({
 
     document.addEventListener('keydown', handleKeyDownLocal);
     return () => document.removeEventListener('keydown', handleKeyDownLocal);
-  }, [handleFitView, toggleFullscreen, openLibrary, handleKeyDown]);
+  }, [handleFitView, toggleFullscreen, openLibrary, openNotionPage, handleKeyDown]);
 
   return (
     <div 
@@ -930,26 +944,28 @@ const AdvancedCanvasEditor = ({
             >
               {/* Controles essenciais */}
               <div className="flex flex-col gap-1">
-                {[
+                {[ 
+                  { action: openNotionPage, icon: FileText, label: 'Editor Estruturado (Ctrl/Cmd + N)', primary: true, special: true },
                   { action: openLibrary, icon: Library, label: 'Biblioteca de Contexto (Ctrl/Cmd + B)', primary: true },
                   { action: handleFitView, icon: RotateCcw, label: 'Fit View (Ctrl/Cmd + 0)' },
                   { action: toggleFullscreen, icon: Maximize2, label: 'Fullscreen (Ctrl/Cmd + F)' }
-                ].map(({ action, icon: Icon, label, primary }, index) => (
+                ].map(({ action, icon: Icon, label, primary, special }, index) => (
                   <motion.button
                     key={label}
                     onClick={action}
                     className="p-2 rounded flex items-center justify-center transition-all duration-200"
                     style={{
                       backgroundColor: primary 
-                        ? 'var(--primary-green-transparent)' 
+                        ? (special ? 'var(--primary-green)' : 'var(--primary-green-transparent)')
                         : 'var(--bg-secondary)',
                       border: `1px solid ${primary 
                         ? 'var(--primary-green)' 
                         : 'var(--border-primary)'}`,
                       color: primary 
-                        ? 'var(--primary-green)' 
+                        ? (special ? 'white' : 'var(--primary-green)')
                         : 'var(--text-secondary)',
-                      cursor: 'pointer'
+                      cursor: 'pointer',
+                      boxShadow: special ? '0 0 10px rgba(43, 178, 76, 0.3)' : 'none'
                     }}
                     whileTap={{ scale: 0.95 }}
                     title={label}
@@ -1011,6 +1027,16 @@ const AdvancedCanvasEditor = ({
         currentCardIndex={nodeModalData?.currentIndex || 0}
         onNavigate={handleNavigateCard}
         microData={nodeModalData?.microData || []}
+      />
+
+      {/* Editor Estruturado estilo Notion */}
+      <NotionLikePage
+        isOpen={isNotionPageOpen}
+        onClose={closeNotionPage}
+        newsData={newsData}
+        newsTitle={newsTitle}
+        nodes={nodes}
+        onSaveNode={(nodeId, newContent) => updateNodeContent(nodeId, { content: newContent })}
       />
     </div>
   );

@@ -106,26 +106,28 @@ const TextSegmentNode = ({ data, selected }) => {
         <div className="text-xs text-gray-500">Clique duplo para editar</div>
       </div>
 
-      {/* Handles padrão e especializados para nodes de texto */}
+      {/* Handles reposicionados: categoria no canto superior esquerdo */}
       <>
-        <Handle
-          type="target"
-          position={Position.Top}
-          id="dados"
-          style={{ left: '15%', width: 8, height: 8 }}
-          className="connection-handle connection-handle-dados"
-          isConnectable={true}
-          title="Entrada de Dados"
-        />
-
+        {/* Entrada de Estrutura (laranja) no topo-esquerda */}
         <Handle
           type="target"
           position={Position.Top}
           id="estrutura"
-          style={{ left: '35%', width: 8, height: 8 }}
+          style={{ left: 8, top: -6, width: 10, height: 10 }}
           className="connection-handle connection-handle-estrutura"
           isConnectable={true}
           title="Entrada de Estrutura"
+        />
+
+        {/* Entrada de Dados (azul) ligeiramente à direita do canto */}
+        <Handle
+          type="target"
+          position={Position.Top}
+          id="dados"
+          style={{ left: 28, top: -6, width: 10, height: 10 }}
+          className="connection-handle connection-handle-dados"
+          isConnectable={true}
+          title="Entrada de Dados"
         />
 
         <Handle

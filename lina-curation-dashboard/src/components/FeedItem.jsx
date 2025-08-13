@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
-import { Bookmark, CheckCircle2, Clock, Sparkles, BookmarkCheck, ChevronDown, ChevronUp } from 'lucide-react';
+import { Bookmark, CheckCircle2, Clock, Sparkles, BookmarkCheck, ChevronDown, ChevronUp, Share2 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import SourceAvatar from './SourceAvatar';
 import LazyImage from './LazyImage';
@@ -99,6 +99,44 @@ const FeedItem = ({ item, isSelected, onClick, onMarkAsRead, index = 0, isCompac
         fontSize: '12px'
       }
     });
+  };
+
+  const handleShare = async (e) => {
+    e.stopPropagation();
+    const shareUrl = item.link || window.location.href;
+    const shareTitle = item.title || 'LiNA';
+    const shareText = preview || 'Confira esta notícia da LiNA';
+
+    try {
+      if (navigator.share) {
+        await navigator.share({ title: shareTitle, text: shareText, url: shareUrl });
+        return;
+      }
+
+      await navigator.clipboard.writeText(`${shareTitle}\n${shareUrl}`);
+      toast.success('Link copiado para a área de transferência', {
+        duration: 2000,
+        position: 'bottom-right',
+        style: {
+          background: 'var(--bg-secondary)',
+          color: 'var(--text-primary)',
+          border: '1px solid var(--border-primary)',
+          fontSize: '12px'
+        }
+      });
+    } catch (error) {
+      console.error('Erro ao compartilhar:', error);
+      toast.error('Não foi possível compartilhar agora', {
+        duration: 2000,
+        position: 'bottom-right',
+        style: {
+          background: 'var(--bg-secondary)',
+          color: 'var(--text-primary)',
+          border: '1px solid var(--border-primary)',
+          fontSize: '12px'
+        }
+      });
+    }
   };
 
   const handlePublishToggle = async (e) => {

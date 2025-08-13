@@ -19,6 +19,7 @@
     "@xyflow/react": "^12.8.2",
     "chart.js": "^4.5.0",
     "d3": "^7.9.0",
+    "dagre": "^0.8.5",
     "framer-motion": "^12.23.12",
     "lucide-react": "^0.536.0",
     "marked": "^16.1.2",

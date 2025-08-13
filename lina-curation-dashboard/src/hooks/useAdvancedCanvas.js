@@ -544,17 +544,45 @@ export const useAdvancedCanvas = (newsData, newsId) => {
     const centerX = nodes.reduce((sum, node) => sum + node.position.x, 0) / nodes.length;
     const centerY = nodes.reduce((sum, node) => sum + node.position.y, 0) / nodes.length;
     
-    // Calcular a posição do novo node em um padrão espiral
-    const angle = (nodes.length * 137.5) * (Math.PI / 180); // Ângulo dourado
-    const radius = 200 + (nodes.length * 20); // Distância crescente
-    
-    const offsetX = Math.cos(angle) * radius;
-    const offsetY = Math.sin(angle) * radius;
-    
-    let newPosition = {
-      x: centerX + offsetX,
-      y: centerY + offsetY
+    // Funções auxiliares para evitar sobreposição
+    const getNodeSize = (node) => {
+      const width = (node.style && node.style.width) || (node.type === 'textSegmentNode' ? 350 : node.type === 'dataNode' ? 245 : 260);
+      const height = (node.style && node.style.height) || (node.type === 'textSegmentNode' ? 120 : node.type === 'dataNode' ? 110 : 120);
+      return { width, height };
     };
+
+    const intersectsAny = (pos) => {
+      const candidate = { x: pos.x, y: pos.y, width: 300, height: 130 };
+      const margin = 80; // distância mínima entre nodes
+      return nodes.some((n) => {
+        const { width, height } = getNodeSize(n);
+        const a = { x: candidate.x, y: candidate.y, w: candidate.width + margin, h: candidate.height + margin };
+        const b = { x: n.position.x, y: n.position.y, w: width + margin, h: height + margin };
+        const overlapX = a.x < b.x + b.w && a.x + a.w > b.x;
+        const overlapY = a.y < b.y + b.h && a.y + a.h > b.y;
+        return overlapX && overlapY;
+      });
+    };
+
+    // Calcular a posição do novo node em espiral, evitando colisões
+    let angleDeg = (nodes.length * 137.5) % 360; // Ângulo dourado base
+    let radius = 350 + (nodes.length * 30); // Base maior para afastar
+    let attempts = 0;
+    let newPosition = { x: centerX, y: centerY };
+
+    while (attempts < 360) {
+      const rad = (angleDeg * Math.PI) / 180;
+      const offsetX = Math.cos(rad) * radius;
+      const offsetY = Math.sin(rad) * radius;
+      const candidate = { x: centerX + offsetX, y: centerY + offsetY };
+      if (!intersectsAny(candidate)) {
+        newPosition = candidate;
+        break;
+      }
+      angleDeg += 20; // gira
+      radius += 10; // expande
+      attempts += 1;
+    }
     
     // Garantir que o novo node esteja na área visível
     if (reactFlowInstance.current) {
