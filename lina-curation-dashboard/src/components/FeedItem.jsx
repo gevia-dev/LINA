@@ -10,7 +10,7 @@ import { getContextualIcon, toggleSavedItem } from '../utils/iconHelpers';
 import { getTagColors } from '../utils/tagColors';
 import linaPfp from '../assets/imgs/lina_pfp.png';
 
-const FeedItem = ({ item, isSelected, onClick, onMarkAsRead, index = 0, isCompact = false }) => {
+const FeedItem = ({ item, isSelected, onClick, onMarkAsRead, index = 0, isCompact = false, activeTab = 'pending' }) => {
   const [isRead, setIsRead] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
@@ -86,6 +86,7 @@ const FeedItem = ({ item, isSelected, onClick, onMarkAsRead, index = 0, isCompac
   // Ações
   const handleSave = (e) => {
     e.stopPropagation();
+    e.preventDefault();
     const newSavedState = toggleSavedItem(item.id);
     setIsSaved(newSavedState);
     
@@ -103,6 +104,7 @@ const FeedItem = ({ item, isSelected, onClick, onMarkAsRead, index = 0, isCompac
 
   const handleShare = async (e) => {
     e.stopPropagation();
+    e.preventDefault();
     const shareUrl = item.link || window.location.href;
     const shareTitle = item.title || 'LiNA';
     const shareText = preview || 'Confira esta notícia da LiNA';
@@ -141,8 +143,17 @@ const FeedItem = ({ item, isSelected, onClick, onMarkAsRead, index = 0, isCompac
 
   const handlePublishToggle = async (e) => {
     e.stopPropagation();
+    e.preventDefault();
     try {
-      const event = new CustomEvent('toggle-news-published', { detail: { item } });
+      // Na aba "concluídas", desmarcar como concluído (mover para pendentes)
+      // Na aba "pendentes", marcar como concluído (mover para concluídas)
+      const isCompleted = activeTab === 'completed';
+      const event = new CustomEvent('toggle-news-published', { 
+        detail: { 
+          item,
+          action: isCompleted ? 'unpublish' : 'publish'
+        } 
+      });
       window.dispatchEvent(event);
     } catch (err) {
       console.error(err);
@@ -151,6 +162,7 @@ const FeedItem = ({ item, isSelected, onClick, onMarkAsRead, index = 0, isCompac
 
   const handleExpand = (e) => {
     e.stopPropagation();
+    e.preventDefault();
     setIsExpanded(!isExpanded);
   };
 
@@ -488,7 +500,7 @@ const FeedItem = ({ item, isSelected, onClick, onMarkAsRead, index = 0, isCompac
                     alignItems: 'center',
                     borderRadius: '4px'
                   }}
-                  title="Marcar como publicado"
+                                     title={activeTab === 'completed' ? 'Desmarcar como concluído' : 'Marcar como publicado'}
                 >
                   <CheckCircle2 size={14} />
                 </motion.button>

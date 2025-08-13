@@ -28,6 +28,7 @@ const CurationFeed = () => {
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const feedContainerRef = useRef(null);
   const { isCompact, toggleViewMode } = useViewMode();
+  const [recentlyPublished, setRecentlyPublished] = useState([]);
 
   // Função para carregar notícias baseado no filtro e aba ativa
   const loadNews = async () => {
@@ -44,6 +45,10 @@ const CurationFeed = () => {
       
       if (result.data) {
         setNewsItems(result.data);
+        if (activeTab === 'completed') {
+          // Remover itens recém-publicados que já chegaram do backend
+          setRecentlyPublished(prev => prev.filter(p => !result.data.some(d => d.id === p.id)));
+        }
       }
     } catch (err) {
       setError('Não foi possível carregar as notícias.');
@@ -57,14 +62,36 @@ const CurationFeed = () => {
     loadNews();
   }, [activeTab]); // Recarrega quando a aba ativa muda
 
-  // Filtrar notícias baseado nos filtros selecionados (exceto lina_news que já é filtrado no carregamento)
-  const filteredNews = newsItems.filter(item => {
+  // Merge local de recém-publicadas/despublicadas para refletir imediatamente
+  const baseItems = useMemo(() => {
+    if (recentlyPublished.length === 0) return newsItems;
+    
+    const seen = new Set();
+    let merged;
+    
+    if (activeTab === 'completed') {
+      // Na aba concluídas: incluir recém-publicadas
+      merged = [...recentlyPublished.filter(item => item.isPublished), ...newsItems];
+    } else {
+      // Na aba pendentes: incluir recém-despublicadas
+      merged = [...recentlyPublished.filter(item => !item.isPublished), ...newsItems];
+    }
+    
+    return merged.filter(i => {
+      if (seen.has(i.id)) return false;
+      seen.add(i.id);
+      return true;
+    });
+  }, [activeTab, newsItems, recentlyPublished]);
+
+  // Filtrar notícias baseado nos filtros selecionados
+  const filteredNews = baseItems.filter(item => {
     const categoryMatch = filterCategory === 'all' || item.macro_categoria === filterCategory;
     return categoryMatch;
   });
 
   // Obter categorias únicas para o filtro
-  const uniqueCategories = [...new Set(newsItems.map(item => item.macro_categoria).filter(Boolean))];
+  const uniqueCategories = [...new Set(baseItems.map(item => item.macro_categoria).filter(Boolean))];
 
   const handleNewsSelect = (news) => {
     setSelectedNews(news);
@@ -100,19 +127,43 @@ const CurationFeed = () => {
   useEffect(() => {
     const togglePublished = async (e) => {
       const item = e.detail?.item;
+      const action = e.detail?.action || 'publish';
       if (!item) return;
+      
       try {
         const linaId = item.id;
-        await setLinaNewsPublished(linaId, true);
-        if (activeTab === 'pending') {
-          // Remove da lista atual para refletir movimento para Concluídas
-          setNewsItems(prev => prev.filter(n => n.id !== linaId));
+        
+        if (action === 'publish') {
+          // Marcar como concluído
+          await setLinaNewsPublished(linaId, true);
+          const publishedItem = { ...item, isPublished: true };
+          
+          if (activeTab === 'pending') {
+            // Remove da lista atual para refletir movimento para Concluídas
+            setNewsItems(prev => prev.filter(n => n.id !== linaId));
+            // Adiciona a um buffer local para aparecer na aba concluídas imediatamente
+            setRecentlyPublished(prev => [publishedItem, ...prev.filter(p => p.id !== linaId)]);
+          } else {
+            // Garante estado consistente na aba de concluídas
+            setNewsItems(prev => prev.map(n => n.id === linaId ? publishedItem : n));
+          }
         } else {
-          // Garante estado consistente na aba de concluídas
-          setNewsItems(prev => prev.map(n => n.id === linaId ? { ...n, isPublished: true } : n));
+          // Desmarcar como concluído (unpublish)
+          await setLinaNewsPublished(linaId, false);
+          const unpublishedItem = { ...item, isPublished: false };
+          
+          if (activeTab === 'completed') {
+            // Remove da lista de concluídas
+            setNewsItems(prev => prev.filter(n => n.id !== linaId));
+            // Adiciona de volta ao buffer de pendentes
+            setRecentlyPublished(prev => [unpublishedItem, ...prev.filter(p => p.id !== linaId)]);
+          } else {
+            // Garante estado consistente na aba de pendentes
+            setNewsItems(prev => prev.map(n => n.id === linaId ? unpublishedItem : n));
+          }
         }
       } catch (err) {
-        console.error('Erro ao marcar como publicado:', err);
+        console.error('Erro ao alterar status de publicado:', err);
       }
     };
     window.addEventListener('toggle-news-published', togglePublished);
@@ -489,6 +540,7 @@ const CurationFeed = () => {
                             onMarkAsRead={handleMarkAsRead}
                             index={itemIndex}
                             isCompact={isCompact}
+                            activeTab={activeTab}
                           />
                         ))}
                       </AnimatePresence>
