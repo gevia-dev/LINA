@@ -61,7 +61,7 @@ const DetailsSidebar = ({ selectedItem }) => {
   }
 
   // Função para renderizar seções com estilo consistente
-  const DetailSection = ({ label, children, hasBackground = false }) => (
+  const DetailSection = ({ label, children, hasBackground = false, clickable = false, onClick, titleAttr }) => (
     <div style={{ marginBottom: '24px' }}>
       <h3 
         style={{ 
@@ -86,9 +86,22 @@ const DetailsSidebar = ({ selectedItem }) => {
             backgroundColor: '#2A2A2A',
             border: '1px solid #333333',
             borderRadius: '6px',
-            padding: '20px'
+            padding: '20px',
+            ...(clickable ? { cursor: 'pointer', transition: 'all 0.18s ease' } : {})
           })
         }}
+        onClick={clickable ? onClick : undefined}
+        title={clickable ? titleAttr : undefined}
+        onMouseEnter={hasBackground && clickable ? (e) => {
+          e.currentTarget.style.backgroundColor = '#3A3A3A';
+          e.currentTarget.style.borderColor = '#666666';
+          e.currentTarget.style.transform = 'translateY(-2px) scale(1.03)';
+        } : undefined}
+        onMouseLeave={hasBackground && clickable ? (e) => {
+          e.currentTarget.style.backgroundColor = '#2A2A2A';
+          e.currentTarget.style.borderColor = '#333333';
+          e.currentTarget.style.transform = 'translateY(0) scale(1)';
+        } : undefined}
       >
         {children}
       </div>
@@ -268,27 +281,26 @@ const DetailsSidebar = ({ selectedItem }) => {
             {/* ESQUERDA - Topline Summary */}
             <div>
               {wellnessData?.wellness_focus?.topline_summary && (
-                <DetailSection label="O que aconteceu?" hasBackground={true}>
-                  <div
-                    onClick={() => {
-                      // filtrar core_quotes categoria funcional: Fato_Central
-                      try {
-                        const bucket = coreQuotes?.search_quotes || {};
-                        const allLists = Object.values(bucket).flat();
-                        const filtered = allLists.filter((item) => item?.categoria_funcional === 'Fato_Central');
-                        setQuotesForSection(filtered || []);
-                        setQuotesModalTitle('O que aconteceu? • Fato Central');
-                        setIsQuotesModalOpen(true);
-                      } catch (e) {
-                        setQuotesForSection([]);
-                        setIsQuotesModalOpen(true);
-                      }
-                    }}
-                    style={{ cursor: 'pointer' }}
-                    title="Clique para ver exemplos de citações deste bloco"
-                  >
-                    {wellnessData.wellness_focus.topline_summary}
-                  </div>
+                <DetailSection
+                  label="O que aconteceu?"
+                  hasBackground={true}
+                  clickable
+                  titleAttr="Clique para ver exemplos de citações deste bloco"
+                  onClick={() => {
+                    try {
+                      const bucket = coreQuotes?.search_quotes || {};
+                      const allLists = Object.values(bucket).flat();
+                      const filtered = allLists.filter((item) => item?.categoria_funcional === 'Fato_Central');
+                      setQuotesForSection(filtered || []);
+                      setQuotesModalTitle('O que aconteceu? • Fato Central');
+                      setIsQuotesModalOpen(true);
+                    } catch (e) {
+                      setQuotesForSection([]);
+                      setIsQuotesModalOpen(true);
+                    }
+                  }}
+                >
+                  {wellnessData.wellness_focus.topline_summary}
                 </DetailSection>
               )}
             </div>
@@ -298,7 +310,14 @@ const DetailsSidebar = ({ selectedItem }) => {
               
               {/* Título */}
               <DetailSection label="Titulo">
-                {selectedItem.title || 'Sem título disponível'}
+                <div style={{ 
+                  fontSize: '18px', 
+                  fontWeight: '600',
+                  color: 'var(--text-primary)',
+                  lineHeight: '1.4'
+                }}>
+                  {selectedItem.title || 'Sem título disponível'}
+                </div>
               </DetailSection>
               
               {/* Link */}
@@ -377,26 +396,26 @@ const DetailsSidebar = ({ selectedItem }) => {
             {/* ESQUERDA - Relevância de Mercado */}
             <div>
               {wellnessData?.relevance_market_trends?.relevancia_mercado && (
-                <DetailSection label="Por que isso importa?" hasBackground={true}>
-                  <div
-                    onClick={() => {
-                      try {
-                        const bucket = coreQuotes?.search_quotes || {};
-                        const allLists = Object.values(bucket).flat();
-                        const filtered = allLists.filter((item) => item?.categoria_funcional === 'Causas_Motivacoes');
-                        setQuotesForSection(filtered || []);
-                        setQuotesModalTitle('Por que isso importa? • Causas e Motivações');
-                        setIsQuotesModalOpen(true);
-                      } catch (e) {
-                        setQuotesForSection([]);
-                        setIsQuotesModalOpen(true);
-                      }
-                    }}
-                    style={{ cursor: 'pointer' }}
-                    title="Clique para ver exemplos de citações deste bloco"
-                  >
-                    {wellnessData.relevance_market_trends.relevancia_mercado}
-                  </div>
+                <DetailSection
+                  label="Por que isso importa?"
+                  hasBackground={true}
+                  clickable
+                  titleAttr="Clique para ver exemplos de citações deste bloco"
+                  onClick={() => {
+                    try {
+                      const bucket = coreQuotes?.search_quotes || {};
+                      const allLists = Object.values(bucket).flat();
+                      const filtered = allLists.filter((item) => item?.categoria_funcional === 'Causas_Motivacoes');
+                      setQuotesForSection(filtered || []);
+                      setQuotesModalTitle('Por que isso importa? • Causas e Motivações');
+                      setIsQuotesModalOpen(true);
+                    } catch (e) {
+                      setQuotesForSection([]);
+                      setIsQuotesModalOpen(true);
+                    }
+                  }}
+                >
+                  {wellnessData.relevance_market_trends.relevancia_mercado}
                 </DetailSection>
               )}
             </div>
@@ -419,26 +438,26 @@ const DetailsSidebar = ({ selectedItem }) => {
             {/* ESQUERDA - Motivo / Consequência */}
             <div>
               {structuredData?.motivo_ou_consequencia && (
-                <DetailSection label="Motivo / Consequência" hasBackground={true}>
-                  <div
-                    onClick={() => {
-                      try {
-                        const bucket = coreQuotes?.search_quotes || {};
-                        const allLists = Object.values(bucket).flat();
-                        const filtered = allLists.filter((item) => item?.categoria_funcional === 'Impactos_Consequencias');
-                        setQuotesForSection(filtered || []);
-                        setQuotesModalTitle('Motivo / Consequência • Impactos e Consequências');
-                        setIsQuotesModalOpen(true);
-                      } catch (e) {
-                        setQuotesForSection([]);
-                        setIsQuotesModalOpen(true);
-                      }
-                    }}
-                    style={{ cursor: 'pointer' }}
-                    title="Clique para ver exemplos de citações deste bloco"
-                  >
-                    {structuredData.motivo_ou_consequencia}
-                  </div>
+                <DetailSection
+                  label="Motivo / Consequência"
+                  hasBackground={true}
+                  clickable
+                  titleAttr="Clique para ver exemplos de citações deste bloco"
+                  onClick={() => {
+                    try {
+                      const bucket = coreQuotes?.search_quotes || {};
+                      const allLists = Object.values(bucket).flat();
+                      const filtered = allLists.filter((item) => item?.categoria_funcional === 'Impactos_Consequencias');
+                      setQuotesForSection(filtered || []);
+                      setQuotesModalTitle('Motivo / Consequência • Impactos e Consequências');
+                      setIsQuotesModalOpen(true);
+                    } catch (e) {
+                      setQuotesForSection([]);
+                      setIsQuotesModalOpen(true);
+                    }
+                  }}
+                >
+                  {structuredData.motivo_ou_consequencia}
                 </DetailSection>
               )}
             </div>
@@ -446,26 +465,26 @@ const DetailsSidebar = ({ selectedItem }) => {
             {/* MEIO - Possiveis oportunidades */}
             <div>
               {wellnessData?.metadata?.oportunidades_identificadas && (
-                <DetailSection label="Possiveis oportunidades" hasBackground={true}>
-                  <div
-                    onClick={() => {
-                      try {
-                        const bucket = coreQuotes?.search_quotes || {};
-                        const allLists = Object.values(bucket).flat();
-                        const filtered = allLists.filter((item) => item?.categoria_funcional === 'Desafios_Oportunidades');
-                        setQuotesForSection(filtered || []);
-                        setQuotesModalTitle('Possiveis oportunidades • Desafios e Oportunidades');
-                        setIsQuotesModalOpen(true);
-                      } catch (e) {
-                        setQuotesForSection([]);
-                        setIsQuotesModalOpen(true);
-                      }
-                    }}
-                    style={{ cursor: 'pointer' }}
-                    title="Clique para ver exemplos de citações deste bloco"
-                  >
-                    {wellnessData.metadata.oportunidades_identificadas}
-                  </div>
+                <DetailSection
+                  label="Possiveis oportunidades"
+                  hasBackground={true}
+                  clickable
+                  titleAttr="Clique para ver exemplos de citações deste bloco"
+                  onClick={() => {
+                    try {
+                      const bucket = coreQuotes?.search_quotes || {};
+                      const allLists = Object.values(bucket).flat();
+                      const filtered = allLists.filter((item) => item?.categoria_funcional === 'Desafios_Oportunidades');
+                      setQuotesForSection(filtered || []);
+                      setQuotesModalTitle('Possiveis oportunidades • Desafios e Oportunidades');
+                      setIsQuotesModalOpen(true);
+                    } catch (e) {
+                      setQuotesForSection([]);
+                      setIsQuotesModalOpen(true);
+                    }
+                  }}
+                >
+                  {wellnessData.metadata.oportunidades_identificadas}
                 </DetailSection>
               )}
             </div>
@@ -473,26 +492,26 @@ const DetailsSidebar = ({ selectedItem }) => {
             {/* DIREITA - Impacto Futuro */}
             <div>
               {wellnessData?.relevance_market_trends?.impacto_futuro && (
-                <DetailSection label="Impacto futuro" hasBackground={true}>
-                  <div
-                    onClick={() => {
-                      try {
-                        const bucket = coreQuotes?.search_quotes || {};
-                        const allLists = Object.values(bucket).flat();
-                        const filtered = allLists.filter((item) => item?.categoria_funcional === 'Projecoes_Futuro');
-                        setQuotesForSection(filtered || []);
-                        setQuotesModalTitle('Impacto futuro • Projeções de Futuro');
-                        setIsQuotesModalOpen(true);
-                      } catch (e) {
-                        setQuotesForSection([]);
-                        setIsQuotesModalOpen(true);
-                      }
-                    }}
-                    style={{ cursor: 'pointer' }}
-                    title="Clique para ver exemplos de citações deste bloco"
-                  >
-                    {wellnessData.relevance_market_trends.impacto_futuro}
-                  </div>
+                <DetailSection
+                  label="Impacto futuro"
+                  hasBackground={true}
+                  clickable
+                  titleAttr="Clique para ver exemplos de citações deste bloco"
+                  onClick={() => {
+                    try {
+                      const bucket = coreQuotes?.search_quotes || {};
+                      const allLists = Object.values(bucket).flat();
+                      const filtered = allLists.filter((item) => item?.categoria_funcional === 'Projecoes_Futuro');
+                      setQuotesForSection(filtered || []);
+                      setQuotesModalTitle('Impacto futuro • Projeções de Futuro');
+                      setIsQuotesModalOpen(true);
+                    } catch (e) {
+                      setQuotesForSection([]);
+                      setIsQuotesModalOpen(true);
+                    }
+                  }}
+                >
+                  {wellnessData.relevance_market_trends.impacto_futuro}
                 </DetailSection>
               )}
             </div>
