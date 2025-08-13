@@ -520,7 +520,7 @@ const DetailsSidebar = ({ selectedItem }) => {
         </div>
       </div>
 
-      {/* Barra Sticky - Botões Ler e Criar */}
+      {/* Barra Sticky - Botões Ler */}
       <div style={{
         position: 'sticky',
         bottom: 0,
@@ -570,46 +570,7 @@ const DetailsSidebar = ({ selectedItem }) => {
             Ler
           </button>
 
-          {/* Botão Criar */}
-          <button
-            onClick={handleCreateNews}
-            disabled={isLoading}
-            style={{
-              flex: 1,
-              padding: '14px 20px',
-              backgroundColor: isLoading ? '#666666' : '#2A2A2A',
-              color: '#E0E0E0',
-              border: isLoading ? '1px solid #666666' : '1px solid var(--primary-green-transparent)',
-              borderRadius: '8px',
-              fontFamily: 'Inter',
-              fontSize: '14px',
-              fontWeight: '500',
-              cursor: isLoading ? 'not-allowed' : 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: '8px',
-              transition: 'all 0.2s ease',
-              opacity: isLoading ? 0.7 : 1
-            }}
-            onMouseEnter={(e) => {
-              if (!isLoading) {
-                e.target.style.backgroundColor = '#333333';
-                e.target.style.borderColor = 'var(--primary-green)';
-                e.target.style.transform = 'translateY(-1px)';
-              }
-            }}
-            onMouseLeave={(e) => {
-              if (!isLoading) {
-                e.target.style.backgroundColor = '#2A2A2A';
-                e.target.style.borderColor = 'var(--primary-green-transparent)';
-                e.target.style.transform = 'translateY(0)';
-              }
-            }}
-          >
-            <Sparkles size={16} />
-            {isLoading ? 'Buscando...' : 'Criar'}
-          </button>
+          
         </div>
       </div>
 

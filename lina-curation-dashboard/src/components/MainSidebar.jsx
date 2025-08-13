@@ -65,6 +65,9 @@ const MainSidebar = () => {
     { name: 'Bubbles', icon: CircleDot, path: '/bubble-explorer', shortcut: 'Alt+3' }
   ];
 
+  // Nesta branch, exibir apenas o link do Feed na sidebar
+  const navItems = mainItems.filter(item => item.path === '/feed');
+
   const toolsItems = [];
 
   const handleLogout = async () => {
@@ -184,7 +187,7 @@ const MainSidebar = () => {
         aria-label="Navegação principal"
       >
         <div className="flex items-center justify-around h-full px-4">
-          {[...mainItems, ...toolsItems].map((item) => {
+          {[...navItems, ...toolsItems].map((item) => {
             const IconComponent = item.icon;
             const isActive = getActiveItem() === item.name;
 
@@ -312,7 +315,7 @@ const MainSidebar = () => {
           <div style={{ padding: isCollapsed ? '12px 12px 16px 12px' : '14px 14px 16px 14px' }}>
             <nav className="space-y-1" role="menu" style={{ paddingLeft: '0px', paddingRight: '0px' }}>
               {/* Seção MAIN */}
-              {mainItems.map((item) => (
+              {navItems.map((item) => (
                 <NavigationItem key={item.name} item={item} />
               ))}
 
