@@ -399,6 +399,16 @@ const AdvancedCanvasEditor = ({
   // Atalhos de teclado
   useEffect(() => {
     const handleKeyDownLocal = (e) => {
+      // Evitar interferir em inputs/editors (permite apagar texto normalmente)
+      const target = e.target;
+      const tag = target?.tagName;
+      const isEditable = (
+        tag === 'INPUT' ||
+        tag === 'TEXTAREA' ||
+        target?.isContentEditable === true ||
+        (typeof target?.closest === 'function' && target.closest('.notion-editor'))
+      );
+      if (isEditable) return;
 
 
       // Atalhos com Ctrl/Cmd
@@ -1036,6 +1046,7 @@ const AdvancedCanvasEditor = ({
         newsData={newsData}
         newsTitle={newsTitle}
         nodes={nodes}
+        edges={edges}
         onSaveNode={(nodeId, newContent) => updateNodeContent(nodeId, { content: newContent })}
       />
     </div>

@@ -10,7 +10,10 @@ import {
   Save,
   Eye,
   Maximize2,
-  Minimize2
+  Minimize2,
+  Quote as QuoteIcon,
+  Layers as LayersIcon,
+  Braces as BracesIcon
 } from 'lucide-react';
 // Observação: BlockNote foi temporariamente substituído por textarea para evitar
 // problemas de build. Podemos reativar quando a exportação estiver estável.
@@ -25,11 +28,12 @@ const NotionLikePage = ({
   newsData, 
   newsTitle,
   nodes = [],
+  edges = [],
   onSaveNode
 }) => {
   const [isExpanded, setIsExpanded] = useState(false);
   const [editingSection, setEditingSection] = useState(null);
-  const [completedSections, setCompletedSections] = useState(new Set());
+  const [activeSections, setActiveSections] = useState(new Set());
   const [activeSection, setActiveSection] = useState(null);
 
   // Construir visualização a partir dos nodes do canvas (summary, body, conclusion)
@@ -41,21 +45,36 @@ const NotionLikePage = ({
       const sectionOrder = ['summary', 'body', 'conclusion'];
       const titleMap = { summary: 'Introdução', body: 'Corpo', conclusion: 'Conclusão' };
 
+      // Helper: encontrar nodes conectados (source -> target textSegment)
+      const getConnectedToSegment = (segmentId) => {
+        const inbound = edges.filter((e) => e.target === segmentId);
+        // Retornar resumo dos nodes conectados
+        return inbound
+          .map((e) => nodes.find((n) => n.id === e.source))
+          .filter(Boolean)
+          .map((n) => ({
+            id: n.id,
+            title: n.data?.title || n.id,
+            content: n.data?.content || '',
+            coreKey: n.data?.coreKey || '',
+            type: n.type
+          }));
+      };
+
       const sections = sectionOrder
         .map((id) => nodes.find((n) => n.id === id))
         .filter(Boolean)
         .map((node) => ({
           id: node.id,
           title: titleMap[node.id] || (node.data?.title || node.id),
-          phrases: [
-            {
-              id: node.data?.id || node.id,
-              titulo_frase: node.data?.title || titleMap[node.id] || node.id,
-              frase_completa: node.data?.content || '',
-              categoria_funcional: node.data?.coreKey || '',
-              nodeId: node.id
-            }
-          ]
+          phrases: getConnectedToSegment(node.id).map((cn, idx) => ({
+            id: `${cn.id}-${idx}`,
+            titulo_frase: cn.title,
+            frase_completa: cn.content,
+            categoria_funcional: cn.coreKey,
+            nodeId: cn.id,
+            nodeType: cn.type
+          }))
         }));
 
       // Incluir quaisquer outros nodes de texto como seções adicionais
@@ -64,15 +83,14 @@ const NotionLikePage = ({
         .map((node) => ({
           id: node.id,
           title: node.data?.title || node.id,
-          phrases: [
-            {
-              id: node.data?.id || node.id,
-              titulo_frase: node.data?.title || node.id,
-              frase_completa: node.data?.content || '',
-              categoria_funcional: node.data?.coreKey || '',
-              nodeId: node.id
-            }
-          ]
+          phrases: getConnectedToSegment(node.id).map((cn, idx) => ({
+            id: `${cn.id}-${idx}`,
+            titulo_frase: cn.title,
+            frase_completa: cn.content,
+            categoria_funcional: cn.coreKey,
+            nodeId: cn.id,
+            nodeType: cn.type
+          }))
         }));
 
       return [...sections, ...extraTextNodes];
@@ -80,7 +98,7 @@ const NotionLikePage = ({
       console.error('Erro ao montar dados do NotionLikePage:', error);
       return [];
     }
-  }, [nodes]);
+  }, [nodes, edges]);
 
   // Fechar modal ao pressionar ESC
   useEffect(() => {
@@ -105,14 +123,11 @@ const NotionLikePage = ({
   const modalWidth = isExpanded ? 'w-full' : 'w-5/6';
   const modalMaxWidth = isExpanded ? 'max-w-none' : 'max-w-6xl';
 
-  const toggleSectionComplete = (sectionId) => {
-    setCompletedSections(prev => {
+  const toggleSectionActive = (sectionId) => {
+    setActiveSections(prev => {
       const newSet = new Set(prev);
-      if (newSet.has(sectionId)) {
-        newSet.delete(sectionId);
-      } else {
-        newSet.add(sectionId);
-      }
+      // Botão ativo/desativo: todos começam ativos; clique desativa/ativa
+      if (newSet.has(sectionId)) newSet.delete(sectionId); else newSet.add(sectionId);
       return newSet;
     });
   };
@@ -127,6 +142,13 @@ const NotionLikePage = ({
     };
     return colors[categoria] || colors.default;
   };
+
+  // Inicialmente todas as seções ativas quando abrir
+  useEffect(() => {
+    if (isOpen && processedData.length) {
+      setActiveSections(new Set(processedData.map(s => s.id)));
+    }
+  }, [isOpen, processedData]);
 
   if (!isOpen) return null;
 
@@ -338,12 +360,13 @@ const NotionLikePage = ({
                           <motion.button
                             onClick={(e) => {
                               e.stopPropagation();
-                              toggleSectionComplete(section.id);
+                              toggleSectionActive(section.id);
                             }}
                             whileHover={{ scale: 1.1 }}
                             whileTap={{ scale: 0.9 }}
+                            title={activeSections.has(section.id) ? 'Desativar seção' : 'Ativar seção'}
                           >
-                            {completedSections.has(section.id) ? (
+                            {activeSections.has(section.id) ? (
                               <CheckCircle size={16} style={{ color: 'var(--primary-green)' }} />
                             ) : (
                               <Circle size={16} style={{ color: 'var(--text-secondary)' }} />
@@ -380,7 +403,7 @@ const NotionLikePage = ({
 
                         {/* Phrases list when section is active */}
                         <AnimatePresence>
-                          {activeSection === section.id && (
+                          {activeSection === section.id && activeSections.has(section.id) && (
                             <motion.div
                               className="ml-8 mt-2 space-y-2"
                               initial={{ opacity: 0, height: 0 }}
@@ -388,32 +411,29 @@ const NotionLikePage = ({
                               exit={{ opacity: 0, height: 0 }}
                               transition={{ duration: 0.3 }}
                             >
-                              {section.phrases.map((phrase, phraseIndex) => (
-                                <motion.div
-                                  key={phrase.id}
-                                  className="p-2 rounded border-l-2"
-                                  style={{
-                                    backgroundColor: 'var(--bg-primary)',
-                                    borderLeftColor: getCategoryColor(phrase.categoria_funcional)
-                                  }}
-                                  initial={{ opacity: 0, x: -10 }}
-                                  animate={{ opacity: 1, x: 0 }}
-                                  transition={{ delay: phraseIndex * 0.05 }}
-                                >
-                                  <p 
-                                    className="text-xs font-medium"
-                                    style={{ color: 'var(--text-primary)' }}
+                              {section.phrases.map((phrase, phraseIndex) => {
+                                const isStructure = phrase.nodeType === 'dataNode';
+                                const borderColor = isStructure ? '#F5A623' : '#4A90E2';
+                                const IconComp = isStructure ? LayersIcon : QuoteIcon;
+                                return (
+                                  <motion.div
+                                    key={phrase.id}
+                                    className="inline-flex"
+                                    initial={{ opacity: 0, x: -10 }}
+                                    animate={{ opacity: 1, x: 0 }}
+                                    transition={{ delay: phraseIndex * 0.05 }}
                                   >
-                                    {phrase.titulo_frase}
-                                  </p>
-                                  <p 
-                                    className="text-xs mt-1"
-                                    style={{ color: 'var(--text-secondary)' }}
-                                  >
-                                    {phrase.categoria_funcional}
-                                  </p>
-                                </motion.div>
-                              ))}
+                                    <span
+                                      className="inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[12px] leading-4 max-w-full"
+                                      style={{ borderColor, color: 'var(--text-secondary)' }}
+                                      title={phrase.titulo_frase}
+                                    >
+                                      <IconComp className="h-3.5 w-3.5" />
+                                      <span className="truncate max-w-[220px]">{phrase.titulo_frase}</span>
+                                    </span>
+                                  </motion.div>
+                                );
+                              })}
                             </motion.div>
                           )}
                         </AnimatePresence>
@@ -458,9 +478,7 @@ const NotionLikePage = ({
                   {processedData.length} seções • {processedData.reduce((acc, section) => acc + section.phrases.length, 0)} frases
                 </span>
                 <div className="flex items-center gap-4">
-                  <span style={{ color: 'var(--text-secondary)' }}>
-                    {completedSections.size}/{processedData.length} concluídas
-                  </span>
+                  <span style={{ color: 'var(--text-secondary)' }}>{activeSections.size}/{processedData.length} ativas</span>
                   <span style={{ color: 'var(--text-secondary)' }}>
                     ESC para fechar
                   </span>
@@ -583,7 +601,7 @@ const PhraseEditor = ({ phrase, getCategoryColor, isEditing, onEditToggle, onSav
               color: getCategoryColor(phrase.categoria_funcional)
             }}
           >
-            {phrase.categoria_funcional}
+            {phrase.nodeType === 'dataNode' ? 'Estrutura/Dados' : phrase.categoria_funcional}
           </span>
         </div>
         
@@ -656,6 +674,14 @@ const PhraseEditor = ({ phrase, getCategoryColor, isEditing, onEditToggle, onSav
               fontFamily: '"Nunito Sans", "Inter", sans-serif',
               lineHeight: '1.6',
               resize: 'vertical'
+            }}
+            onKeyDown={(e) => {
+              // permitir deletar/backspace sem interferência
+              // e salvar com Ctrl/Cmd+S
+              if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+                e.preventDefault();
+                handleSave();
+              }
             }}
           />
         ) : (

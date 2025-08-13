@@ -75,7 +75,7 @@ const KeyNode = ({ data }) => {
   );
 };
 
-const ItemNode = ({ data }) => {
+const ItemNode = ({ data, sourcePosition, targetPosition }) => {
   const handleTransfer = useCallback((e) => {
     e.stopPropagation();
     if (data && typeof data.onTransferItem === 'function') {
@@ -142,10 +142,16 @@ const ItemNode = ({ data }) => {
         <ArrowRight size={16} />
       </motion.button>
       <Handle
+        type="source"
+        position={sourcePosition ?? Position.Right}
+        id="out"
+        style={{ width: 8, height: 8, background: data.color || 'var(--primary-green)', border: 'none' }}
+      />
+      <Handle
         type="target"
-        position={Position.Top}
+        position={targetPosition ?? Position.Top}
         id="in"
-        style={{ left: '50%', transform: 'translateX(-50%)', width: 8, height: 8, background: data.color || 'var(--primary-green)', border: 'none' }}
+        style={{ width: 8, height: 8, background: data.color || 'var(--primary-green)', border: 'none' }}
       />
     </motion.div>
   );
@@ -405,7 +411,37 @@ const CanvasLibraryView = ({ newsData, onTransferItem, onOpenCardModal }) => {
           const angle = startAngle + j * angleStep;
           const x = centerX + radius * Math.cos(angle) - 160; // 320/2 largura
           const y = centerY + radius * Math.sin(angle) - 65;  // altura aprox 130/2
-          withPositions.push({ ...n, position: { x, y } });
+
+          // Ângulo em graus normalizado para (-180, 180]
+          let angleDeg = (angle * 180) / Math.PI;
+          if (angleDeg > 180) angleDeg -= 360;
+          if (angleDeg <= -180) angleDeg += 360;
+
+          // Mapeamento de ângulo para posições dos handles
+          let sourcePos = Position.Left;
+          let targetPos = Position.Right;
+          if (angleDeg >= 45 && angleDeg <= 135) {
+            sourcePos = Position.Top;
+            targetPos = Position.Bottom;
+          } else if (angleDeg > 135 || angleDeg <= -135) {
+            sourcePos = Position.Right;
+            targetPos = Position.Left;
+          } else if (angleDeg >= -135 && angleDeg <= -45) {
+            sourcePos = Position.Bottom;
+            targetPos = Position.Top;
+          } else {
+            sourcePos = Position.Left;
+            targetPos = Position.Right;
+          }
+
+          withPositions.push({
+            ...n,
+            position: { x, y },
+            // Passar também via props do node para o componente
+            sourcePosition: sourcePos,
+            targetPosition: targetPos,
+            data: { ...n.data }
+          });
         }
         placed += countInRing;
       }
