@@ -1,8 +1,47 @@
 import React, { useEffect, useMemo, useState, useCallback } from 'react';
-import { ReactFlow, Background, Controls, MiniMap, Handle, Position, ConnectionLineType } from '@xyflow/react';
+import { ReactFlow, Controls } from '@xyflow/react';
 import { motion } from 'framer-motion';
-import { FolderTree, Tags, Quote, ArrowRight } from 'lucide-react';
+import { FolderTree, Tags, Quote, ArrowRight, ChevronLeft, ChevronRight, CheckSquare, Square } from 'lucide-react';
 import dagre from 'dagre';
+import VantaBackground from './VantaBackground';
+
+// Utilitário para gerar uma cor em tom pastel a partir de um hex
+const toPastelColor = (baseColor) => {
+  try {
+    const fallback = '#A8D5BA';
+    if (!baseColor || typeof baseColor !== 'string') return fallback;
+    if (!baseColor.startsWith('#')) return fallback;
+    let hex = baseColor.replace('#', '').trim();
+    if (hex.length === 3) {
+      hex = hex.split('').map((c) => c + c).join('');
+    }
+    if (hex.length !== 6) return fallback;
+    const r = parseInt(hex.slice(0, 2), 16);
+    const g = parseInt(hex.slice(2, 4), 16);
+    const b = parseInt(hex.slice(4, 6), 16);
+    // mistura com branco para um tom pastel (70% branco, 30% cor)
+    const mix = (ch) => Math.round(0.7 * 255 + 0.3 * ch);
+    const rp = mix(r);
+    const gp = mix(g);
+    const bp = mix(b);
+    const toHex = (n) => n.toString(16).padStart(2, '0');
+    return `#${toHex(rp)}${toHex(gp)}${toHex(bp)}`;
+  } catch {
+    return '#A8D5BA';
+  }
+};
+
+// Formata a label da categoria: substitui '_' por espaço e capitaliza palavras
+const formatCategoryLabel = (value) => {
+  try {
+    const raw = String(value || '').trim();
+    const withSpaces = raw.replace(/_/g, ' ');
+    // Capitaliza cada palavra mantendo acrônimos
+    return withSpaces.replace(/\b([a-z])(\w*)/gi, (m, p1, p2) => p1.toUpperCase() + p2.toLowerCase());
+  } catch {
+    return String(value || '');
+  }
+};
 
 // Node renderers
 const CategoryNode = ({ data }) => {
@@ -10,29 +49,19 @@ const CategoryNode = ({ data }) => {
     <motion.div
       whileHover={{ scale: 1.02 }}
       transition={{ duration: 0.15 }}
-      className="rounded-lg border shadow-sm"
+      className="rounded-lg"
       style={{
         backgroundColor: 'var(--bg-secondary)',
-        borderColor: data.color || 'var(--primary-green)',
         color: 'var(--text-primary)',
         width: 200,
         padding: 12,
-        borderWidth: 2
+        borderWidth: 0
       }}
     >
       <div className="flex items-center gap-2">
-        <Tags size={16} style={{ color: data.color || 'var(--primary-green)' }} />
-        <span className="text-sm font-semibold" style={{ fontFamily: '"Nunito Sans", "Inter", sans-serif' }}>{data.label}</span>
+        <Tags size={16} style={{ color: toPastelColor(data.color) }} />
+        <span className="text-sm font-semibold" style={{ fontFamily: '"Nunito Sans", "Inter", sans-serif' }}>{formatCategoryLabel(data.label)}</span>
       </div>
-      {typeof data.count === 'number' && (
-        <div className="text-xs mt-1" style={{ color: 'var(--text-secondary)' }}>{data.count} chaves</div>
-      )}
-      <Handle
-        type="source"
-        position={Position.Bottom}
-        id="out"
-        style={{ left: '50%', transform: 'translateX(-50%)', width: 8, height: 8, background: data.color || 'var(--primary-green)', border: 'none' }}
-      />
     </motion.div>
   );
 };
@@ -59,30 +88,14 @@ const KeyNode = ({ data }) => {
       {typeof data.count === 'number' && (
         <div className="text-[11px] mt-1" style={{ color: 'var(--text-secondary)' }}>{data.count} itens</div>
       )}
-      <Handle
-        type="target"
-        position={Position.Top}
-        id="in"
-        style={{ left: '50%', transform: 'translateX(-50%)', width: 8, height: 8, background: data.color || 'var(--primary-green)', border: 'none' }}
-      />
-      <Handle
-        type="source"
-        position={Position.Bottom}
-        id="out"
-        style={{ left: '50%', transform: 'translateX(-50%)', width: 8, height: 8, background: data.color || 'var(--primary-green)', border: 'none' }}
-      />
     </motion.div>
   );
 };
 
-const ItemNode = ({ data, sourcePosition, targetPosition }) => {
-  const handleTransfer = useCallback((e) => {
-    e.stopPropagation();
-    if (data && typeof data.onTransferItem === 'function') {
-      if (import.meta.env?.DEV) console.debug('[CanvasLibraryView] transfer', { itemId: data.itemId });
-      data.onTransferItem(data.itemId, data.phrase);
-    }
-  }, [data]);
+const ItemNode = ({ data }) => {
+  useEffect(() => {
+    if (import.meta.env?.DEV) console.debug('[CanvasLibraryView][ItemNode] mounted', { itemId: data?.itemId, title: data?.title, categoryKey: data?.categoryKey });
+  }, [data?.itemId, data?.title, data?.categoryKey]);
 
   const handleOpen = useCallback(() => {
     if (data && typeof data.onOpenCardModal === 'function') {
@@ -97,62 +110,38 @@ const ItemNode = ({ data, sourcePosition, targetPosition }) => {
 
   return (
     <motion.div
-      initial={{ opacity: 0, scale: 0.98 }}
-      animate={{ opacity: 1, scale: 1 }}
-      transition={{ duration: 0.2 }}
-      className="rounded-lg border relative group"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      className="item-node-card rounded-lg border relative group"
       onDoubleClick={handleOpen}
+      onMouseEnter={() => { if (import.meta.env?.DEV) console.debug('[CanvasLibraryView][ItemNode] hover enter', { itemId: data?.itemId }); }}
+      onMouseLeave={() => { if (import.meta.env?.DEV) console.debug('[CanvasLibraryView][ItemNode] hover leave', { itemId: data?.itemId }); }}
       style={{
         backgroundColor: 'var(--bg-primary)',
-        borderColor: data.color || 'var(--border-primary)',
+        borderColor: 'var(--border-primary)',
         color: 'var(--text-primary)',
         width: 320,
         padding: 12,
-        boxShadow: '0 4px 12px rgba(0,0,0,0.15)'
+        boxShadow: 'none',
+        transition: 'transform 20s linear, box-shadow 20s linear, border-color 20s linear'
       }}
     >
-      <div className="flex items-center gap-2 mb-1">
-        <Quote size={14} style={{ color: data.color || 'var(--primary-green)' }} />
+      <div
+        className="pointer-events-none absolute inset-0 rounded-lg opacity-0 group-hover:opacity-100"
+        style={{
+          boxShadow: '0 10px 28px rgba(255,255,255,0.10)',
+          transition: 'opacity 0.2s ease'
+        }}
+      />
+      <div className="flex items-center gap-2 mb-2">
+        <Quote size={14} style={{ color: toPastelColor(data.color) }} />
         <span className="text-sm font-semibold truncate" style={{ fontFamily: '"Nunito Sans", "Inter", sans-serif' }}>{data.title}</span>
       </div>
-      <div className="mb-1">
-        {data.categoryKey && (
-          (() => {
-            const parts = String(data.categoryKey).split('::');
-            const child = parts[1] || data.categoryKey;
-            return (
-              <span className="text-[10px] px-2 py-0.5 rounded-full border" style={{ borderColor: 'var(--primary-green-transparent)', color: 'var(--text-secondary)' }}>
-                {child}
-              </span>
-            );
-          })()
-        )}
-      </div>
-      <p className="text-xs pr-10" style={{ color: 'var(--text-secondary)', lineHeight: 1.4 }}>
+      {/* Tag removida para um visual mais limpo */}
+      <p className="text-sm pr-8" style={{ color: 'var(--text-secondary)', lineHeight: 1.6 }}>
         {data.phrase}
       </p>
-      <motion.button
-        onClick={handleTransfer}
-        className="absolute right-2 bottom-2 p-2 rounded-full border opacity-0 group-hover:opacity-100"
-        whileHover={{ scale: 1.08 }}
-        whileTap={{ scale: 0.95 }}
-        title="Transferir"
-        style={{ borderColor: data.color || 'var(--primary-green)', color: data.color || 'var(--primary-green)', backgroundColor: 'var(--primary-green-transparent)' }}
-      >
-        <ArrowRight size={16} />
-      </motion.button>
-      <Handle
-        type="source"
-        position={sourcePosition ?? Position.Right}
-        id="out"
-        style={{ width: 8, height: 8, background: data.color || 'var(--primary-green)', border: 'none' }}
-      />
-      <Handle
-        type="target"
-        position={targetPosition ?? Position.Top}
-        id="in"
-        style={{ width: 8, height: 8, background: data.color || 'var(--primary-green)', border: 'none' }}
-      />
+      {/* Botão removido conforme solicitação; transferência pode ser acionada via double click (abre modal) e ações subsequentes */}
     </motion.div>
   );
 };
@@ -280,11 +269,37 @@ const buildHierarchy = (normalized) => {
   return { categories, counts };
 };
 
-const CanvasLibraryView = ({ newsData, onTransferItem, onOpenCardModal }) => {
+const CanvasLibraryView = ({ newsData, onTransferItem, onOpenCardModal, compact = false, sidebarOnRight = false, enableSidebarToggle = false, initialSidebarCollapsed = false }) => {
   const [nodes, setNodes] = useState([]);
   const [edges, setEdges] = useState([]);
   const [isProcessing, setIsProcessing] = useState(false);
   const [selectedTag, setSelectedTag] = useState('');
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(initialSidebarCollapsed);
+  const [rfInstance, setRfInstance] = useState(null);
+  const [isMultiSelect, setIsMultiSelect] = useState(false);
+  const [activeTags, setActiveTags] = useState([]);
+  const toggleSidebar = useCallback(() => setIsSidebarCollapsed((v) => !v), []);
+
+  const toggleMultiSelect = useCallback(() => {
+    setIsMultiSelect((prev) => {
+      const next = !prev;
+      if (next) setActiveTags([]);
+      return next;
+    });
+  }, []);
+
+  const handleInit = useCallback((instance) => {
+    setRfInstance(instance);
+    try {
+      // Garantir interatividade ligada (evita canvas "travado")
+      if (typeof instance.setInteractive === 'function') {
+        instance.setInteractive(true);
+      }
+      if (import.meta.env?.DEV) console.debug('[CanvasLibraryView] onInit', { interactiveForced: true });
+    } catch (e) {
+      if (import.meta.env?.DEV) console.debug('[CanvasLibraryView] onInit error', e);
+    }
+  }, []);
 
   const categoryColorFor = useCallback((tag) => {
     const palette = [
@@ -321,10 +336,11 @@ const CanvasLibraryView = ({ newsData, onTransferItem, onOpenCardModal }) => {
 
   const hierarchy = useMemo(() => buildHierarchy(normalizedCore), [normalizedCore]);
   const allTags = useMemo(() => Object.keys(hierarchy.categories || {}), [hierarchy]);
+  const memoNodeTypes = useMemo(() => nodeTypes, []);
 
   useEffect(() => {
-    if (!selectedTag && allTags.length > 0) setSelectedTag(allTags[0]);
-  }, [allTags, selectedTag]);
+    if (!isMultiSelect && !selectedTag && allTags.length > 0) setSelectedTag(allTags[0]);
+  }, [allTags, selectedTag, isMultiSelect]);
 
   useEffect(() => {
     setIsProcessing(true);
@@ -341,9 +357,13 @@ const CanvasLibraryView = ({ newsData, onTransferItem, onOpenCardModal }) => {
       if (!g.hasNode(id)) g.setNode(id, { width, height });
     };
 
-    if (selectedTag && categories[selectedTag]) {
-      const tag = selectedTag;
+    const tagsToRender = isMultiSelect
+      ? activeTags.filter((t) => categories[t])
+      : (selectedTag && categories[selectedTag]) ? [selectedTag] : [];
+
+    tagsToRender.forEach((tag) => {
       const keyObj = categories[tag];
+      if (!keyObj) return;
       const categoryId = `cat-${tag}`;
       const color = categoryColorFor(tag);
       rfNodes.push({
@@ -373,117 +393,131 @@ const CanvasLibraryView = ({ newsData, onTransferItem, onOpenCardModal }) => {
             position: { x: 0, y: 0 }
           });
           addGNode(itemId, 320, 130);
-          g.setEdge(categoryId, itemId);
         });
       });
-    }
+    });
 
     // Layout
-    // Estratégia híbrida: se o número de filhos for grande, usar radial; senão, usar dagre (top-bottom)
-    const useRadial = rfNodes.filter(n => n.type === 'itemNode').length >= 6;
     let withPositions = [];
-    if (useRadial) {
-      // Centro para a categoria
-      const centerX = 0;
-      const centerY = 0;
-      const categoryNode = rfNodes.find(n => n.type === 'categoryNode');
-      if (categoryNode) {
-        withPositions.push({ ...categoryNode, position: { x: centerX - 100, y: centerY - 40 } });
-      }
-      const children = rfNodes.filter(n => n.type === 'itemNode');
-      const itemsPerRing = 10; // mais espaçado por anel
-      const ringCount = Math.max(1, Math.ceil(children.length / itemsPerRing));
-      const baseRadius = 420; // mais afastado do centro
-      const ringGap = 220; // distância entre anéis
+    if (isMultiSelect) {
+      // Layout linear por categoria, categorias empilhadas verticalmente
+      const categoryWidth = 200;
+      const categoryHeight = 64;
+      const itemWidth = 320;
+      const itemHeight = 130;
+      const gapX = 40;
+      const gapY = 180;
+      const startX = categoryWidth + 60; // início dos itens à direita do título da categoria
 
-      let placed = 0;
-      for (let ring = 0; ring < ringCount; ring += 1) {
-        const remaining = children.length - placed;
-        const countInRing = Math.min(itemsPerRing, remaining);
-        if (countInRing <= 0) break;
-
-        const radius = baseRadius + ring * ringGap;
-        const angleStep = (2 * Math.PI) / countInRing;
-        const startAngle = -Math.PI / 2 + (ring % 2 === 0 ? 0 : angleStep / 2); // alterna offset por anel
-
-        for (let j = 0; j < countInRing; j += 1) {
-          const n = children[placed + j];
-          const angle = startAngle + j * angleStep;
-          const x = centerX + radius * Math.cos(angle) - 160; // 320/2 largura
-          const y = centerY + radius * Math.sin(angle) - 65;  // altura aprox 130/2
-
-          // Ângulo em graus normalizado para (-180, 180]
-          let angleDeg = (angle * 180) / Math.PI;
-          if (angleDeg > 180) angleDeg -= 360;
-          if (angleDeg <= -180) angleDeg += 360;
-
-          // Mapeamento de ângulo para posições dos handles
-          let sourcePos = Position.Left;
-          let targetPos = Position.Right;
-          if (angleDeg >= 45 && angleDeg <= 135) {
-            sourcePos = Position.Top;
-            targetPos = Position.Bottom;
-          } else if (angleDeg > 135 || angleDeg <= -135) {
-            sourcePos = Position.Right;
-            targetPos = Position.Left;
-          } else if (angleDeg >= -135 && angleDeg <= -45) {
-            sourcePos = Position.Bottom;
-            targetPos = Position.Top;
-          } else {
-            sourcePos = Position.Left;
-            targetPos = Position.Right;
-          }
-
-          withPositions.push({
-            ...n,
-            position: { x, y },
-            // Passar também via props do node para o componente
-            sourcePosition: sourcePos,
-            targetPosition: targetPos,
-            data: { ...n.data }
-          });
+      let currentY = 0;
+      tagsToRender.forEach((tag) => {
+        const catId = `cat-${tag}`;
+        const catNode = rfNodes.find((n) => n.id === catId);
+        if (catNode) {
+          const catY = currentY + (itemHeight - categoryHeight) / 2;
+          withPositions.push({ ...catNode, position: { x: 0, y: catY } });
         }
-        placed += countInRing;
-      }
-    } else {
-      dagre.layout(g);
-      withPositions = rfNodes.map((n) => {
-        const gn = g.node(n.id);
-        if (!gn) return n;
-        return {
-          ...n,
-          position: { x: gn.x - (gn.width / 2), y: gn.y - (gn.height / 2) }
-        };
+        const children = rfNodes.filter((n) => n.type === 'itemNode' && n.id.startsWith(`item-${tag}-`));
+        children.forEach((n, idx) => {
+          const x = startX + idx * (itemWidth + gapX);
+          const y = currentY;
+          withPositions.push({ ...n, position: { x, y }, data: { ...n.data } });
+        });
+        currentY += itemHeight + gapY;
       });
+    } else {
+      // Estratégia híbrida para categoria única
+      const useRadial = rfNodes.filter(n => n.type === 'itemNode').length >= 6;
+      if (useRadial) {
+        const centerX = 0;
+        const centerY = 0;
+        const categoryNode = rfNodes.find(n => n.type === 'categoryNode');
+        if (categoryNode) {
+          withPositions.push({ ...categoryNode, position: { x: centerX - 100, y: centerY - 40 } });
+        }
+        const children = rfNodes.filter(n => n.type === 'itemNode');
+        const itemsPerRing = 10;
+        const ringCount = Math.max(1, Math.ceil(children.length / itemsPerRing));
+        const baseRadius = 420;
+        const ringGap = 220;
+        let placed = 0;
+        for (let ring = 0; ring < ringCount; ring += 1) {
+          const remaining = children.length - placed;
+          const countInRing = Math.min(itemsPerRing, remaining);
+          if (countInRing <= 0) break;
+          const radius = baseRadius + ring * ringGap;
+          const angleStep = (2 * Math.PI) / countInRing;
+          const startAngle = -Math.PI / 2 + (ring % 2 === 0 ? 0 : angleStep / 2);
+          for (let j = 0; j < countInRing; j += 1) {
+            const n = children[placed + j];
+            const angle = startAngle + j * angleStep;
+            const x = centerX + radius * Math.cos(angle) - 160;
+            const y = centerY + radius * Math.sin(angle) - 65;
+            withPositions.push({ ...n, position: { x, y }, data: { ...n.data } });
+          }
+          placed += countInRing;
+        }
+      } else {
+        dagre.layout(g);
+        withPositions = rfNodes.map((n) => {
+          const gn = g.node(n.id);
+          if (!gn) return n;
+          return { ...n, position: { x: gn.x - (gn.width / 2), y: gn.y - (gn.height / 2) } };
+        });
+      }
     }
 
-    const styledEdges = rfEdges.length > 0 ? rfEdges : (() => {
-      const edgesArr = Array.from(g.edges && typeof g.edges === 'function' ? g.edges() : []);
-      const hasGraphEdges = edgesArr.length > 0;
-      const pairs = hasGraphEdges ? edgesArr.map(e => [e.v, e.w]) : (() => {
-        const cat = withPositions.find(n => n.type === 'categoryNode');
-        const items = withPositions.filter(n => n.type === 'itemNode');
-        return cat ? items.map(it => [cat.id, it.id]) : [];
-      })();
-      return pairs.map(([src, dst], idx) => ({
-        id: `e-${src}-${dst}-${idx}`,
-        source: src,
-        target: dst,
-        sourceHandle: 'out',
-        targetHandle: 'in',
-        type: 'default',
-        animated: true,
-        style: { stroke: 'rgba(255, 255, 255, 0.7)', strokeWidth: 2 }
-      }));
-    })();
+    const styledEdges = [];
 
     setNodes(withPositions);
     setEdges(styledEdges);
     if (import.meta.env?.DEV) console.debug('[CanvasLibraryView] nodes/edges', { nodes: withPositions.length, edges: styledEdges.length });
     setIsProcessing(false);
-  }, [hierarchy, selectedTag, onTransferItem, onOpenCardModal, categoryColorFor]);
+  }, [hierarchy, selectedTag, isMultiSelect, activeTags, onTransferItem, onOpenCardModal, categoryColorFor]);
 
   const hasData = nodes.length > 0;
+
+  // Ajusta viewport ao finalizar layout
+  useEffect(() => {
+    if (!rfInstance || isProcessing) return;
+    const center = () => {
+      try {
+        if (isMultiSelect) {
+          if (!nodes.length) return;
+          rfInstance.fitView({ padding: 0.2, includeHiddenNodes: false, duration: 350 });
+          return;
+        }
+        if (!selectedTag) return;
+        const categoryId = `cat-${selectedTag}`;
+        const categoryNode = nodes.find(n => n.id === categoryId);
+        if (!categoryNode) return;
+        if (typeof rfInstance.fitView === 'function') {
+          rfInstance.fitView({ nodes: [{ id: categoryId }], padding: 0.2, includeHiddenNodes: false, duration: 350 });
+          return;
+        }
+        if (typeof rfInstance.setCenter === 'function') {
+          const width = 200;
+          const height = 64;
+          const cx = categoryNode.position.x + width / 2;
+          const cy = categoryNode.position.y + height / 2;
+          rfInstance.setCenter(cx, cy, { zoom: 1, duration: 350 });
+        }
+      } catch {}
+    };
+    if (typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function') {
+      window.requestAnimationFrame(center);
+    } else {
+      setTimeout(center, 0);
+    }
+  }, [rfInstance, isMultiSelect, selectedTag, isProcessing, nodes]);
+
+  const handleCategoryClick = useCallback((t) => {
+    if (isMultiSelect) {
+      setActiveTags((prev) => prev.includes(t) ? prev.filter((x) => x !== t) : [...prev, t]);
+    } else {
+      setSelectedTag(t);
+    }
+  }, [isMultiSelect]);
 
   return (
     <div className="h-full flex flex-col canvas-library-view" style={{ backgroundColor: 'var(--bg-primary)' }}>
@@ -493,6 +527,22 @@ const CanvasLibraryView = ({ newsData, onTransferItem, onOpenCardModal }) => {
           transform: none !important;
           background: inherit !important;
         }
+        /* Garantir que os nodes recebam eventos de hover mesmo se interatividade estiver off */
+        .canvas-library-view .react-flow__renderer,
+        .canvas-library-view .react-flow__nodes,
+        .canvas-library-view .react-flow__node {
+          pointer-events: auto !important;
+        }
+        /* Spotlight hover para nodes de item */
+        .canvas-library-view .react-flow__node-itemNode .item-node-card {
+          transform-origin: center !important;
+          transition: all ease-in-out 12s;
+        }
+        .canvas-library-view .react-flow__node-itemNode:hover .item-node-card {
+          transform: scale(1.15) !important;
+          box-shadow: 0 14px 34px rgba(255,255,255,0.12) !important;
+          border-color: rgba(255,255,255,0.5) !important;
+        }
       `}</style>
       <div className="p-3 border-b" style={{ borderColor: 'var(--border-primary)' }}>
         <div className="flex items-center gap-2">
@@ -500,69 +550,152 @@ const CanvasLibraryView = ({ newsData, onTransferItem, onOpenCardModal }) => {
             <FolderTree size={18} style={{ color: 'var(--primary-green)' }} />
           </motion.div>
           <span className="text-sm font-semibold" style={{ color: 'var(--text-primary)', fontFamily: '"Nunito Sans", "Inter", sans-serif' }}>Visão em Canvas</span>
-          {allTags.length > 0 && (
-            <select
-              value={selectedTag}
-              onChange={(e) => setSelectedTag(e.target.value)}
-              className="ml-3 text-xs px-2 py-1 rounded border"
-              style={{ backgroundColor: 'var(--bg-primary)', color: 'var(--text-primary)', borderColor: 'var(--border-primary)' }}
-            >
-              {allTags.map(t => (
-                <option key={t} value={t}>{t}</option>
-              ))}
-            </select>
-          )}
+          <div className="ml-auto" />
         </div>
       </div>
-      <div className="flex-1">
-        {isProcessing ? (
-          <div className="h-full flex items-center justify-center">
-            <motion.div
-              className="w-8 h-8 rounded-full"
-              style={{ backgroundColor: 'var(--primary-green)' }}
-              animate={{ scale: [0.8, 1.1, 0.8], opacity: [0.6, 1, 0.6] }}
-              transition={{ repeat: Infinity, duration: 1.2 }}
-            />
+      <div className={`flex-1 flex ${sidebarOnRight ? 'flex-row-reverse' : ''}`}>
+        <div
+          className={`${sidebarOnRight ? 'border-l' : 'border-r'}`}
+          style={{
+            borderColor: 'var(--border-primary)',
+            backgroundColor: 'var(--bg-secondary)',
+            width: isSidebarCollapsed ? 36 : (compact ? 160 : 256),
+            transition: 'width 0.2s ease',
+            display: 'flex',
+            flexDirection: 'column'
+          }}
+        >
+          <div className={`${compact ? 'p-2' : 'p-3'} flex ${sidebarOnRight ? 'justify-start' : 'justify-end'} gap-2`} style={{ alignItems: 'center' }}>
+            {enableSidebarToggle && (
+              <motion.button
+                onClick={toggleSidebar}
+                className="p-1.5 rounded-lg border transition-colors"
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                title={`${isSidebarCollapsed ? 'Expandir' : 'Recolher'} categorias`}
+                style={{
+                  backgroundColor: 'var(--bg-tertiary)',
+                  borderColor: 'var(--border-primary)',
+                  color: 'var(--text-secondary)'
+                }}
+              >
+                {(isSidebarCollapsed
+                  ? (sidebarOnRight ? <ChevronLeft size={16} /> : <ChevronRight size={16} />)
+                  : (sidebarOnRight ? <ChevronRight size={16} /> : <ChevronLeft size={16} />))}
+              </motion.button>
+            )}
+            <motion.button
+              onClick={toggleMultiSelect}
+              className={`p-1.5 rounded-lg border transition-colors`}
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              title={isMultiSelect ? 'Desativar seleção de categorias' : 'Ativar seleção de categorias'}
+              style={{
+                backgroundColor: isMultiSelect ? 'var(--bg-tertiary)' : 'var(--bg-tertiary)',
+                borderColor: isMultiSelect ? 'var(--primary-green)' : 'var(--border-primary)',
+                color: isMultiSelect ? 'var(--primary-green)' : 'var(--text-secondary)'
+              }}
+            >
+              {isMultiSelect ? <CheckSquare size={16} /> : <Square size={16} />}
+            </motion.button>
           </div>
-        ) : hasData ? (
-          <ReactFlow
-            nodes={nodes}
-            edges={edges}
-            nodeTypes={nodeTypes}
-            connectionLineType={ConnectionLineType.SmoothStep}
-            fitView
-            fitViewOptions={{ padding: 0.2, includeHiddenNodes: false }}
-            minZoom={0.2}
-            maxZoom={1.5}
-            zoomOnScroll
-            zoomOnPinch
-            panOnScroll
-            nodesDraggable={false}
-            nodesConnectable={false}
-            elementsSelectable={false}
-            className="h-full"
-            style={{ background: 'var(--bg-primary)' }}
-          >
-            <Background color="var(--border-primary)" gap={16} />
-            <MiniMap
-              nodeStrokeColor={() => 'var(--primary-green)'}
-              nodeColor={() => 'var(--bg-secondary)'}
-              maskColor="rgba(0,0,0,0.2)"
-            />
-            <Controls position="bottom-right" />
-          </ReactFlow>
-        ) : (
-          <div className="h-full flex items-center justify-center">
-            <div className="text-center">
-              <div className="mb-2 text-sm" style={{ color: 'var(--text-secondary)' }}>
-                Nenhum dado disponível para exibir no Canvas
-              </div>
-              <div className="text-xs" style={{ color: 'var(--text-secondary)' }}>
-                Verifique se a notícia possui <code>core_quotes</code> válidos com <code>categoria_funcional</code>.
+          {!isSidebarCollapsed && (
+            <div className={`${compact ? 'px-2 pb-2' : 'px-3 pb-3'} overflow-auto`} style={{ flex: 1 }}>
+              <div className="text-[11px] uppercase tracking-wide mb-2 opacity-70" style={{ color: 'var(--text-secondary)' }}>Categorias</div>
+              {allTags.length > 0 ? (
+                allTags.map((t) => {
+                  const base = categoryColorFor(t);
+                  const pastel = toPastelColor(base);
+                  const isSelected = isMultiSelect ? activeTags.includes(t) : (t === selectedTag);
+                  return (
+                    <motion.button
+                      key={t}
+                      onClick={() => handleCategoryClick(t)}
+                      className={`w-full flex items-center gap-2 ${compact ? 'px-2 py-1.5' : 'px-3 py-2'} rounded text-left mb-1`}
+                      whileHover={{ scale: 1.01 }}
+                      whileTap={{ scale: 0.98 }}
+                      style={{
+                        backgroundColor: isSelected ? 'var(--bg-tertiary)' : 'transparent',
+                        color: 'var(--text-primary)',
+                        border: `1px solid ${isSelected ? pastel : 'var(--border-primary)'}`
+                      }}
+                      title={t}
+                    >
+                      <span className="inline-block w-2.5 h-2.5 rounded-full" style={{ backgroundColor: pastel }} />
+                      {isMultiSelect && (
+                        isSelected ? <CheckSquare size={14} style={{ color: 'var(--primary-green)' }} /> : <Square size={14} style={{ color: 'var(--text-secondary)' }} />
+                      )}
+                      <span className={`${compact ? 'text-xs' : 'text-sm'} truncate`} style={{ fontFamily: '"Nunito Sans", "Inter", sans-serif' }}>{formatCategoryLabel(t)}</span>
+                    </motion.button>
+                  );
+                })
+              ) : (
+                <div className="text-xs px-2 py-1" style={{ color: 'var(--text-secondary)' }}>Sem categorias</div>
+              )}
+            </div>
+          )}
+        </div>
+        <div className="flex-1 relative">
+          {/* Fundo animado Vanta (padrão: dots branco, sem linhas) */}
+          <VantaBackground 
+            style={{ opacity: 0.15
+             }}
+            effect="dots"
+            options={{
+              backgroundColor: 0x0b0f12,
+              color: 0xffffff,
+              color2: 0xffffff,
+              size: 5.0,
+              spacing: 35.0,
+              showLines: false
+            }}
+            enableAnimatedBackground={true}
+          />
+          {isProcessing ? (
+            <div className="h-full flex items-center justify-center relative z-10">
+              <motion.div
+                className="w-8 h-8 rounded-full"
+                style={{ backgroundColor: 'var(--primary-green)' }}
+                animate={{ scale: [0.8, 1.1, 0.8], opacity: [0.6, 1, 0.6] }}
+                transition={{ repeat: Infinity, duration: 1.2 }}
+              />
+            </div>
+          ) : hasData ? (
+            <ReactFlow
+              onInit={handleInit}
+              nodes={nodes}
+              edges={edges}
+              nodeTypes={memoNodeTypes}
+              // Sem linhas de conexão e sem interações de conexão
+              proOptions={{ hideAttribution: true }}
+              fitView
+              fitViewOptions={{ padding: 0.2, includeHiddenNodes: false }}
+              minZoom={0.2}
+              maxZoom={1.5}
+              zoomOnScroll
+              zoomOnPinch
+              panOnScroll
+              nodesDraggable={false}
+              nodesConnectable={false}
+              elementsSelectable={false}
+              className="h-full relative z-10"
+              style={{ background: 'transparent' }}
+            >
+              <Controls position="bottom-right" showInteractive={false} />
+            </ReactFlow>
+          ) : (
+            <div className="h-full flex items-center justify-center relative z-10">
+              <div className="text-center">
+                <div className="mb-2 text-sm" style={{ color: 'var(--text-secondary)' }}>
+                  Nenhum dado disponível para exibir no Canvas
+                </div>
+                <div className="text-xs" style={{ color: 'var(--text-secondary)' }}>
+                  Verifique se a notícia possui <code>core_quotes</code> válidos com <code>categoria_funcional</code>.
+                </div>
               </div>
             </div>
-          </div>
-        )}
+          )}
+        </div>
       </div>
     </div>
   );

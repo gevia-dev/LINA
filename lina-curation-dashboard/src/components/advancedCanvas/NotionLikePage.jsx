@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   X, 
@@ -15,6 +15,7 @@ import {
   Layers as LayersIcon,
   Braces as BracesIcon
 } from 'lucide-react';
+import CanvasLibraryView from './CanvasLibraryView';
 // Observação: BlockNote foi temporariamente substituído por textarea para evitar
 // problemas de build. Podemos reativar quando a exportação estiver estável.
 
@@ -31,10 +32,43 @@ const NotionLikePage = ({
   edges = [],
   onSaveNode
 }) => {
-  const [isExpanded, setIsExpanded] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(true);
   const [editingSection, setEditingSection] = useState(null);
   const [activeSections, setActiveSections] = useState(new Set());
   const [activeSection, setActiveSection] = useState(null);
+  // Splitter state: proporção editor/library
+  const [splitRatio, setSplitRatio] = useState(0.6); // 60% editor / 40% library
+  const [isResizing, setIsResizing] = useState(false);
+  const rightPaneRef = useRef(null);
+  const EDITOR_MIN_PX = 480;
+  const LIB_MIN_PX = 360;
+
+  const onStartResize = useCallback((e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsResizing(true);
+  }, []);
+
+  useEffect(() => {
+    if (!isResizing) return;
+    const handleMouseMove = (e) => {
+      const el = rightPaneRef.current;
+      if (!el) return;
+      const rect = el.getBoundingClientRect();
+      let x = e.clientX - rect.left;
+      // Respeitar mínimos
+      x = Math.max(EDITOR_MIN_PX, Math.min(rect.width - LIB_MIN_PX, x));
+      const ratio = x / rect.width;
+      setSplitRatio(ratio);
+    };
+    const handleMouseUp = () => setIsResizing(false);
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isResizing]);
 
   // Construir visualização a partir dos nodes do canvas (summary, body, conclusion)
   const processedData = useMemo(() => {
@@ -57,7 +91,9 @@ const NotionLikePage = ({
             title: n.data?.title || n.id,
             content: n.data?.content || '',
             coreKey: n.data?.coreKey || '',
-            type: n.type
+            type: n.type,
+            structureType: n.data?.structureType || '',
+            isStructure: (n.data?.nodeType === 'estrutura') || (n.data?.coreKey === 'micro_estrutura')
           }));
       };
 
@@ -73,7 +109,9 @@ const NotionLikePage = ({
             frase_completa: cn.content,
             categoria_funcional: cn.coreKey,
             nodeId: cn.id,
-            nodeType: cn.type
+            nodeType: cn.type,
+            structureType: cn.structureType,
+            isStructure: cn.isStructure
           }))
         }));
 
@@ -89,7 +127,9 @@ const NotionLikePage = ({
             frase_completa: cn.content,
             categoria_funcional: cn.coreKey,
             nodeId: cn.id,
-            nodeType: cn.type
+            nodeType: cn.type,
+            structureType: cn.structureType,
+            isStructure: cn.isStructure
           }))
         }));
 
@@ -142,6 +182,15 @@ const NotionLikePage = ({
     };
     return colors[categoria] || colors.default;
   };
+
+  // Rotulo amigável para tipo de estrutura
+  const getStructureLabel = (value) => ({
+    continua: 'Continua',
+    paragrafos: 'Paragrafos',
+    parágrafos: 'Paragrafos',
+    topicos: 'Topicos',
+    tópicos: 'Topicos'
+  }[(value || '').toString().toLowerCase()] || 'Estrutura');
 
   // Inicialmente todas as seções ativas quando abrir
   useEffect(() => {
@@ -203,6 +252,18 @@ const NotionLikePage = ({
         
         .notion-editor .bn-slash-menu-item[data-selected="true"] {
           background-color: var(--primary-green-transparent) !important;
+        }
+        
+        /* Splitter vertical entre editor e canvas library */
+        .splitter-handle {
+          background-color: var(--border-primary);
+          transition: background-color 0.15s ease, width 0.15s ease;
+        }
+        .splitter-handle:hover {
+          background-color: rgba(255, 255, 255, 0.3);
+        }
+        .splitter-handle.active {
+          background-color: rgba(255, 255, 255, 0.45);
         }
       `}</style>
       
@@ -316,7 +377,7 @@ const NotionLikePage = ({
             <div className="flex-1 flex overflow-hidden">
               {/* Timeline Sidebar */}
               <motion.div
-                className="w-72 border-r overflow-y-auto"
+                className="w-80 min-w-[20rem] border-r overflow-y-auto"
                 style={{ 
                   backgroundColor: 'var(--bg-secondary)', 
                   borderColor: 'var(--border-primary)' 
@@ -403,7 +464,7 @@ const NotionLikePage = ({
 
                         {/* Phrases list when section is active */}
                         <AnimatePresence>
-                          {activeSection === section.id && activeSections.has(section.id) && (
+                          {(activeSections.has(section.id) || activeSection === section.id) && (
                             <motion.div
                               className="ml-8 mt-2 space-y-2"
                               initial={{ opacity: 0, height: 0 }}
@@ -412,13 +473,16 @@ const NotionLikePage = ({
                               transition={{ duration: 0.3 }}
                             >
                               {section.phrases.map((phrase, phraseIndex) => {
-                                const isStructure = phrase.nodeType === 'dataNode';
+                                const role = (phrase.categoria_funcional || '').toString();
+                                const isStructure = role === 'estrutura' || role === 'micro_estrutura' || role.includes('estrutura');
+                                const isMicro = !isStructure && role.toLowerCase().includes('micro');
                                 const borderColor = isStructure ? '#F5A623' : '#4A90E2';
-                                const IconComp = isStructure ? LayersIcon : QuoteIcon;
+                                const IconComp = isStructure ? LayersIcon : (isMicro ? QuoteIcon : BracesIcon);
+                                const chipText = isStructure ? getStructureLabel(phrase.structureType) : phrase.titulo_frase;
                                 return (
                                   <motion.div
                                     key={phrase.id}
-                                    className="inline-flex"
+                                    className="inline-flex max-w-full"
                                     initial={{ opacity: 0, x: -10 }}
                                     animate={{ opacity: 1, x: 0 }}
                                     transition={{ delay: phraseIndex * 0.05 }}
@@ -426,10 +490,10 @@ const NotionLikePage = ({
                                     <span
                                       className="inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[12px] leading-4 max-w-full"
                                       style={{ borderColor, color: 'var(--text-secondary)' }}
-                                      title={phrase.titulo_frase}
+                                      title={chipText}
                                     >
                                       <IconComp className="h-3.5 w-3.5" />
-                                      <span className="truncate max-w-[220px]">{phrase.titulo_frase}</span>
+                                      <span className="truncate max-w-[220px]">{chipText}</span>
                                     </span>
                                   </motion.div>
                                 );
@@ -443,22 +507,64 @@ const NotionLikePage = ({
                 </div>
               </motion.div>
 
-              {/* Main Content Area */}
+              {/* Main Content Area (Editor + Canvas Library ao lado direito) */}
               <motion.div
-                className="flex-1 overflow-y-auto"
+                className="flex-1 overflow-hidden flex"
                 initial={{ opacity: 0, x: 20 }}
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ delay: 0.3 }}
+                ref={rightPaneRef}
               >
-                {activeSection ? (
-                  <ActiveSectionEditor 
-                    section={processedData.find(s => s.id === activeSection)}
-                    getCategoryColor={getCategoryColor}
-                    onSaveNode={onSaveNode}
-                  />
-                ) : (
-                  <EmptyState />
-                )}
+                <div
+                  className="overflow-y-auto"
+                  style={{
+                    width: `${Math.round(splitRatio * 100)}%`,
+                    minWidth: EDITOR_MIN_PX
+                  }}
+                >
+                  {activeSection ? (
+                    <ActiveSectionEditor 
+                      section={processedData.find(s => s.id === activeSection)}
+                      getCategoryColor={getCategoryColor}
+                      getStructureLabel={getStructureLabel}
+                      onSaveNode={onSaveNode}
+                    />
+                  ) : (
+                    <div className="p-6 space-y-8">
+                      {processedData
+                        .filter((s) => activeSections.has(s.id))
+                        .map((s) => (
+                          <ActiveSectionEditor
+                            key={s.id}
+                            section={s}
+                            getCategoryColor={getCategoryColor}
+                            getStructureLabel={getStructureLabel}
+                            onSaveNode={onSaveNode}
+                          />
+                        ))}
+                    </div>
+                  )}
+                </div>
+                {/* Splitter handle */}
+                <div
+                  onMouseDown={onStartResize}
+                  className={`splitter-handle cursor-col-resize ${isResizing ? 'active' : ''}`}
+                  style={{
+                    width: 5,
+                    zIndex: 10
+                  }}
+                  title="Arraste para redimensionar"
+                />
+                <div
+                  className="overflow-hidden"
+                  style={{
+                    width: `${Math.round((1 - splitRatio) * 100)}%`,
+                    minWidth: LIB_MIN_PX,
+                    backgroundColor: 'var(--bg-secondary)'
+                  }}
+                >
+                  <CanvasLibraryView compact sidebarOnRight enableSidebarToggle newsData={newsData} onTransferItem={() => {}} onOpenCardModal={() => {}} />
+                </div>
               </motion.div>
             </div>
 
@@ -512,8 +618,13 @@ const EmptyState = () => (
 );
 
 // Componente para editar seção ativa
-const ActiveSectionEditor = ({ section, getCategoryColor, onSaveNode }) => {
+const ActiveSectionEditor = ({ section, getCategoryColor, getStructureLabel, onSaveNode }) => {
   const [editingPhrase, setEditingPhrase] = useState(null);
+  const isStructurePhrase = (p) => {
+    return p.isStructure === true || Boolean(p.structureType);
+  };
+  const structurePhrases = Array.isArray(section?.phrases) ? section.phrases.filter(isStructurePhrase) : [];
+  const contentPhrases = Array.isArray(section?.phrases) ? section.phrases.filter((p) => !isStructurePhrase(p)) : [];
   
   if (!section) return <EmptyState />;
 
@@ -525,7 +636,7 @@ const ActiveSectionEditor = ({ section, getCategoryColor, onSaveNode }) => {
         transition={{ duration: 0.4 }}
       >
         <h2 
-          className="text-2xl font-bold mb-6"
+          className="text-2xl font-bold"
           style={{ 
             color: 'var(--text-primary)', 
             fontFamily: '"Nunito Sans", "Inter", sans-serif' 
@@ -533,9 +644,19 @@ const ActiveSectionEditor = ({ section, getCategoryColor, onSaveNode }) => {
         >
           {section.title}
         </h2>
+        {structurePhrases.length > 0 && (
+          <div className="mt-2 mb-6 flex flex-wrap gap-2">
+            {structurePhrases.map((phrase) => (
+              <span key={phrase.id} className="inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[12px] leading-4" style={{ borderColor: '#F5A623', color: 'var(--text-secondary)' }} title={getStructureLabel(phrase.structureType)}>
+                <LayersIcon className="h-3.5 w-3.5" />
+                <span>{getStructureLabel(phrase.structureType)}</span>
+              </span>
+            ))}
+          </div>
+        )}
 
         <div className="space-y-6">
-          {section.phrases.map((phrase, index) => (
+          {contentPhrases.map((phrase, index) => (
             <motion.div
               key={phrase.id}
               className="group"
@@ -594,15 +715,6 @@ const PhraseEditor = ({ phrase, getCategoryColor, isEditing, onEditToggle, onSav
           >
             {phrase.titulo_frase}
           </h3>
-          <span 
-            className="text-xs px-2 py-1 rounded-full"
-            style={{ 
-              backgroundColor: `${getCategoryColor(phrase.categoria_funcional)}20`,
-              color: getCategoryColor(phrase.categoria_funcional)
-            }}
-          >
-            {phrase.nodeType === 'dataNode' ? 'Estrutura/Dados' : phrase.categoria_funcional}
-          </span>
         </div>
         
         <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
