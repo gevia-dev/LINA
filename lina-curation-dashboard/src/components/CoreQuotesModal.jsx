@@ -1,4 +1,19 @@
-import React from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
+
+const chipBaseStyle = {
+  padding: '10px 14px',
+  backgroundColor: '#2A2A2A',
+  border: '1px solid #333333',
+  borderRadius: '12px',
+  fontSize: '14px',
+  color: '#E0E0E0',
+  fontFamily: 'Inter',
+  fontWeight: 600,
+  cursor: 'pointer',
+  transition: 'all 0.2s ease',
+  whiteSpace: 'nowrap',
+  transform: 'scale(1)'
+};
 
 const Wrapper = ({ children, onClose }) => (
   <div
@@ -22,9 +37,9 @@ const Wrapper = ({ children, onClose }) => (
       onClick={(e) => e.stopPropagation()}
       style={{
         width: '80%',
-        height: '80vh',
+        height: '65vh',
         maxWidth: 1100,
-        maxHeight: '80vh',
+        maxHeight: '65vh',
         overflow: 'auto',
         backgroundColor: 'var(--bg-secondary)',
         border: '1px solid var(--border-primary)',
@@ -37,7 +52,7 @@ const Wrapper = ({ children, onClose }) => (
   </div>
 );
 
-const Title = ({ text }) => (
+const TitleBar = ({ text, onClose }) => (
   <div style={{
     position: 'sticky',
     top: 0,
@@ -48,41 +63,114 @@ const Title = ({ text }) => (
     justifyContent: 'space-between',
     padding: '18px 24px',
     zIndex: 1,
-    fontFamily: 'Inter',
-    fontWeight: 700,
-    fontSize: 18,
-    color: 'var(--text-primary)'
-  }}>{text}</div>
+  }}>
+    <div style={{
+      fontFamily: 'Inter',
+      fontWeight: 700,
+      fontSize: 18,
+      color: 'var(--text-primary)'
+    }}>{text}</div>
+    <button
+      onClick={onClose}
+      aria-label="Fechar"
+      style={{
+        background: 'transparent',
+        border: '1px solid #333333',
+        color: 'var(--text-primary)',
+        borderRadius: 8,
+        padding: '8px 12px',
+        cursor: 'pointer'
+      }}
+    >
+      Fechar
+    </button>
+  </div>
 );
 
-const QuoteCard = ({ titulo, frase }) => (
+const PhraseCard = ({ frase }) => (
   <div style={{
     backgroundColor: '#2A2A2A',
     border: '1px solid #333333',
     borderRadius: 12,
-    padding: 18,
-    display: 'flex',
-    flexDirection: 'column',
-    gap: 8,
+    padding: 28,
+    color: 'var(--text-primary)',
+    lineHeight: 1.9,
+    fontSize: 18,
+    fontFamily: 'Inter',
   }}>
-    <div style={{ color: 'var(--text-primary)', fontFamily: 'Inter', fontWeight: 600, fontSize: 15 }}>{titulo}</div>
-    <div style={{ color: 'var(--text-primary)', fontFamily: 'Inter', fontSize: 14, lineHeight: 1.8 }}>{frase}</div>
+    {frase}
   </div>
 );
 
 const CoreQuotesModal = ({ isOpen, onClose, quotes = [], title = 'Citações' }) => {
+  const [selectedIndex, setSelectedIndex] = useState(0);
+  const [visible, setVisible] = useState(true);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    setSelectedIndex(0);
+    setVisible(true);
+  }, [isOpen]);
+
+  // animação quando troca o índice
+  useEffect(() => {
+    setVisible(false);
+    const t = setTimeout(() => setVisible(true), 20);
+    return () => clearTimeout(t);
+  }, [selectedIndex]);
+
+  const selected = useMemo(() => {
+    if (!quotes || quotes.length === 0) return null;
+    return quotes[Math.min(selectedIndex, quotes.length - 1)];
+  }, [quotes, selectedIndex]);
+
   if (!isOpen) return null;
 
   return (
     <Wrapper onClose={onClose}>
-      <Title text={title} />
-      <div style={{ padding: '16px 24px 24px 24px', display: 'grid', gridTemplateColumns: '1fr', gap: 16 }}>
-        {quotes.length === 0 && (
+      <TitleBar text={title} onClose={onClose} />
+
+      {/* Chips de títulos */}
+      <div style={{ padding: '20px 24px 8px 24px' }}>
+        {quotes.length === 0 ? (
           <div style={{ color: '#A0A0A0', fontFamily: 'Inter' }}>Nenhuma citação disponível para esta seção.</div>
+        ) : (
+          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+            {quotes.map((q, idx) => {
+              const isSelected = selectedIndex === idx;
+              return (
+                <div
+                  key={`quote-chip-${idx}`}
+                  onClick={() => setSelectedIndex(idx)}
+                  style={{
+                    ...chipBaseStyle,
+                    backgroundColor: isSelected ? '#333333' : '#2A2A2A',
+                    borderColor: isSelected ? '#666666' : '#333333',
+                    transform: isSelected ? 'scale(1.06)' : 'scale(1)',
+                    boxShadow: isSelected ? '0 6px 16px rgba(0,0,0,0.35)' : 'none',
+                  }}
+                  title={q.titulo_frase || 'Título'}
+                >
+                  {q.titulo_frase || 'Título'}
+                </div>
+              );
+            })}
+          </div>
         )}
-        {quotes.map((q, idx) => (
-          <QuoteCard key={idx} titulo={q.titulo_frase || 'Sem título'} frase={q.frase_completa || ''} />
-        ))}
+      </div>
+
+      {/* Frase selecionada */}
+      <div
+        style={{
+          padding: '12px 24px 24px 24px',
+          opacity: visible ? 1 : 0,
+          transform: visible ? 'translateY(0px)' : 'translateY(6px)',
+          transition: 'opacity 180ms ease, transform 180ms ease',
+        }}
+      >
+        {selected && (
+          <PhraseCard frase={selected.frase_completa || ''} />
+        )}
       </div>
     </Wrapper>
   );

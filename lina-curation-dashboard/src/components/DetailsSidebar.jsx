@@ -14,10 +14,12 @@ const DetailsSidebar = ({ selectedItem }) => {
   const [quotesForSection, setQuotesForSection] = useState([]);
   const [quotesModalTitle, setQuotesModalTitle] = useState('Citações');
 
-  // Garantir que o modal de entidades não permaneça aberto ao trocar de notícia
+  // Garantir que o modal de entidades e o de citações não permaneçam abertos ao trocar de notícia
   React.useEffect(() => {
     setIsEntitiesModalOpen(false);
     setEntitiesModalIndex(0);
+    setIsQuotesModalOpen(false);
+    setQuotesForSection([]);
   }, [selectedItem?.id]);
 
   const handleCreateNews = async () => {
@@ -376,7 +378,25 @@ const DetailsSidebar = ({ selectedItem }) => {
             <div>
               {wellnessData?.relevance_market_trends?.relevancia_mercado && (
                 <DetailSection label="Por que isso importa?" hasBackground={true}>
-                  {wellnessData.relevance_market_trends.relevancia_mercado}
+                  <div
+                    onClick={() => {
+                      try {
+                        const bucket = coreQuotes?.search_quotes || {};
+                        const allLists = Object.values(bucket).flat();
+                        const filtered = allLists.filter((item) => item?.categoria_funcional === 'Causas_Motivacoes');
+                        setQuotesForSection(filtered || []);
+                        setQuotesModalTitle('Por que isso importa? • Causas e Motivações');
+                        setIsQuotesModalOpen(true);
+                      } catch (e) {
+                        setQuotesForSection([]);
+                        setIsQuotesModalOpen(true);
+                      }
+                    }}
+                    style={{ cursor: 'pointer' }}
+                    title="Clique para ver exemplos de citações deste bloco"
+                  >
+                    {wellnessData.relevance_market_trends.relevancia_mercado}
+                  </div>
                 </DetailSection>
               )}
             </div>
@@ -400,7 +420,25 @@ const DetailsSidebar = ({ selectedItem }) => {
             <div>
               {structuredData?.motivo_ou_consequencia && (
                 <DetailSection label="Motivo / Consequência" hasBackground={true}>
-                  {structuredData.motivo_ou_consequencia}
+                  <div
+                    onClick={() => {
+                      try {
+                        const bucket = coreQuotes?.search_quotes || {};
+                        const allLists = Object.values(bucket).flat();
+                        const filtered = allLists.filter((item) => item?.categoria_funcional === 'Impactos_Consequencias');
+                        setQuotesForSection(filtered || []);
+                        setQuotesModalTitle('Motivo / Consequência • Impactos e Consequências');
+                        setIsQuotesModalOpen(true);
+                      } catch (e) {
+                        setQuotesForSection([]);
+                        setIsQuotesModalOpen(true);
+                      }
+                    }}
+                    style={{ cursor: 'pointer' }}
+                    title="Clique para ver exemplos de citações deste bloco"
+                  >
+                    {structuredData.motivo_ou_consequencia}
+                  </div>
                 </DetailSection>
               )}
             </div>
@@ -409,7 +447,25 @@ const DetailsSidebar = ({ selectedItem }) => {
             <div>
               {wellnessData?.metadata?.oportunidades_identificadas && (
                 <DetailSection label="Possiveis oportunidades" hasBackground={true}>
-                  {wellnessData.metadata.oportunidades_identificadas}
+                  <div
+                    onClick={() => {
+                      try {
+                        const bucket = coreQuotes?.search_quotes || {};
+                        const allLists = Object.values(bucket).flat();
+                        const filtered = allLists.filter((item) => item?.categoria_funcional === 'Desafios_Oportunidades');
+                        setQuotesForSection(filtered || []);
+                        setQuotesModalTitle('Possiveis oportunidades • Desafios e Oportunidades');
+                        setIsQuotesModalOpen(true);
+                      } catch (e) {
+                        setQuotesForSection([]);
+                        setIsQuotesModalOpen(true);
+                      }
+                    }}
+                    style={{ cursor: 'pointer' }}
+                    title="Clique para ver exemplos de citações deste bloco"
+                  >
+                    {wellnessData.metadata.oportunidades_identificadas}
+                  </div>
                 </DetailSection>
               )}
             </div>
@@ -418,7 +474,25 @@ const DetailsSidebar = ({ selectedItem }) => {
             <div>
               {wellnessData?.relevance_market_trends?.impacto_futuro && (
                 <DetailSection label="Impacto futuro" hasBackground={true}>
-                  {wellnessData.relevance_market_trends.impacto_futuro}
+                  <div
+                    onClick={() => {
+                      try {
+                        const bucket = coreQuotes?.search_quotes || {};
+                        const allLists = Object.values(bucket).flat();
+                        const filtered = allLists.filter((item) => item?.categoria_funcional === 'Projecoes_Futuro');
+                        setQuotesForSection(filtered || []);
+                        setQuotesModalTitle('Impacto futuro • Projeções de Futuro');
+                        setIsQuotesModalOpen(true);
+                      } catch (e) {
+                        setQuotesForSection([]);
+                        setIsQuotesModalOpen(true);
+                      }
+                    }}
+                    style={{ cursor: 'pointer' }}
+                    title="Clique para ver exemplos de citações deste bloco"
+                  >
+                    {wellnessData.relevance_market_trends.impacto_futuro}
+                  </div>
                 </DetailSection>
               )}
             </div>
