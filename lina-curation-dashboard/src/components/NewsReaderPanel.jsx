@@ -15,6 +15,14 @@ function extractFinalTextMarkdown(item) {
   return '';
 }
 
+// Normaliza títulos Markdown sem espaço após as # (ex: "##Titulo" -> "## Titulo")
+function normalizeMarkdownHeadings(text) {
+  if (typeof text !== 'string' || text.length === 0) return '';
+  // Apenas no começo da linha, 1 a 6 hashes, seguidos imediatamente de caractere não espaço/não #
+  // Ex.: "##Titulo" => "## Titulo"; mantém linhas corretas intocadas
+  return text.replace(/^(#{1,6})([^\s#])/gm, '$1 $2');
+}
+
 const NewsReaderPanel = ({ item, onClose }) => {
   const [title, setTitle] = useState(item?.title || 'Sem título');
   const [markdown, setMarkdown] = useState('');
@@ -22,7 +30,9 @@ const NewsReaderPanel = ({ item, onClose }) => {
 
   useEffect(() => {
     setTitle(item?.title || 'Sem título');
-    setMarkdown(extractFinalTextMarkdown(item));
+    const raw = extractFinalTextMarkdown(item);
+    const normalized = normalizeMarkdownHeadings(raw);
+    setMarkdown(normalized);
   }, [item]);
 
   return (

@@ -87,7 +87,8 @@ const CurationFeed = () => {
   // Filtrar notícias baseado nos filtros selecionados
   const filteredNews = baseItems.filter(item => {
     const categoryMatch = filterCategory === 'all' || item.macro_categoria === filterCategory;
-    return categoryMatch;
+    const hasFinalText = item.final_text && item.final_text.trim() !== '';
+    return categoryMatch && hasFinalText;
   });
 
   // Obter categorias únicas para o filtro
@@ -470,19 +471,19 @@ const CurationFeed = () => {
                 <div style={{ fontSize: '48px', marginBottom: '16px', color: 'var(--text-secondary)' }}>
                   {activeTab === 'completed' ? '✅' : '📰'}
                 </div>
-                <p 
-                  style={{ 
-                    color: 'var(--text-secondary)', // Text Secondary do style guide
-                    fontFamily: 'Inter',
-                    fontSize: '18px', // Título de Seção (H2) do style guide
-                    fontWeight: '600' // SemiBold (600) do style guide
-                  }}
-                >
-                  {activeTab === 'completed' 
-                    ? 'Nenhuma notícia concluída encontrada.'
-                    : 'Nenhuma notícia pendente encontrada.'
-                  }
-                </p>
+                                 <p 
+                   style={{ 
+                     color: 'var(--text-secondary)', // Text Secondary do style guide
+                     fontFamily: 'Inter',
+                     fontSize: '18px', // Título de Seção (H2) do style guide
+                     fontWeight: '600' // SemiBold (600) do style guide
+                   }}
+                 >
+                   {activeTab === 'completed' 
+                     ? 'Nenhuma notícia concluída com texto final encontrada.'
+                     : 'Nenhuma notícia pendente com texto final encontrada.'
+                   }
+                 </p>
               </div>
             ) : (
               <>
