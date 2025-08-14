@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState, useCallback } from 'react';
+import React, { useEffect, useMemo, useState, useCallback, useRef } from 'react';
 import { ReactFlow, Controls } from '@xyflow/react';
 import { motion } from 'framer-motion';
 import { FolderTree, Tags, Quote, ArrowRight, ChevronLeft, ChevronRight, CheckSquare, Square } from 'lucide-react';
@@ -269,7 +269,7 @@ const buildHierarchy = (normalized) => {
   return { categories, counts };
 };
 
-const CanvasLibraryView = ({ newsData, onTransferItem, onOpenCardModal, compact = false, sidebarOnRight = false, enableSidebarToggle = false, initialSidebarCollapsed = false }) => {
+const CanvasLibraryView = ({ newsData, onTransferItem, onOpenCardModal, compact = false, sidebarOnRight = false, enableSidebarToggle = false, initialSidebarCollapsed = false, transparentSidebar = false }) => {
   const [nodes, setNodes] = useState([]);
   const [edges, setEdges] = useState([]);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -279,6 +279,28 @@ const CanvasLibraryView = ({ newsData, onTransferItem, onOpenCardModal, compact 
   const [isMultiSelect, setIsMultiSelect] = useState(false);
   const [activeTags, setActiveTags] = useState([]);
   const toggleSidebar = useCallback(() => setIsSidebarCollapsed((v) => !v), []);
+  const didInitialCenter = useRef(false);
+
+  // Força recálculo do Vanta quando a sidebar de categorias muda de largura
+  useEffect(() => {
+    const fire = () => {
+      try { window.dispatchEvent(new Event('resize')); } catch {}
+    };
+    if (typeof window !== 'undefined') {
+      if (typeof window.requestAnimationFrame === 'function') {
+        window.requestAnimationFrame(fire);
+      } else {
+        setTimeout(fire, 0);
+      }
+      const t1 = setTimeout(fire, 220); // após a transição de width (0.2s)
+      const t2 = setTimeout(fire, 450); // garantia tardia
+      return () => {
+        clearTimeout(t1);
+        clearTimeout(t2);
+      };
+    }
+    return undefined;
+  }, [isSidebarCollapsed]);
 
   const toggleMultiSelect = useCallback(() => {
     setIsMultiSelect((prev) => {
@@ -482,9 +504,11 @@ const CanvasLibraryView = ({ newsData, onTransferItem, onOpenCardModal, compact 
     if (!rfInstance || isProcessing) return;
     const center = () => {
       try {
+        const isFirstCenter = !didInitialCenter.current;
         if (isMultiSelect) {
           if (!nodes.length) return;
-          rfInstance.fitView({ padding: 0.2, includeHiddenNodes: false, duration: 350 });
+          rfInstance.fitView({ padding: 0.2, includeHiddenNodes: false, duration: isFirstCenter ? 0 : 350, maxZoom: 0.75 });
+          didInitialCenter.current = true;
           return;
         }
         if (!selectedTag) return;
@@ -492,7 +516,8 @@ const CanvasLibraryView = ({ newsData, onTransferItem, onOpenCardModal, compact 
         const categoryNode = nodes.find(n => n.id === categoryId);
         if (!categoryNode) return;
         if (typeof rfInstance.fitView === 'function') {
-          rfInstance.fitView({ nodes: [{ id: categoryId }], padding: 0.2, includeHiddenNodes: false, duration: 350 });
+          rfInstance.fitView({ nodes: [{ id: categoryId }], padding: 0.2, includeHiddenNodes: false, duration: isFirstCenter ? 0 : 350, maxZoom: 0.75 });
+          didInitialCenter.current = true;
           return;
         }
         if (typeof rfInstance.setCenter === 'function') {
@@ -500,7 +525,8 @@ const CanvasLibraryView = ({ newsData, onTransferItem, onOpenCardModal, compact 
           const height = 64;
           const cx = categoryNode.position.x + width / 2;
           const cy = categoryNode.position.y + height / 2;
-          rfInstance.setCenter(cx, cy, { zoom: 1, duration: 350 });
+          rfInstance.setCenter(cx, cy, { zoom: 0.75, duration: isFirstCenter ? 0 : 350 });
+          didInitialCenter.current = true;
         }
       } catch {}
     };
@@ -520,7 +546,7 @@ const CanvasLibraryView = ({ newsData, onTransferItem, onOpenCardModal, compact 
   }, [isMultiSelect]);
 
   return (
-    <div className="h-full flex flex-col canvas-library-view" style={{ backgroundColor: 'var(--bg-primary)' }}>
+    <div className="h-full flex flex-col canvas-library-view" style={{ backgroundColor: transparentSidebar ? 'transparent' : 'var(--bg-primary)' }}>
       <style>{`
         .canvas-library-view .react-flow__handle:hover {
           box-shadow: none !important;
@@ -544,21 +570,13 @@ const CanvasLibraryView = ({ newsData, onTransferItem, onOpenCardModal, compact 
           border-color: rgba(255,255,255,0.5) !important;
         }
       `}</style>
-      <div className="p-3 border-b" style={{ borderColor: 'var(--border-primary)' }}>
-        <div className="flex items-center gap-2">
-          <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}>
-            <FolderTree size={18} style={{ color: 'var(--primary-green)' }} />
-          </motion.div>
-          <span className="text-sm font-semibold" style={{ color: 'var(--text-primary)', fontFamily: '"Nunito Sans", "Inter", sans-serif' }}>Visão em Canvas</span>
-          <div className="ml-auto" />
-        </div>
-      </div>
+
       <div className={`flex-1 flex ${sidebarOnRight ? 'flex-row-reverse' : ''}`}>
         <div
           className={`${sidebarOnRight ? 'border-l' : 'border-r'}`}
           style={{
             borderColor: 'var(--border-primary)',
-            backgroundColor: 'var(--bg-secondary)',
+            backgroundColor: transparentSidebar ? 'transparent' : 'var(--bg-secondary)',
             width: isSidebarCollapsed ? 36 : (compact ? 160 : 256),
             transition: 'width 0.2s ease',
             display: 'flex',
@@ -669,7 +687,7 @@ const CanvasLibraryView = ({ newsData, onTransferItem, onOpenCardModal, compact 
               // Sem linhas de conexão e sem interações de conexão
               proOptions={{ hideAttribution: true }}
               fitView
-              fitViewOptions={{ padding: 0.2, includeHiddenNodes: false }}
+              fitViewOptions={{ padding: 0.2, includeHiddenNodes: false, maxZoom: 0.75 }}
               minZoom={0.2}
               maxZoom={1.5}
               zoomOnScroll

@@ -216,6 +216,46 @@ const VantaBackground = ({
     };
   }, [featureEnabled, isReducedMotion, effect, options]);
 
+  // Observa mudanças de tamanho do container para forçar resize do Vanta
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return undefined;
+    let rafId = null;
+    let timeoutId = null;
+    const triggerResize = () => {
+      try {
+        if (vantaInstanceRef.current && typeof vantaInstanceRef.current.resize === 'function') {
+          vantaInstanceRef.current.resize();
+        } else if (typeof window !== 'undefined') {
+          window.dispatchEvent(new Event('resize'));
+        }
+      } catch {}
+    };
+    const schedule = () => {
+      if (typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function') {
+        rafId = window.requestAnimationFrame(triggerResize);
+      } else {
+        timeoutId = setTimeout(triggerResize, 16);
+      }
+    };
+    if (typeof window !== 'undefined' && 'ResizeObserver' in window) {
+      const ro = new window.ResizeObserver(() => {
+        schedule();
+        // reforço após transições CSS
+        clearTimeout(timeoutId);
+        timeoutId = setTimeout(triggerResize, 240);
+      });
+      ro.observe(el);
+      return () => {
+        try { ro.disconnect(); } catch {}
+        if (rafId) cancelAnimationFrame(rafId);
+        if (timeoutId) clearTimeout(timeoutId);
+      };
+    }
+    // Fallback: observar window resize já é suficiente; sem RO não há muito o que fazer
+    return undefined;
+  }, []);
+
   return (
     <div
       ref={containerRef}

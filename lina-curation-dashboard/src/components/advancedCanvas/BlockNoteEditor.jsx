@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useImperativeHandle, forwardRef, useCallback } from 'react';
-import { useCreateBlockNote } from '@blocknote/react';
+import { useCreateBlockNote, BlockNoteViewEditor, FormattingToolbar, BlockTypeSelect, BasicTextStyleButton, CreateLinkButton, ColorStyleButton } from '@blocknote/react';
 import { BlockNoteView } from '@blocknote/mantine';
 import '@blocknote/core/fonts/inter.css';
 import '@blocknote/mantine/style.css';
@@ -155,7 +155,27 @@ const BlockNoteEditor = forwardRef(({ initialContent = '', onChange, onScroll },
 
   return (
     <div ref={scrollRef} className="notion-editor" style={{ height: '100vh', overflowY: 'auto', backgroundColor: 'var(--bg-primary)' }}>
-      <BlockNoteView editor={editor} onChange={handleEditorChange} />
+      <BlockNoteView
+        editor={editor}
+        onChange={handleEditorChange}
+        formattingToolbar={false}
+        sideMenu={false}
+        slashMenu={false}
+        renderEditor={false}
+      >
+        <div className="bn-top-toolbar" style={{ position: 'sticky', top: 0, zIndex: 5, backgroundColor: 'var(--bg-secondary)', borderBottom: '1px solid var(--border-primary)', padding: '6px 10px' }}>
+          <FormattingToolbar>
+            <BlockTypeSelect />
+            <BasicTextStyleButton basicTextStyle="bold" />
+            <BasicTextStyleButton basicTextStyle="italic" />
+            <BasicTextStyleButton basicTextStyle="underline" />
+            <BasicTextStyleButton basicTextStyle="strike" />
+            <ColorStyleButton />
+            <CreateLinkButton />
+          </FormattingToolbar>
+        </div>
+        <BlockNoteViewEditor />
+      </BlockNoteView>
     </div>
   );
 });
