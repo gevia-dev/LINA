@@ -89,6 +89,8 @@ const BlockNoteEditor = forwardRef(({ initialContent = '', onChange, onScroll, i
   const scrollRef = useRef(null);
   const toolbarRef = useRef(null);
   const [panelTop, setPanelTop] = useState(42);
+  const [isDragActive, setIsDragActive] = useState(false);
+  const dragActiveRef = useRef(false);
 
   // Conteúdo inicial em blocos (parsing simples de markdown -> blocks)
   const initialBlocks = useMemo(() => markdownToSimpleBlocks(initialContent), [initialContent]);
@@ -129,33 +131,81 @@ const BlockNoteEditor = forwardRef(({ initialContent = '', onChange, onScroll, i
     };
     el.addEventListener('scroll', onScrollInternal, { passive: true });
     // Permitir drop sobre o container do editor
+    const isAllowedDragTypes = (types) => {
+      try {
+        if (!Array.isArray(types)) return false;
+        return (
+          types.includes('application/json') ||
+          types.includes('text/plain') ||
+          types.includes('text/uri-list') ||
+          types.includes('application/x-lina-item')
+        );
+      } catch {
+        return false;
+      }
+    };
+    const onDragEnter = (e) => {
+      try {
+        const types = Array.from(e.dataTransfer?.types || []);
+        if (isAllowedDragTypes(types)) {
+          // Não usar capture; deixar ProseMirror lidar primeiro
+          if (!dragActiveRef.current) {
+            // Feedback no console quando entrar na área do editor
+            console.log('🎯 Editor detectou drag:', types);
+          }
+          dragActiveRef.current = true;
+          setIsDragActive(true);
+        }
+      } catch {}
+    };
     const onDragOver = (e) => {
       try {
         const types = Array.from(e.dataTransfer?.types || []);
-        if (types.includes('application/json') || types.includes('text/plain')) {
+        if (isAllowedDragTypes(types)) {
           e.preventDefault();
           e.dataTransfer.dropEffect = 'copy';
+          if (!dragActiveRef.current) {
+            console.log('🎯 Editor detectou drag:', types);
+          }
+          dragActiveRef.current = true;
+          setIsDragActive(true);
         }
+      } catch {}
+    };
+    const onDragLeave = (e) => {
+      try {
+        // Evita desligar ao navegar entre filhos internos
+        const current = e.currentTarget;
+        const related = e.relatedTarget;
+        if (current && related && current.contains(related)) return;
+        dragActiveRef.current = false;
+        setIsDragActive(false);
       } catch {}
     };
     const onDrop = (e) => {
       try {
         // A lógica final de drop é tratada no NotionLikePage (captura global)
         const types = Array.from(e.dataTransfer?.types || []);
-        if (types.includes('application/json') || types.includes('text/plain')) {
+        if (isAllowedDragTypes(types)) {
           e.preventDefault();
-          e.stopPropagation();
         }
       } catch {}
+      // Encerrar estado visual de drag em qualquer cenário
+      dragActiveRef.current = false;
+      setIsDragActive(false);
     };
-    el.addEventListener('dragover', onDragOver);
-    el.addEventListener('drop', onDrop);
+    el.addEventListener('dragenter', onDragEnter, { capture: false });
+    el.addEventListener('dragover', onDragOver, { capture: false });
+    el.addEventListener('dragleave', onDragLeave, { capture: false });
+    el.addEventListener('drop', onDrop, { capture: false });
     // Dispara uma leitura inicial
     queueMicrotask(onScrollInternal);
     return () => {
       el.removeEventListener('scroll', onScrollInternal);
-      el.removeEventListener('dragover', onDragOver);
-      el.removeEventListener('drop', onDrop);
+      el.removeEventListener('dragenter', onDragEnter, { capture: false });
+      el.removeEventListener('dragover', onDragOver, { capture: false });
+      el.removeEventListener('dragleave', onDragLeave, { capture: false });
+      el.removeEventListener('drop', onDrop, { capture: false });
     };
   }, [onScroll]);
 
@@ -190,7 +240,15 @@ const BlockNoteEditor = forwardRef(({ initialContent = '', onChange, onScroll, i
     <div
       ref={scrollRef}
       className="notion-editor"
-      style={{ height: '100vh', overflowY: 'auto', backgroundColor: 'var(--bg-primary)', position: 'relative' }}
+      style={{
+        height: '100vh',
+        overflowY: 'auto',
+        backgroundColor: 'var(--bg-primary)',
+        position: 'relative',
+        outline: isDragActive ? '2px solid var(--status-success, #22c55e)' : 'none',
+        outlineOffset: isDragActive ? '-2px' : 0,
+        transition: 'outline-color 150ms ease, outline-width 150ms ease'
+      }}
     >
       <BlockNoteView
         editor={editor}

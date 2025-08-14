@@ -14,6 +14,7 @@ const NotionLikePage = ({ isOpen = true, onClose, newsData, newsTitle, nodes = [
   const editorRef = useRef(null);
   const containerRef = useRef(null);
   const rightPaneRef = useRef(null);
+  const lastDropRef = useRef({ itemId: null, sectionId: null, at: 0 });
   const [activeSection, setActiveSection] = useState('summary');
   const [lastMarkdown, setLastMarkdown] = useState('');
   const [isResizing, setIsResizing] = useState(false);
@@ -130,20 +131,21 @@ const NotionLikePage = ({ isOpen = true, onClose, newsData, newsTitle, nodes = [
   const handleContentAdd = useCallback((dragData, sectionId) => {
     try {
       if (!dragData || !sectionId) return;
-      const current = String(nodes.find((n) => n.id === sectionId)?.data?.content || '');
+      const currentNode = nodes.find((n) => n.id === sectionId);
+      const current = String(currentNode?.data?.content || '');
       const title = String(dragData?.title || '').trim();
       const content = String(dragData?.content || '').trim();
       const addition = [title && `### ${title}`, content].filter(Boolean).join('\n\n');
       const updated = current ? `${current}\n\n${addition}` : addition;
-      if (typeof onSaveNode === 'function') onSaveNode(sectionId, updated);
-      // Refletir no AdvancedCanvas como conexão de micro dado -> seção
-      if (typeof onLinkDataToSection === 'function') {
-        onLinkDataToSection(sectionId, dragData);
-      }
-      setRecentlyAdded({ sectionId, at: Date.now() });
-      setTimeout(() => setRecentlyAdded(null), 1200);
+      // Evita chamadas múltiplas síncronas que causam re-render em cascata
+      Promise.resolve().then(() => {
+        try { if (typeof onSaveNode === 'function') onSaveNode(sectionId, updated); } catch {}
+        try { if (typeof onLinkDataToSection === 'function') onLinkDataToSection(sectionId, dragData); } catch {}
+        setRecentlyAdded({ sectionId, at: Date.now() });
+        setTimeout(() => setRecentlyAdded(null), 1200);
+      });
     } catch {}
-  }, [nodes, onSaveNode]);
+  }, [nodes, onSaveNode, onLinkDataToSection]);
 
   // Inventário: adicionar sem abrir painel; mostra badge no botão
   const handleAddToInventory = useCallback((payload) => {
@@ -157,8 +159,11 @@ const NotionLikePage = ({ isOpen = true, onClose, newsData, newsTitle, nodes = [
         categoryKey: payload?.categoryKey,
         nodeType: payload?.nodeType || 'micro'
       };
-      setInventoryItems((prev) => [item, ...prev]);
-      setInventoryUnread((n) => n + 1);
+      // Debounce leve para evitar múltiplos re-renders se vários itens forem adicionados em sequência
+      requestAnimationFrame(() => {
+        setInventoryItems((prev) => [item, ...prev]);
+        setInventoryUnread((n) => n + 1);
+      });
     } catch {}
   }, []);
 
@@ -170,19 +175,17 @@ const NotionLikePage = ({ isOpen = true, onClose, newsData, newsTitle, nodes = [
     const [isActive, setIsActive] = useState(false);
     const onDragEnter = useCallback((e) => {
       try {
-        if (!e?.dataTransfer) return;
-        e.preventDefault();
-        e.stopPropagation();
-        setIsActive(true);
+        const types = Array.from(e?.dataTransfer?.types || []);
+        if (types.includes('application/json') || types.includes('text/plain') || types.includes('application/x-lina-item')) {
+          setIsActive(true);
+        }
       } catch {}
     }, []);
     const onDragOver = useCallback((e) => {
       try {
-        if (!e?.dataTransfer) return;
-        const types = Array.from(e.dataTransfer.types || []);
-        if (types.includes('application/json') || types.includes('text/plain')) {
+        const types = Array.from(e?.dataTransfer?.types || []);
+        if (types.includes('application/json') || types.includes('text/plain') || types.includes('application/x-lina-item')) {
           e.preventDefault();
-          e.stopPropagation();
           e.dataTransfer.dropEffect = 'copy';
           setIsActive(true);
         }
@@ -190,22 +193,26 @@ const NotionLikePage = ({ isOpen = true, onClose, newsData, newsTitle, nodes = [
     }, []);
     const onDragLeave = useCallback((e) => {
       try {
-        e.preventDefault();
-        e.stopPropagation();
         setIsActive(false);
       } catch {}
     }, []);
     const onDrop = useCallback((e, sectionId) => {
       try {
-        e.preventDefault();
-        e.stopPropagation();
-        setIsActive(false);
-        let json = e.dataTransfer.getData('application/json');
-        if (!json) json = e.dataTransfer.getData('text/plain');
-        if (!json) return;
-        const data = JSON.parse(json);
-        if (data && data.type === 'canvas-library-item') {
-          onAdd?.(data, sectionId);
+        const types = Array.from(e?.dataTransfer?.types || []);
+        if (types.includes('application/json') || types.includes('text/plain') || types.includes('application/x-lina-item')) {
+          e.preventDefault();
+          setIsActive(false);
+          let data = null;
+          try {
+            let json = e.dataTransfer.getData('application/json');
+            if (!json) json = e.dataTransfer.getData('application/x-lina-item');
+            if (!json) json = e.dataTransfer.getData('text/plain');
+            if (json) data = JSON.parse(json);
+          } catch {}
+          if (data && data.type === 'canvas-library-item') {
+            onAdd?.(data, sectionId);
+            console.debug('🧰 Drop (fallback) aplicado na DropZone:', { section: sectionId, data });
+          }
         }
       } catch {}
     }, [onAdd]);
@@ -284,15 +291,19 @@ const NotionLikePage = ({ isOpen = true, onClose, newsData, newsTitle, nodes = [
         if (types.includes('application/json')) {
           const json = dt.getData('application/json');
           if (json) {
-            const data = JSON.parse(json);
-            if (data && data.type === 'canvas-library-item') return data;
+            try { const data = JSON.parse(json); if (data && data.type === 'canvas-library-item') return data; } catch {}
+          }
+        }
+        if (types.includes('application/x-lina-item')) {
+          const raw = dt.getData('application/x-lina-item');
+          if (raw) {
+            try { const data = JSON.parse(raw); if (data && data.type === 'canvas-library-item') return data; } catch {}
           }
         }
         if (types.includes('text/plain')) {
           const txt = dt.getData('text/plain');
           if (txt) {
-            const data = JSON.parse(txt);
-            if (data && data.type === 'canvas-library-item') return data;
+            try { const data = JSON.parse(txt); if (data && data.type === 'canvas-library-item') return data; } catch {}
           }
         }
       } catch {}
@@ -301,10 +312,11 @@ const NotionLikePage = ({ isOpen = true, onClose, newsData, newsTitle, nodes = [
 
     const onDragOverCapture = (e) => {
       try {
-        const data = parseDragData(e.dataTransfer);
-        if (data) {
+        const types = Array.from(e.dataTransfer?.types || []);
+        if (types.includes('application/json') || types.includes('text/plain') || types.includes('application/x-lina-item') || types.includes('text/uri-list')) {
           e.preventDefault();
           e.dataTransfer.dropEffect = 'copy';
+          // Mantido leve para performance; logs removidos para evitar travamentos ao arrastar
         }
       } catch {}
     };
@@ -316,8 +328,24 @@ const NotionLikePage = ({ isOpen = true, onClose, newsData, newsTitle, nodes = [
           e.preventDefault();
           e.stopPropagation();
           const targetSection = filteredSection || activeSection || 'summary';
+          // Deduplica múltiplos drops do mesmo item em curto intervalo
+          const now = Date.now();
+          const isDuplicate = (
+            lastDropRef.current &&
+            lastDropRef.current.itemId === (data.itemId || data.id) &&
+            lastDropRef.current.sectionId === targetSection &&
+            (now - lastDropRef.current.at) < 800
+          );
+          if (isDuplicate) {
+            console.debug('⏭️ Drop duplicado ignorado');
+            return;
+          }
+          lastDropRef.current = { itemId: (data.itemId || data.id), sectionId: targetSection, at: now };
           handleContentAdd(data, targetSection);
-          setDragState({ active: false });
+          console.log('✅ Drop capturado com sucesso:', { section: targetSection, data });
+        } else {
+          const types = Array.from(e.dataTransfer?.types || []);
+          console.debug('⚠️ Drop ignorado (tipos não suportados ou payload inválido):', types);
         }
       } catch {}
     };
@@ -512,11 +540,7 @@ const NotionLikePage = ({ isOpen = true, onClose, newsData, newsTitle, nodes = [
             </motion.div>
 
             {/* Editor + Splitter + Biblioteca */}
-            <div className="flex-1 overflow-hidden flex" ref={rightPaneRef}
-              onDragEnter={() => setDragState({ active: true })}
-              onDragOver={() => setDragState({ active: true })}
-              onDragLeave={() => setDragState({ active: false })}
-            >
+            <div className="flex-1 overflow-hidden flex" ref={rightPaneRef}>
                 <div className="overflow-hidden" style={{ width: `${Math.round(splitRatio * 100)}%`, minWidth: EDITOR_MIN_PX, backgroundColor: '#000' }}>
                 <div className="h-full" style={{ height: '100%' }}>
                   <DropZone sectionId={filteredSection || activeSection}>
@@ -530,7 +554,7 @@ const NotionLikePage = ({ isOpen = true, onClose, newsData, newsTitle, nodes = [
                       isInventoryOpen={isInventoryOpen}
                       inventoryUnread={inventoryUnread}
                       onToggleInventory={() => setIsInventoryOpen((v) => !v)}
-                      onCanvasItemDragStart={(payload) => { try { setDragState({ active: true }); onCanvasItemDragStart?.(payload); } catch {} }}
+                      onCanvasItemDragStart={(payload) => { try { onCanvasItemDragStart?.(payload); } catch {} }}
                     />
                   </DropZone>
                 </div>
@@ -547,7 +571,7 @@ const NotionLikePage = ({ isOpen = true, onClose, newsData, newsTitle, nodes = [
                   newsData={newsData}
                   onTransferItem={() => {}}
                   onOpenCardModal={() => {}}
-                  onDragStart={(payload) => { try { setDragState({ active: true }); onCanvasItemDragStart?.(payload); } catch {} }}
+                  onDragStart={(payload) => { try { onCanvasItemDragStart?.(payload); } catch {} }}
                   onCanvasItemDragStart={() => {}}
                   onAddToNotionSection={(sectionId, payload) => handleContentAdd(payload, sectionId)}
                   onAddToInventory={handleAddToInventory}
