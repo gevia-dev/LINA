@@ -31,7 +31,8 @@ const ContextLibrary = ({
   selectedBlock, 
   onTransferItem, 
   onOpenCardModal,
-  onAddNode
+  onAddNode,
+  onCanvasDragStart
 }) => {
   const [isExpanded, setIsExpanded] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -195,6 +196,7 @@ const ContextLibrary = ({
                       newsData={newsData}
                       onTransferItem={onTransferItem}
                       onOpenCardModal={onOpenCardModal}
+                      onCanvasItemDragStart={onCanvasDragStart}
                     />
                   </motion.div>
                 )}

@@ -51,6 +51,7 @@ const AdvancedCanvasEditor = ({
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isLibraryOpen, setIsLibraryOpen] = useState(false);
   const [isNotionPageOpen, setIsNotionPageOpen] = useState(false);
+  const [isDragActive, setIsDragActive] = useState(false);
   const [isNodeModalOpen, setIsNodeModalOpen] = useState(false);
   const [nodeModalData, setNodeModalData] = useState(null);
   const [canvasStats, setCanvasStats] = useState({
@@ -345,6 +346,20 @@ const AdvancedCanvasEditor = ({
     setIsNotionPageOpen(false);
   }, []);
 
+  const handleCanvasDragStart = useCallback((dragData) => {
+    setIsDragActive(true);
+  }, []);
+
+  useEffect(() => {
+    const resetDrag = () => setIsDragActive(false);
+    window.addEventListener('dragend', resetDrag);
+    window.addEventListener('drop', resetDrag);
+    return () => {
+      window.removeEventListener('dragend', resetDrag);
+      window.removeEventListener('drop', resetDrag);
+    };
+  }, []);
+
   // Função para lidar com transferência de item da biblioteca (lógica aditiva)
   const handleTransferFromLibrary = useCallback((blockId, content) => {
     // Extrair informações do blockId para determinar o tipo e título
@@ -395,6 +410,36 @@ const AdvancedCanvasEditor = ({
     // Fechar a biblioteca após adicionar o node
     closeLibrary();
   }, [addNewNode, focusNode, closeLibrary]);
+
+  // Vincula um micro dado a uma seção (como se conectasse micro-output -> dados)
+  const handleLinkDataToSection = useCallback((sectionId, payload) => {
+    try {
+      const title = String(payload?.title || 'Citação');
+      const content = String(payload?.content || '');
+      // Cria um DataNode e em seguida conecta à seção
+      const newNodeId = addNewNode({
+        type: 'dataNode',
+        data: {
+          title,
+          content,
+          coreKey: 'micro_adicionado',
+          isStructureNode: false
+        }
+      });
+      if (newNodeId) {
+        onConnect({
+          source: newNodeId,
+          target: sectionId,
+          sourceHandle: 'micro-output',
+          targetHandle: 'dados'
+        });
+        // opcional: focar no node
+        setTimeout(() => {
+          try { focusNode(newNodeId); } catch {}
+        }, 300);
+      }
+    } catch {}
+  }, [addNewNode, onConnect, focusNode]);
 
   // Atalhos de teclado
   useEffect(() => {
@@ -1025,6 +1070,7 @@ const AdvancedCanvasEditor = ({
         onTransferItem={handleTransferFromLibrary}
         onOpenCardModal={onOpenCardModal}
         onAddNode={addNewNode}
+        onCanvasDragStart={handleCanvasDragStart}
       />
 
       {/* Modal de Node usando CardModal */}
@@ -1048,7 +1094,24 @@ const AdvancedCanvasEditor = ({
         nodes={nodes}
         edges={edges}
         onSaveNode={(nodeId, newContent) => updateNodeContent(nodeId, { content: newContent })}
+        onCanvasItemDragStart={handleCanvasDragStart}
+        onLinkDataToSection={handleLinkDataToSection}
       />
+
+      {/* Indicador visual global de drag ativo */}
+      {isDragActive && (
+        <div
+          className="fixed pointer-events-none"
+          style={{ top: 12, left: '50%', transform: 'translateX(-50%)', zIndex: 10000 }}
+        >
+          <div
+            className="px-3 py-1.5 rounded-lg border"
+            style={{ backgroundColor: 'var(--primary-green-transparent)', borderColor: 'var(--primary-green)', color: 'var(--primary-green)', fontFamily: '"Nunito Sans", "Inter", sans-serif', fontSize: 12 }}
+          >
+            Arraste para o Editor para adicionar
+          </div>
+        </div>
+      )}
     </div>
   );
 };

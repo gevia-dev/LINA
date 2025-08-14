@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState, useCallback, useRef } from 'react';
-import { ReactFlow, Controls } from '@xyflow/react';
+import { ReactFlow, Controls, applyNodeChanges } from '@xyflow/react';
 import { motion } from 'framer-motion';
-import { FolderTree, Tags, Quote, ArrowRight, ChevronLeft, ChevronRight, CheckSquare, Square } from 'lucide-react';
+import { FolderTree, Tags, Quote, ArrowRight, ChevronLeft, ChevronRight, CheckSquare, Square, Edit3, Save, Plus } from 'lucide-react';
 import dagre from 'dagre';
 import VantaBackground from './VantaBackground';
 
@@ -92,7 +92,7 @@ const KeyNode = ({ data }) => {
   );
 };
 
-const ItemNode = ({ data }) => {
+const ItemNode = React.memo(({ data }) => {
   useEffect(() => {
     if (import.meta.env?.DEV) console.debug('[CanvasLibraryView][ItemNode] mounted', { itemId: data?.itemId, title: data?.title, categoryKey: data?.categoryKey });
   }, [data?.itemId, data?.title, data?.categoryKey]);
@@ -107,6 +107,28 @@ const ItemNode = ({ data }) => {
       );
     }
   }, [data]);
+
+  const [showPicker, setShowPicker] = React.useState(false);
+  const popoverRef = React.useRef(null);
+  const buttonRef = React.useRef(null);
+
+  React.useEffect(() => {
+    if (!showPicker) return undefined;
+    const handleDocClick = (e) => {
+      try {
+        const target = e.target;
+        if (popoverRef.current && popoverRef.current.contains(target)) return;
+        if (buttonRef.current && buttonRef.current.contains(target)) return;
+        setShowPicker(false);
+      } catch {}
+    };
+    document.addEventListener('mousedown', handleDocClick, true);
+    document.addEventListener('touchstart', handleDocClick, true);
+    return () => {
+      document.removeEventListener('mousedown', handleDocClick, true);
+      document.removeEventListener('touchstart', handleDocClick, true);
+    };
+  }, [showPicker]);
 
   return (
     <motion.div
@@ -126,25 +148,91 @@ const ItemNode = ({ data }) => {
         transition: 'transform 20s linear, box-shadow 20s linear, border-color 20s linear'
       }}
     >
-      <div
-        className="pointer-events-none absolute inset-0 rounded-lg opacity-0 group-hover:opacity-100"
-        style={{
-          boxShadow: '0 10px 28px rgba(255,255,255,0.10)',
-          transition: 'opacity 0.2s ease'
-        }}
-      />
-      <div className="flex items-center gap-2 mb-2">
-        <Quote size={14} style={{ color: toPastelColor(data.color) }} />
-        <span className="text-sm font-semibold truncate" style={{ fontFamily: '"Nunito Sans", "Inter", sans-serif' }}>{data.title}</span>
+      {/* Botão Add → adiciona ao Inventário quando disponível; fallback abre popup de seção */}
+      {(typeof data?.onAddToInventory === 'function' || typeof data?.onAddToNotionSection === 'function') && (
+        <div className="absolute top-2 right-2 z-20 pointer-events-auto">
+          <motion.button
+            ref={buttonRef}
+            onMouseDown={(e) => { e.stopPropagation(); }}
+            onClick={(e) => {
+              try {
+                e.stopPropagation();
+                if (typeof data?.onAddToInventory === 'function') {
+                  data.onAddToInventory({
+                    title: data.title,
+                    content: data.phrase,
+                    itemId: data.itemId,
+                    categoryKey: data.categoryKey,
+                    nodeType: 'micro'
+                  });
+                  return;
+                }
+                setShowPicker((v) => !v);
+              } catch {}
+            }}
+            className="p-2.5 rounded-md border opacity-0 group-hover:opacity-100 cursor-pointer"
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            title={typeof data?.onAddToInventory === 'function' ? 'Adicionar ao Inventário' : 'Adicionar ao Editor'}
+            style={{ backgroundColor: 'var(--bg-tertiary)', borderColor: 'var(--border-primary)', color: 'var(--text-secondary)' }}
+          >
+            <Plus size={14} />
+          </motion.button>
+          {showPicker && typeof data?.onAddToInventory !== 'function' && (
+            <motion.div
+              ref={popoverRef}
+              initial={{ opacity: 0, scale: 0.96, y: -4 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.96, y: -4 }}
+              className="popup-menu absolute right-0 top-8 w-48 rounded-lg border shadow-lg z-50"
+              style={{ backgroundColor: 'var(--bg-secondary)', borderColor: 'var(--border-primary)' }}
+              onMouseDown={(e) => { e.stopPropagation(); }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              {[
+                { id: 'summary', label: 'Introdução' },
+                { id: 'body', label: 'Corpo' },
+                { id: 'conclusion', label: 'Conclusão' }
+              ].map((opt) => (
+                <button
+                  key={opt.id}
+                  onClick={() => {
+                    try {
+                      data.onAddToNotionSection(opt.id, { title: data.title, content: data.phrase, itemId: data.itemId, nodeType: 'micro' });
+                      setShowPicker(false);
+                    } catch {}
+                  }}
+                  className="w-full text-left px-3.5 py-2.5 text-sm cursor-pointer transition-colors"
+                  style={{ color: 'var(--text-primary)', fontFamily: '"Nunito Sans", "Inter", sans-serif' }}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </motion.div>
+          )}
+        </div>
+      )}
+      <div className="rf-node-drag-area">
+        <div
+          className="pointer-events-none absolute inset-0 rounded-lg opacity-0 group-hover:opacity-100"
+          style={{
+            boxShadow: '0 10px 28px rgba(255,255,255,0.10)',
+            transition: 'opacity 0.2s ease'
+          }}
+        />
+        <div className="flex items-center gap-2 mb-2">
+          <Quote size={14} style={{ color: toPastelColor(data.color) }} />
+          <span className="text-sm font-semibold truncate" style={{ fontFamily: '"Nunito Sans", "Inter", sans-serif' }}>{data.title}</span>
+        </div>
+        {/* Tag removida para um visual mais limpo */}
+        <p className="text-sm pr-8" style={{ color: 'var(--text-secondary)', lineHeight: 1.6 }}>
+          {data.phrase}
+        </p>
       </div>
-      {/* Tag removida para um visual mais limpo */}
-      <p className="text-sm pr-8" style={{ color: 'var(--text-secondary)', lineHeight: 1.6 }}>
-        {data.phrase}
-      </p>
       {/* Botão removido conforme solicitação; transferência pode ser acionada via double click (abre modal) e ações subsequentes */}
     </motion.div>
   );
-};
+});
 
 const nodeTypes = {
   categoryNode: CategoryNode,
@@ -269,7 +357,7 @@ const buildHierarchy = (normalized) => {
   return { categories, counts };
 };
 
-const CanvasLibraryView = ({ newsData, onTransferItem, onOpenCardModal, compact = false, sidebarOnRight = false, enableSidebarToggle = false, initialSidebarCollapsed = false, transparentSidebar = false }) => {
+const CanvasLibraryView = ({ newsData, onTransferItem, onOpenCardModal, onCanvasItemDragStart, onDragStart, onAddToNotionSection, onAddToInventory, compact = false, sidebarOnRight = false, enableSidebarToggle = false, initialSidebarCollapsed = false, transparentSidebar = false }) => {
   const [nodes, setNodes] = useState([]);
   const [edges, setEdges] = useState([]);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -278,6 +366,26 @@ const CanvasLibraryView = ({ newsData, onTransferItem, onOpenCardModal, compact 
   const [rfInstance, setRfInstance] = useState(null);
   const [isMultiSelect, setIsMultiSelect] = useState(false);
   const [activeTags, setActiveTags] = useState([]);
+  const [isEditMode, setIsEditMode] = useState(false);
+  const onAddToNotionSectionRef = useRef(onAddToNotionSection);
+  const onAddToInventoryRef = useRef(onAddToInventory);
+  const savedPositionsRef = useRef(new Map());
+  const skipAutoCenterRef = useRef(false);
+  const skipTimerRef = useRef(null);
+  useEffect(() => { onAddToNotionSectionRef.current = onAddToNotionSection; }, [onAddToNotionSection]);
+  useEffect(() => { onAddToInventoryRef.current = onAddToInventory; }, [onAddToInventory]);
+
+  const blockAutoCenter = useCallback(() => {
+    try {
+      skipAutoCenterRef.current = true;
+      if (skipTimerRef.current) clearTimeout(skipTimerRef.current);
+      skipTimerRef.current = setTimeout(() => {
+        skipAutoCenterRef.current = false;
+        skipTimerRef.current = null;
+      }, 800);
+    } catch {}
+  }, []);
+
   const toggleSidebar = useCallback(() => setIsSidebarCollapsed((v) => !v), []);
   const didInitialCenter = useRef(false);
 
@@ -410,7 +518,19 @@ const CanvasLibraryView = ({ newsData, onTransferItem, onOpenCardModal, compact 
               index: item.index,
               color,
               onTransferItem,
-              onOpenCardModal
+              onOpenCardModal,
+              onAddToNotionSection: (sectionId, payload) => {
+                try {
+                  const fn = onAddToNotionSectionRef.current;
+                  if (typeof fn === 'function') { fn(sectionId, payload); }
+                } catch {}
+              },
+              onAddToInventory: (payload) => {
+                try {
+                  const fn = onAddToInventoryRef.current;
+                  if (typeof fn === 'function') { fn(payload); }
+                } catch {}
+              }
             },
             position: { x: 0, y: 0 }
           });
@@ -489,21 +609,50 @@ const CanvasLibraryView = ({ newsData, onTransferItem, onOpenCardModal, compact 
       }
     }
 
+    // Preserva posições arrastadas manualmente quando em modo edição
+    const positioned = withPositions.map((n) => {
+      if (isEditMode) {
+        const saved = savedPositionsRef.current.get(n.id);
+        if (saved && typeof saved.x === 'number' && typeof saved.y === 'number') {
+          return { ...n, position: saved };
+        }
+      }
+      return n;
+    });
+
     const styledEdges = [];
 
-    setNodes(withPositions);
-    setEdges(styledEdges);
+    // Evita re-render cascata após pequenos updates (como add ao editor)
+    setNodes((prev) => {
+      const same = prev.length === positioned.length && prev.every((p, i) => p.id === positioned[i].id && p.position.x === positioned[i].position.x && p.position.y === positioned[i].position.y);
+      return same ? prev : positioned;
+    });
+    setEdges((prev) => {
+      const same = prev.length === styledEdges.length;
+      return same ? prev : styledEdges;
+    });
     if (import.meta.env?.DEV) console.debug('[CanvasLibraryView] nodes/edges', { nodes: withPositions.length, edges: styledEdges.length });
     setIsProcessing(false);
-  }, [hierarchy, selectedTag, isMultiSelect, activeTags, onTransferItem, onOpenCardModal, categoryColorFor]);
+  }, [hierarchy, selectedTag, isMultiSelect, activeTags, categoryColorFor]);
 
   const hasData = nodes.length > 0;
+  const onNodesChange = useCallback((changes) => {
+    try {
+      setNodes((nds) => applyNodeChanges(changes, nds));
+      changes.forEach((c) => {
+        if (c.type === 'position' && c.id && c.position) {
+          savedPositionsRef.current.set(c.id, c.position);
+        }
+      });
+    } catch {}
+  }, []);
 
   // Ajusta viewport ao finalizar layout
   useEffect(() => {
     if (!rfInstance || isProcessing) return;
     const center = () => {
       try {
+        if (isEditMode || skipAutoCenterRef.current) return;
         const isFirstCenter = !didInitialCenter.current;
         if (isMultiSelect) {
           if (!nodes.length) return;
@@ -535,7 +684,7 @@ const CanvasLibraryView = ({ newsData, onTransferItem, onOpenCardModal, compact 
     } else {
       setTimeout(center, 0);
     }
-  }, [rfInstance, isMultiSelect, selectedTag, isProcessing, nodes]);
+  }, [rfInstance, isMultiSelect, selectedTag, isProcessing, nodes, isEditMode]);
 
   const handleCategoryClick = useCallback((t) => {
     if (isMultiSelect) {
@@ -546,7 +695,7 @@ const CanvasLibraryView = ({ newsData, onTransferItem, onOpenCardModal, compact 
   }, [isMultiSelect]);
 
   return (
-    <div className="h-full flex flex-col canvas-library-view" style={{ backgroundColor: transparentSidebar ? 'transparent' : 'var(--bg-primary)' }}>
+    <div className={`h-full flex flex-col canvas-library-view ${isEditMode ? 'is-edit-mode' : ''}`} style={{ backgroundColor: transparentSidebar ? 'transparent' : 'var(--bg-primary)' }}>
       <style>{`
         .canvas-library-view .react-flow__handle:hover {
           box-shadow: none !important;
@@ -568,6 +717,10 @@ const CanvasLibraryView = ({ newsData, onTransferItem, onOpenCardModal, compact 
           transform: scale(1.15) !important;
           box-shadow: 0 14px 34px rgba(255,255,255,0.12) !important;
           border-color: rgba(255,255,255,0.5) !important;
+        }
+        /* Popup hover opções */
+        .canvas-library-view .popup-menu button:hover {
+          background-color: var(--bg-tertiary) !important;
         }
       `}</style>
 
@@ -669,6 +822,24 @@ const CanvasLibraryView = ({ newsData, onTransferItem, onOpenCardModal, compact 
             }}
             enableAnimatedBackground={true}
           />
+          {/* Botão de modo edição (canto superior esquerdo) */}
+          <div className="absolute top-2 left-2 z-20">
+            <motion.button
+              onClick={() => setIsEditMode((v) => !v)}
+              className="p-2 rounded-lg border"
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              title={isEditMode ? 'Sair do modo edição' : 'Ativar modo edição'}
+              style={{
+                backgroundColor: isEditMode ? 'var(--bg-tertiary)' : 'var(--bg-tertiary)',
+                borderColor: isEditMode ? 'var(--primary-green)' : 'var(--border-primary)',
+                color: isEditMode ? 'var(--primary-green)' : 'var(--text-secondary)'
+              }}
+            >
+              {isEditMode ? <Save size={16} /> : <Edit3 size={16} />}
+            </motion.button>
+          </div>
+
           {isProcessing ? (
             <div className="h-full flex items-center justify-center relative z-10">
               <motion.div
@@ -686,18 +857,30 @@ const CanvasLibraryView = ({ newsData, onTransferItem, onOpenCardModal, compact 
               nodeTypes={memoNodeTypes}
               // Sem linhas de conexão e sem interações de conexão
               proOptions={{ hideAttribution: true }}
-              fitView
-              fitViewOptions={{ padding: 0.2, includeHiddenNodes: false, maxZoom: 0.75 }}
+             fitView
+             fitViewOptions={{ padding: 0.2, includeHiddenNodes: false, maxZoom: 0.75 }}
               minZoom={0.2}
               maxZoom={1.5}
               zoomOnScroll
               zoomOnPinch
-              panOnScroll
-              nodesDraggable={false}
+             panOnScroll
+             panOnDrag={!isEditMode}
+              nodesDraggable={isEditMode}
               nodesConnectable={false}
-              elementsSelectable={false}
+              elementsSelectable={isEditMode}
               className="h-full relative z-10"
               style={{ background: 'transparent' }}
+              onNodesChange={onNodesChange}
+              onNodeDrag={(e, node) => {
+                blockAutoCenter();
+                savedPositionsRef.current.set(node.id, node.position);
+                setNodes((prev) => prev.map((n) => n.id === node.id ? { ...n, position: node.position } : n));
+              }}
+              onNodeDragStop={(e, node) => {
+                blockAutoCenter();
+                savedPositionsRef.current.set(node.id, node.position);
+                setNodes((prev) => prev.map((n) => n.id === node.id ? { ...n, position: node.position } : n));
+              }}
             >
               <Controls position="bottom-right" showInteractive={false} />
             </ReactFlow>

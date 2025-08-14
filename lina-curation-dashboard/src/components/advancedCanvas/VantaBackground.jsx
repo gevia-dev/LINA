@@ -274,6 +274,26 @@ const VantaBackground = ({
   );
 };
 
-export default VantaBackground;
+// Evita re-render quando props não mudam de fato (inclui shallow compare de style e deep compare de options)
+const arePropsEqual = (prevProps, nextProps) => {
+  if (prevProps.enableAnimatedBackground !== nextProps.enableAnimatedBackground) return false;
+  if (prevProps.effect !== nextProps.effect) return false;
+  if (prevProps.className !== nextProps.className) return false;
+  const prevStyle = prevProps.style || {};
+  const nextStyle = nextProps.style || {};
+  const prevStyleKeys = Object.keys(prevStyle);
+  const nextStyleKeys = Object.keys(nextStyle);
+  if (prevStyleKeys.length !== nextStyleKeys.length) return false;
+  for (let i = 0; i < prevStyleKeys.length; i += 1) {
+    const k = prevStyleKeys[i];
+    if (prevStyle[k] !== nextStyle[k]) return false;
+  }
+  const prevOptionsStr = JSON.stringify(prevProps.options || {});
+  const nextOptionsStr = JSON.stringify(nextProps.options || {});
+  if (prevOptionsStr !== nextOptionsStr) return false;
+  return true;
+};
+
+export default React.memo(VantaBackground, arePropsEqual);
 
 

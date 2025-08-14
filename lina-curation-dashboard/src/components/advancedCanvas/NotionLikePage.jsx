@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useRef, useCallback, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { FileText, Save, X, Layers as LayersIcon, Quote as QuoteIcon, Braces as BracesIcon, ChevronLeft, ChevronRight } from 'lucide-react';
+import { FileText, Save, X, Layers as LayersIcon, Quote as QuoteIcon, Braces as BracesIcon, ChevronLeft, ChevronRight, Library as LibraryIcon } from 'lucide-react';
 import CanvasLibraryView from './CanvasLibraryView';
 import BlockNoteEditor from './BlockNoteEditor';
 
@@ -10,7 +10,7 @@ const SECTION_TITLES = {
   conclusion: 'Conclusão'
 };
 
-const NotionLikePage = ({ isOpen = true, onClose, newsData, newsTitle, nodes = [], edges = [], onSaveNode }) => {
+const NotionLikePage = ({ isOpen = true, onClose, newsData, newsTitle, nodes = [], edges = [], onSaveNode, onCanvasItemDragStart, onLinkDataToSection }) => {
   const editorRef = useRef(null);
   const containerRef = useRef(null);
   const rightPaneRef = useRef(null);
@@ -20,6 +20,11 @@ const NotionLikePage = ({ isOpen = true, onClose, newsData, newsTitle, nodes = [
   const [splitRatio, setSplitRatio] = useState(0.62);
   const [filteredSection, setFilteredSection] = useState(null);
   const [isLeftCollapsed, setIsLeftCollapsed] = useState(false);
+  const [dragState, setDragState] = useState({ active: false });
+  const [recentlyAdded, setRecentlyAdded] = useState(null);
+  const [inventoryItems, setInventoryItems] = useState([]);
+  const [isInventoryOpen, setIsInventoryOpen] = useState(false);
+  const [inventoryUnread, setInventoryUnread] = useState(0);
   const EDITOR_MIN_PX = 480;
   const LIB_MIN_PX = 360;
 
@@ -122,6 +127,110 @@ const NotionLikePage = ({ isOpen = true, onClose, newsData, newsTitle, nodes = [
     setLastMarkdown(editorContent);
   }, [editorContent]);
 
+  const handleContentAdd = useCallback((dragData, sectionId) => {
+    try {
+      if (!dragData || !sectionId) return;
+      const current = String(nodes.find((n) => n.id === sectionId)?.data?.content || '');
+      const title = String(dragData?.title || '').trim();
+      const content = String(dragData?.content || '').trim();
+      const addition = [title && `### ${title}`, content].filter(Boolean).join('\n\n');
+      const updated = current ? `${current}\n\n${addition}` : addition;
+      if (typeof onSaveNode === 'function') onSaveNode(sectionId, updated);
+      // Refletir no AdvancedCanvas como conexão de micro dado -> seção
+      if (typeof onLinkDataToSection === 'function') {
+        onLinkDataToSection(sectionId, dragData);
+      }
+      setRecentlyAdded({ sectionId, at: Date.now() });
+      setTimeout(() => setRecentlyAdded(null), 1200);
+    } catch {}
+  }, [nodes, onSaveNode]);
+
+  // Inventário: adicionar sem abrir painel; mostra badge no botão
+  const handleAddToInventory = useCallback((payload) => {
+    try {
+      const id = String(payload?.itemId || `inv-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`);
+      const item = {
+        id,
+        title: String(payload?.title || 'Item'),
+        content: String(payload?.content || ''),
+        itemId: payload?.itemId,
+        categoryKey: payload?.categoryKey,
+        nodeType: payload?.nodeType || 'micro'
+      };
+      setInventoryItems((prev) => [item, ...prev]);
+      setInventoryUnread((n) => n + 1);
+    } catch {}
+  }, []);
+
+  useEffect(() => {
+    if (isInventoryOpen) setInventoryUnread(0);
+  }, [isInventoryOpen]);
+
+  const useDragAndDrop = (onAdd) => {
+    const [isActive, setIsActive] = useState(false);
+    const onDragEnter = useCallback((e) => {
+      try {
+        if (!e?.dataTransfer) return;
+        e.preventDefault();
+        e.stopPropagation();
+        setIsActive(true);
+      } catch {}
+    }, []);
+    const onDragOver = useCallback((e) => {
+      try {
+        if (!e?.dataTransfer) return;
+        const types = Array.from(e.dataTransfer.types || []);
+        if (types.includes('application/json') || types.includes('text/plain')) {
+          e.preventDefault();
+          e.stopPropagation();
+          e.dataTransfer.dropEffect = 'copy';
+          setIsActive(true);
+        }
+      } catch {}
+    }, []);
+    const onDragLeave = useCallback((e) => {
+      try {
+        e.preventDefault();
+        e.stopPropagation();
+        setIsActive(false);
+      } catch {}
+    }, []);
+    const onDrop = useCallback((e, sectionId) => {
+      try {
+        e.preventDefault();
+        e.stopPropagation();
+        setIsActive(false);
+        let json = e.dataTransfer.getData('application/json');
+        if (!json) json = e.dataTransfer.getData('text/plain');
+        if (!json) return;
+        const data = JSON.parse(json);
+        if (data && data.type === 'canvas-library-item') {
+          onAdd?.(data, sectionId);
+        }
+      } catch {}
+    }, [onAdd]);
+    return { isActive, onDragEnter, onDragOver, onDragLeave, onDrop };
+  };
+
+  const DropZone = ({ sectionId, children }) => {
+    const dnd = useDragAndDrop((data) => handleContentAdd(data, sectionId));
+    return (
+      <div
+        onDragEnter={dnd.onDragEnter}
+        onDragOver={dnd.onDragOver}
+        onDragLeave={dnd.onDragLeave}
+        onDrop={(e) => dnd.onDrop(e, sectionId)}
+        style={{
+          position: 'relative',
+          border: dnd.isActive ? '2px dashed var(--primary-green)' : '2px solid transparent',
+          borderRadius: 8
+        }}
+      >
+        {children}
+      </div>
+    );
+  };
+
   const handleScrollSync = useCallback((headingText) => {
     const text = String(headingText || '').trim();
     const map = {
@@ -165,6 +274,61 @@ const NotionLikePage = ({ isOpen = true, onClose, newsData, newsTitle, nodes = [
       }
     }
   }, [onSaveNode]);
+
+  // Captura global de dragover/drop para permitir soltar no editor (ProseMirror intercepta eventos)
+  useEffect(() => {
+    const parseDragData = (dt) => {
+      try {
+        if (!dt) return null;
+        const types = Array.from(dt.types || []);
+        if (types.includes('application/json')) {
+          const json = dt.getData('application/json');
+          if (json) {
+            const data = JSON.parse(json);
+            if (data && data.type === 'canvas-library-item') return data;
+          }
+        }
+        if (types.includes('text/plain')) {
+          const txt = dt.getData('text/plain');
+          if (txt) {
+            const data = JSON.parse(txt);
+            if (data && data.type === 'canvas-library-item') return data;
+          }
+        }
+      } catch {}
+      return null;
+    };
+
+    const onDragOverCapture = (e) => {
+      try {
+        const data = parseDragData(e.dataTransfer);
+        if (data) {
+          e.preventDefault();
+          e.dataTransfer.dropEffect = 'copy';
+        }
+      } catch {}
+    };
+
+    const onDropCapture = (e) => {
+      try {
+        const data = parseDragData(e.dataTransfer);
+        if (data) {
+          e.preventDefault();
+          e.stopPropagation();
+          const targetSection = filteredSection || activeSection || 'summary';
+          handleContentAdd(data, targetSection);
+          setDragState({ active: false });
+        }
+      } catch {}
+    };
+
+    document.addEventListener('dragover', onDragOverCapture, true);
+    document.addEventListener('drop', onDropCapture, true);
+    return () => {
+      document.removeEventListener('dragover', onDragOverCapture, true);
+      document.removeEventListener('drop', onDropCapture, true);
+    };
+  }, [filteredSection, activeSection, handleContentAdd]);
 
   const onStartResize = useCallback((e) => {
     e.preventDefault();
@@ -234,6 +398,26 @@ const NotionLikePage = ({ isOpen = true, onClose, newsData, newsTitle, nodes = [
             }
             .splitter-handle:hover,
             .splitter-handle.active { background-color: #9ca3af; /* gray-400 */ }
+
+            /* Inventário (aba retraída + painel) */
+            .inventory-toggle {
+              position: absolute;
+              top: 50%;
+              right: 0;
+              transform: translateY(-50%);
+              z-index: 60;
+            }
+            .inventory-panel {
+              position: absolute;
+              top: 64px; /* abaixo do header */
+              right: 0;
+              bottom: 0;
+              width: 320px;
+              z-index: 55;
+              background-color: var(--bg-secondary);
+              border-left: 1px solid var(--border-primary);
+              box-shadow: -8px 0 24px rgba(0,0,0,0.3);
+            }
           `}</style>
             {/* Header */}
           <div className="flex items-center justify-between p-4 border-b" style={{ backgroundColor: 'var(--bg-secondary)', borderColor: 'var(--border-primary)' }}>
@@ -259,7 +443,7 @@ const NotionLikePage = ({ isOpen = true, onClose, newsData, newsTitle, nodes = [
             {/* Painel Esquerdo - timeline de segmentos com chips (dados/estrutura) */}
             <motion.div
               className="border-r overflow-y-auto"
-              style={{ backgroundColor: 'var(--bg-secondary)', borderColor: 'var(--border-primary)', width: isLeftCollapsed ? 40 : 220 }}
+              style={{ borderColor: 'var(--border-primary)', width: isLeftCollapsed ? 40 : 220 }}
               initial={{ opacity: 0, x: -20 }}
               animate={{ opacity: 1, x: 0 }}
               transition={{ delay: 0.1 }}
@@ -274,7 +458,7 @@ const NotionLikePage = ({ isOpen = true, onClose, newsData, newsTitle, nodes = [
                     className="p-1.5 rounded border"
                     whileTap={{ scale: 0.95 }}
                     title={isLeftCollapsed ? 'Expandir' : 'Recolher'}
-                    style={{ backgroundColor: 'var(--bg-tertiary)', borderColor: 'var(--border-primary)', color: 'var(--text-secondary)' }}
+                    style={{ borderColor: 'var(--border-primary)', color: 'var(--text-secondary)' }}
                   >
                     {isLeftCollapsed ? <ChevronRight size={14} /> : <ChevronLeft size={14} />}
                   </motion.button>
@@ -289,27 +473,29 @@ const NotionLikePage = ({ isOpen = true, onClose, newsData, newsTitle, nodes = [
                           <div
                             className="w-3 h-3 rounded-full border-2"
                             style={{
-                              borderColor: (filteredSection === id) ? 'var(--primary-green)' : 'var(--border-primary)',
-                              backgroundColor: (filteredSection === id) ? 'var(--primary-green-transparent)' : 'var(--bg-primary)'
+                              borderColor: ((filteredSection === id) || (recentlyAdded?.sectionId === id)) ? 'var(--primary-green)' : 'var(--border-primary)',
+                              backgroundColor: ((filteredSection === id) || (recentlyAdded?.sectionId === id)) ? 'var(--primary-green-transparent)' : 'var(--bg-primary)'
                             }}
                           />
                         </div>
-                        {/* Botão do título da seção (toggle filtro) */}
-                        <button
-                          className="w-full text-left px-3 py-2 rounded-lg border"
-                          onClick={() => {
-                            setFilteredSection((current) => current === id ? null : id);
-                            setActiveSection(id);
-                          }}
-                          style={{
-                            backgroundColor: (filteredSection === id) ? 'var(--bg-tertiary)' : 'var(--bg-primary)',
-                            borderColor: 'var(--border-primary)',
-                            color: 'var(--text-primary)',
-                            fontFamily: '"Nunito Sans", "Inter", sans-serif'
-                          }}
-                        >
-                          {SECTION_TITLES[id]}
-                        </button>
+                        {/* Botão do título da seção (toggle filtro) com DropZone */}
+                        <DropZone sectionId={id}>
+                          <button
+                            className="w-full text-left px-3 py-2 rounded-lg border"
+                            onClick={() => {
+                              setFilteredSection((current) => current === id ? null : id);
+                              setActiveSection(id);
+                            }}
+                            style={{
+                              backgroundColor: ((filteredSection === id) || (recentlyAdded?.sectionId === id)) ? 'var(--bg-tertiary)' : 'var(--bg-primary)',
+                              borderColor: ((filteredSection === id) || (recentlyAdded?.sectionId === id)) ? 'var(--primary-green)' : 'var(--border-primary)',
+                              color: 'var(--text-primary)',
+                              fontFamily: '"Nunito Sans", "Inter", sans-serif'
+                            }}
+                          >
+                            {SECTION_TITLES[id]}
+                          </button>
+                        </DropZone>
                         {/* Chips conectados (dados/estrutura) */}
                         {Array.isArray(sortedSectionChildren[id]) && sortedSectionChildren[id].length > 0 && (
                           <div className="mt-2 flex flex-wrap gap-1.5 pl-1">
@@ -326,19 +512,49 @@ const NotionLikePage = ({ isOpen = true, onClose, newsData, newsTitle, nodes = [
             </motion.div>
 
             {/* Editor + Splitter + Biblioteca */}
-            <div className="flex-1 overflow-hidden flex" ref={rightPaneRef}>
+            <div className="flex-1 overflow-hidden flex" ref={rightPaneRef}
+              onDragEnter={() => setDragState({ active: true })}
+              onDragOver={() => setDragState({ active: true })}
+              onDragLeave={() => setDragState({ active: false })}
+            >
                 <div className="overflow-hidden" style={{ width: `${Math.round(splitRatio * 100)}%`, minWidth: EDITOR_MIN_PX, backgroundColor: '#000' }}>
                 <div className="h-full" style={{ height: '100%' }}>
-                  <BlockNoteEditor key={`bn-${filteredSection || 'all'}-${displayContent.length}`} ref={editorRef} initialContent={displayContent} onChange={setLastMarkdown} onScroll={filteredSection ? undefined : handleScrollSync} />
+                  <DropZone sectionId={filteredSection || activeSection}>
+                    <BlockNoteEditor
+                      key={`bn-${filteredSection || 'all'}-${displayContent.length}`}
+                      ref={editorRef}
+                      initialContent={displayContent}
+                      onChange={setLastMarkdown}
+                      onScroll={filteredSection ? undefined : handleScrollSync}
+                      inventoryItems={inventoryItems}
+                      isInventoryOpen={isInventoryOpen}
+                      inventoryUnread={inventoryUnread}
+                      onToggleInventory={() => setIsInventoryOpen((v) => !v)}
+                      onCanvasItemDragStart={(payload) => { try { setDragState({ active: true }); onCanvasItemDragStart?.(payload); } catch {} }}
+                    />
+                  </DropZone>
                 </div>
               </div>
 
               <div onMouseDown={onStartResize} className={`splitter-handle cursor-col-resize ${isResizing ? 'active' : ''}`} style={{ width: 4, zIndex: 10, backgroundColor: '#6b7280' }} title="Arraste para redimensionar" />
 
               <div className="overflow-hidden" style={{ width: `${Math.round((1 - splitRatio) * 100)}%`, minWidth: LIB_MIN_PX, backgroundColor: 'var(--bg-primary)' }}>
-                <CanvasLibraryView compact sidebarOnRight enableSidebarToggle transparentSidebar newsData={newsData} onTransferItem={() => {}} onOpenCardModal={() => {}} />
+                <CanvasLibraryView
+                  compact
+                  sidebarOnRight
+                  enableSidebarToggle
+                  transparentSidebar
+                  newsData={newsData}
+                  onTransferItem={() => {}}
+                  onOpenCardModal={() => {}}
+                  onDragStart={(payload) => { try { setDragState({ active: true }); onCanvasItemDragStart?.(payload); } catch {} }}
+                  onCanvasItemDragStart={() => {}}
+                  onAddToNotionSection={(sectionId, payload) => handleContentAdd(payload, sectionId)}
+                  onAddToInventory={handleAddToInventory}
+                />
               </div>
             </div>
+            
           </div>
           </motion.div>
         </motion.div>
