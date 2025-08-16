@@ -575,33 +575,33 @@ const buildHierarchy = (normalized) => {
     console.log('[DEBUG] buildHierarchy - Object.keys(quotesMap):', quotesMap ? Object.keys(quotesMap) : 'quotesMap é null/undefined');
     
     // Fallback para nodes de segmentação padrão se não houver quotes_map
-    segments.summary = {
-      type: 'summary',
-      title: 'Introdução',
-      content: '',
-      itemId: 'segment-summary'
-    };
-    segments.body = {
-      type: 'body',
-      title: 'Corpo',
-      content: '',
-      itemId: 'segment-body'
-    };
-    segments.conclusion = {
-      type: 'conclusion',
-      title: 'Conclusão',
-      content: '',
-      itemId: 'segment-conclusion'
-    };
+  segments.summary = {
+    type: 'summary',
+    title: 'Introdução',
+    content: '',
+    itemId: 'segment-summary'
+  };
+  segments.body = {
+    type: 'body',
+    title: 'Corpo',
+    content: '',
+    itemId: 'segment-body'
+  };
+  segments.conclusion = {
+    type: 'conclusion',
+    title: 'Conclusão',
+    content: '',
+    itemId: 'segment-conclusion'
+  };
   }
   
   Object.entries(normalized).forEach(([parentKey, childObj]) => {
     // Pula quotes_map pois já foi processado acima
     if (parentKey === 'quotes_map') return;
-    
+
     // Verifica se childObj é um objeto válido para processar
     if (!childObj || typeof childObj !== 'object') return;
-    
+  
     Object.entries(childObj).forEach(([childKey, list]) => {
       if (!Array.isArray(list)) return;
       const categoryKey = `${parentKey}::${childKey}`;
@@ -629,6 +629,23 @@ const buildHierarchy = (normalized) => {
   if (quotesMap && typeof quotesMap === 'object' && Object.keys(quotesMap).length > 0) {
     console.log('[DEBUG] buildHierarchy - 🔗 FASE 2: Conectando ItemNodes aos SegmentNodes...');
     
+    // Criar mapa de títulos para busca eficiente e precisa
+    const titleToItemMap = new Map();
+    Object.entries(categories).forEach(([tag, categoryData]) => {
+      Object.entries(categoryData).forEach(([categoryKey, items]) => {
+        items.forEach((item) => {
+          // A premissa é que os títulos são únicos
+          titleToItemMap.set(item.title, {
+            ...item,
+            tag,
+            categoryKey: `${tag}::${categoryKey}`
+          });
+        });
+      });
+    });
+    
+    console.log(`[DEBUG] buildHierarchy - Mapa de títulos criado com ${titleToItemMap.size} itens`);
+    
     // Para cada segment, encontrar os ItemNodes que pertencem a ele
     Object.entries(segments).forEach(([segmentKey, segment]) => {
       if (segment.type === 'header' && segment.subItems && segment.subItems.length > 0) {
@@ -636,30 +653,21 @@ const buildHierarchy = (normalized) => {
         
         // Para cada sub-item do segment, procurar ItemNodes com título correspondente
         segment.subItems.forEach((subItemTitle, subItemIndex) => {
-          let foundItem = null;
+          // Busca direta e muito mais rápida/segura no Mapa
+          const itemNode = titleToItemMap.get(subItemTitle);
           
-          // Procurar em todas as categorias por um ItemNode com título correspondente
-          Object.entries(categories).forEach(([tag, categoryData]) => {
-            Object.entries(categoryData).forEach(([categoryKey, items]) => {
-              items.forEach((item) => {
-                // Comparar título da frase com o sub-item do segment
-                if (item.title === subItemTitle || item.phrase.includes(subItemTitle)) {
-                  foundItem = {
-                    ...item,
-                    segmentKey,
-                    subItemIndex,
-                    connectionOrder: subItemIndex,
-                    categoryKey: `${tag}::${categoryKey}` // Adicionar categoryKey para compatibilidade com IDs
-                  };
-                  console.log(`[DEBUG] buildHierarchy - ✅ ItemNode encontrado: "${item.title}" -> Segment: "${segment.title}"`);
-                }
-              });
-            });
-          });
-          
-          if (foundItem) {
+          if (itemNode) {
+            const foundItem = {
+              ...itemNode,
+              segmentKey,
+              subItemIndex,
+              connectionOrder: subItemIndex,
+              categoryKey: itemNode.categoryKey
+            };
+            
             if (!segment.connectedItems) segment.connectedItems = [];
             segment.connectedItems.push(foundItem);
+            console.log(`[DEBUG] buildHierarchy - ✅ ItemNode encontrado: "${itemNode.title}" -> Segment: "${segment.title}"`);
           } else {
             console.log(`[DEBUG] buildHierarchy - ⚠️ ItemNode não encontrado para: "${subItemTitle}"`);
           }
@@ -782,10 +790,10 @@ const CanvasLibraryView = ({ newsData, onTransferItem, onOpenCardModal, onCanvas
       // Processa core_quotes
       const raw = newsData?.core_quotes;
       if (raw) {
-        let parsed = null;
-        if (typeof raw === 'string' || Object.prototype.toString.call(raw) === '[object String]') {
-          parsed = JSON.parse(String(raw.valueOf()));
-        } else {
+      let parsed = null;
+      if (typeof raw === 'string' || Object.prototype.toString.call(raw) === '[object String]') {
+        parsed = JSON.parse(String(raw.valueOf()));
+      } else {
           parsed = raw;
         }
         if (parsed) {
@@ -811,9 +819,10 @@ const CanvasLibraryView = ({ newsData, onTransferItem, onOpenCardModal, onCanvas
   const allTags = useMemo(() => Object.keys(hierarchy.categories || {}), [hierarchy]);
   const memoNodeTypes = useMemo(() => nodeTypes, []);
 
-  useEffect(() => {
-    if (!isMultiSelect && !selectedTag && allTags.length > 0) setSelectedTag(allTags[0]);
-  }, [allTags, selectedTag, isMultiSelect]);
+  // Comentado para evitar inicialização automática que quebra a visualização
+  // useEffect(() => {
+  //   if (!isMultiSelect && !selectedTag && allTags.length > 0) setSelectedTag(allTags[0]);
+  // }, [allTags, selectedTag, isMultiSelect]);
 
   useEffect(() => {
     setIsProcessing(true);
@@ -868,18 +877,14 @@ const CanvasLibraryView = ({ newsData, onTransferItem, onOpenCardModal, onCanvas
         if (segment.connectedItems && segment.connectedItems.length > 0) {
           console.log(`[DEBUG] Criando ${segment.connectedItems.length} edges para segment: ${segmentId}`);
           
-          // Conectar SegmentNode -> ItemNode1 -> ItemNode2 -> ItemNode3...
-          let previousNodeId = segmentId;
-          segment.connectedItems.forEach((connectedItem, edgeIndex) => {
-            // Usar o mesmo padrão de ID que é usado na criação dos ItemNodes
-            const itemId = `item-${connectedItem.categoryKey?.split('::')[0] || 'unknown'}-${connectedItem.categoryKey?.split('::')[1] || 'unknown'}::${connectedItem.title}-${connectedItem.index}`;
-            
-            // Criar edge: previousNode -> currentItem
-            const edgeId = `edge-${previousNodeId}-${itemId}`;
+          // 1. Conecta o SegmentNode ao primeiro ItemNode
+          const firstItem = segment.connectedItems[0];
+          if (firstItem) {
+            const edgeId = `edge-${segmentId}-${firstItem.itemId}`;
             const edge = {
               id: edgeId,
-              source: previousNodeId,
-              target: itemId,
+              source: segmentId,
+              target: firstItem.itemId,
               sourceHandle: 'segment-output',
               targetHandle: 'data-input',
               type: 'custom',
@@ -890,22 +895,43 @@ const CanvasLibraryView = ({ newsData, onTransferItem, onOpenCardModal, onCanvas
               style: { strokeWidth: 2 }
             };
             
-            console.log(`[DEBUG] Criando edge: ${edgeId} (${previousNodeId} -> ${itemId})`);
-            console.log(`[DEBUG] Edge details:`, { source: previousNodeId, target: itemId, sourceHandle: 'segment-output', targetHandle: 'data-input' });
-            console.log(`[DEBUG] ItemNode ID para edge: ${itemId}`);
+            console.log(`[DEBUG] Criando edge: ${edgeId} (${segmentId} -> ${firstItem.itemId})`);
             rfEdges.push(edge);
-            
-            // Atualizar previousNode para a próxima conexão
-            previousNodeId = itemId;
-          });
+          }
+
+          // 2. Conecta os ItemNodes em sequência (em cadeia)
+          for (let i = 0; i < segment.connectedItems.length - 1; i++) {
+            const currentItem = segment.connectedItems[i];
+            const nextItem = segment.connectedItems[i + 1];
+
+            if (currentItem && nextItem) {
+              const edgeId = `edge-${currentItem.itemId}-${nextItem.itemId}`;
+              const edge = {
+                id: edgeId,
+                source: currentItem.itemId,
+                target: nextItem.itemId,
+                sourceHandle: 'segment-output',
+                targetHandle: 'data-input',
+                type: 'custom',
+                data: { 
+                  connectionType: 'item-to-item',
+                  onDelete: onEdgeDelete
+                },
+                style: { strokeWidth: 2 }
+              };
+              
+              console.log(`[DEBUG] Criando edge: ${edgeId} (${currentItem.itemId} -> ${nextItem.itemId})`);
+              rfEdges.push(edge);
+            }
+          }
         }
       }
     });
 
-    // Forçar criação de ItemNodes mesmo sem tag selecionada (para as edges funcionarem)
+    // Exibir todos os nós quando nenhuma tag estiver selecionada (visualização inicial completa)
     const tagsToRender = isMultiSelect
       ? activeTags.filter((t) => categories[t])
-      : (selectedTag && categories[selectedTag]) ? [selectedTag] : Object.keys(categories).slice(0, 1); // Usar primeira categoria se nenhuma selecionada
+      : (selectedTag && categories[selectedTag]) ? [selectedTag] : Object.keys(categories); // Exibir todas as categorias se nenhuma selecionada
       
     // Log para debug: verificar por que tagsToRender está vazio
     console.log('[DEBUG] Debug tagsToRender:', {
@@ -931,8 +957,9 @@ const CanvasLibraryView = ({ newsData, onTransferItem, onOpenCardModal, onCanvas
 
       Object.entries(keyObj).forEach(([k, items]) => {
         items.forEach((item) => {
-          // Criar ID que inclui o título da frase para compatibilidade com as edges
-          const itemId = `item-${tag}-${k}::${item.title}-${item.index}`;
+          // Usar o itemId que já é único e foi definido em buildHierarchy
+          const itemId = item.itemId;
+          console.log(`[DEBUG] Criando ItemNode com itemId: ${itemId} para item: "${item.title}"`);
           // Verificar se este ItemNode está conectado a algum segment
           const isConnectedToSegment = Object.values(segments).some(segment => 
             segment.connectedItems?.some(connectedItem => 
@@ -940,28 +967,28 @@ const CanvasLibraryView = ({ newsData, onTransferItem, onOpenCardModal, onCanvas
             )
           );
             
-            rfNodes.push({
-              id: itemId,
-              type: 'itemNode',
-              data: {
-                title: item.title,
-                phrase: item.phrase,
-                itemId: item.itemId,
-                categoryKey: item.categoryKey,
-                index: item.index,
-                color,
+          rfNodes.push({
+            id: itemId,
+            type: 'itemNode',
+            data: {
+              title: item.title,
+              phrase: item.phrase,
+              itemId: item.itemId,
+              categoryKey: item.categoryKey,
+              index: item.index,
+              color,
                 isConnectedToSegment,
-                onTransferItem,
-                onOpenCardModal,
-                onAddToNotionSection: (sectionId, payload) => {
-                  try {
-                    const fn = onAddToNotionSectionRef.current;
-                    if (typeof fn === 'function') { fn(sectionId, payload); }
-                  } catch {}
-                },
+              onTransferItem,
+              onOpenCardModal,
+              onAddToNotionSection: (sectionId, payload) => {
+                try {
+                  const fn = onAddToNotionSectionRef.current;
+                  if (typeof fn === 'function') { fn(sectionId, payload); }
+                } catch {}
               },
-              position: { x: 0, y: 0 }
-            });
+            },
+            position: { x: 0, y: 0 }
+          });
           addGNode(itemId, 320, 130);
         });
       });
@@ -997,8 +1024,8 @@ const CanvasLibraryView = ({ newsData, onTransferItem, onOpenCardModal, onCanvas
         
         let currentItemY = y + segmentHeight + gapY;
         segmentData.connectedItems.forEach((connectedItem, itemIndex) => {
-          // Usar o mesmo padrão de ID que é usado na criação dos ItemNodes
-          const itemId = `item-${connectedItem.categoryKey?.split('::')[0] || 'unknown'}-${connectedItem.categoryKey?.split('::')[1] || 'unknown'}::${connectedItem.title}-${connectedItem.index}`;
+          // Usar o itemId que já é único e foi definido em buildHierarchy
+          const itemId = connectedItem.itemId;
           console.log(`[DEBUG] Procurando ItemNode com ID: ${itemId}`);
           const itemNode = rfNodes.find(n => n.id === itemId);
           
