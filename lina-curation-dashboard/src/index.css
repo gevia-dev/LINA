@@ -219,13 +219,21 @@ body {
 .react-flow__edge-path {
   stroke: rgba(255, 255, 255, 0.4);
   stroke-width: 2;
-  stroke-dasharray: 5, 5;
 }
 
 .react-flow__edge:hover .react-flow__edge-path,
 .react-flow__edge-selected .react-flow__edge-path {
   stroke: var(--primary-green);
   stroke-width: 2;
+}
+
+/* Garantir que as edges mantenham sempre 2px de largura */
+.react-flow__edge path {
+  stroke-width: 2px !important;
+}
+
+.react-flow__edge:hover path {
+  stroke-width: 2px !important;
 }
 
 /* Remover animações de hover dos handles */
@@ -260,6 +268,39 @@ body {
 .react-flow__node .nodrag,
 .react-flow__node .nodrag * {
   cursor: default !important;
+}
+
+/* Garantir que as connection lines sejam sólidas */
+.react-flow__connection-line {
+  stroke-dasharray: none !important;
+}
+
+.react-flow__connection-line path {
+  stroke-dasharray: none !important;
+}
+
+/* Sobrescrever qualquer stroke-dasharray nas connection lines */
+.react-flow__connection-line * {
+  stroke-dasharray: none !important;
+}
+
+/* Garantir que as connection lines customizadas sejam sólidas */
+.react-flow__connection-line g path {
+  stroke-dasharray: none !important;
+}
+
+/* Sobrescrever qualquer stroke-dasharray em elementos SVG das connection lines */
+.react-flow__connection-line svg * {
+  stroke-dasharray: none !important;
+}
+
+/* Garantir que as connection lines mantenham sempre 2px de largura */
+.react-flow__connection-line path {
+  stroke-width: 2px !important;
+}
+
+.react-flow__connection-line:hover path {
+  stroke-width: 2px !important;
 }
 
 /* Sobrescrever especificamente o cursor text */

@@ -28,7 +28,7 @@ const CurationPage = () => {
       // Primeiro, buscar o news_id na tabela lina_news
       const { data: linaNewsData, error: linaNewsError } = await supabase
         .from('lina_news')
-        .select('news_id, core_structure, variant_structure, core_quotes')
+        .select('news_id, core_structure, variant_structure, core_quotes, quotes_map')
         .eq('id', newsId);
 
       if (linaNewsError) {

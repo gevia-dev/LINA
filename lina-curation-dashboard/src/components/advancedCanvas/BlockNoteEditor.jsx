@@ -3,9 +3,9 @@ import { useCreateBlockNote, BlockNoteViewEditor, FormattingToolbar, BlockTypeSe
 import { BlockNoteView } from '@blocknote/mantine';
 import '@blocknote/core/fonts/inter.css';
 import '@blocknote/mantine/style.css';
-import { Library as LibraryIcon } from 'lucide-react';
+
 import { motion, AnimatePresence } from 'framer-motion';
-import InventoryPanel from './InventoryPanel';
+
 
 // Converte uma string Markdown simples em blocos parciais do BlockNote.
 // Suporta headings (#, ##, ###) e parágrafos. Demais sintaxes são tratadas como parágrafos.
@@ -85,10 +85,10 @@ const domToMarkdownSimple = (rootEl) => {
   }
 };
 
-const BlockNoteEditor = forwardRef(({ initialContent = '', onChange, onScroll, inventoryItems = [], isInventoryOpen = false, inventoryUnread = 0, onToggleInventory, onCanvasItemDragStart }, ref) => {
+const BlockNoteEditor = forwardRef(({ initialContent = '', onChange, onScroll, onCanvasItemDragStart }, ref) => {
   const scrollRef = useRef(null);
   const toolbarRef = useRef(null);
-  const [panelTop, setPanelTop] = useState(42);
+
   const [isDragActive, setIsDragActive] = useState(false);
   const dragActiveRef = useRef(false);
 
@@ -271,32 +271,10 @@ const BlockNoteEditor = forwardRef(({ initialContent = '', onChange, onScroll, i
                 <CreateLinkButton />
               </FormattingToolbar>
             </div>
-            <motion.button
-              onClick={() => onToggleInventory?.()}
-              className="p-2 rounded border"
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              title="Inventário"
-              style={{ backgroundColor: 'var(--bg-tertiary)', borderColor: 'var(--border-primary)', color: 'var(--text-secondary)', position: 'relative' }}
-            >
-              <LibraryIcon size={16} />
-              {inventoryUnread > 0 && (
-                <span
-                  style={{ position: 'absolute', top: -6, right: -6, minWidth: 16, height: 16, padding: '0 4px', borderRadius: 9999, backgroundColor: 'var(--status-error)', color: 'white', fontSize: 10, lineHeight: '16px', textAlign: 'center' }}
-                >{Math.min(9, inventoryUnread)}{inventoryUnread > 9 ? '+' : ''}</span>
-              )}
-            </motion.button>
+
           </div>
         </div>
-        <InventoryPanel
-          items={inventoryItems}
-          isOpen={isInventoryOpen}
-          onToggle={() => onToggleInventory?.()}
-          onClose={() => onToggleInventory?.()}
-          onCanvasItemDragStart={onCanvasItemDragStart}
-          topOffset={panelTop}
-          variant="inside-editor"
-        />
+
         <BlockNoteViewEditor />
       </BlockNoteView>
     </div>

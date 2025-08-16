@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { FileText, Save, X, Layers as LayersIcon, Quote as QuoteIcon, Braces as BracesIcon, ChevronLeft, ChevronRight, Library as LibraryIcon } from 'lucide-react';
 import CanvasLibraryView from './CanvasLibraryView';
 import BlockNoteEditor from './BlockNoteEditor';
+import MainSidebar from '../MainSidebar';
 
 const SECTION_TITLES = {
   summary: 'Introdução',
@@ -18,14 +19,12 @@ const NotionLikePage = ({ isOpen = true, onClose, newsData, newsTitle, nodes = [
   const [activeSection, setActiveSection] = useState('summary');
   const [lastMarkdown, setLastMarkdown] = useState('');
   const [isResizing, setIsResizing] = useState(false);
-  const [splitRatio, setSplitRatio] = useState(0.62);
+  const [splitRatio, setSplitRatio] = useState(0.4);
   const [filteredSection, setFilteredSection] = useState(null);
   const [isLeftCollapsed, setIsLeftCollapsed] = useState(false);
   const [dragState, setDragState] = useState({ active: false });
   const [recentlyAdded, setRecentlyAdded] = useState(null);
-  const [inventoryItems, setInventoryItems] = useState([]);
-  const [isInventoryOpen, setIsInventoryOpen] = useState(false);
-  const [inventoryUnread, setInventoryUnread] = useState(0);
+
   const EDITOR_MIN_PX = 480;
   const LIB_MIN_PX = 360;
 
@@ -148,28 +147,9 @@ const NotionLikePage = ({ isOpen = true, onClose, newsData, newsTitle, nodes = [
   }, [nodes, onSaveNode, onLinkDataToSection]);
 
   // Inventário: adicionar sem abrir painel; mostra badge no botão
-  const handleAddToInventory = useCallback((payload) => {
-    try {
-      const id = String(payload?.itemId || `inv-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`);
-      const item = {
-        id,
-        title: String(payload?.title || 'Item'),
-        content: String(payload?.content || ''),
-        itemId: payload?.itemId,
-        categoryKey: payload?.categoryKey,
-        nodeType: payload?.nodeType || 'micro'
-      };
-      // Debounce leve para evitar múltiplos re-renders se vários itens forem adicionados em sequência
-      requestAnimationFrame(() => {
-        setInventoryItems((prev) => [item, ...prev]);
-        setInventoryUnread((n) => n + 1);
-      });
-    } catch {}
-  }, []);
 
-  useEffect(() => {
-    if (isInventoryOpen) setInventoryUnread(0);
-  }, [isInventoryOpen]);
+
+
 
   const useDragAndDrop = (onAdd) => {
     const [isActive, setIsActive] = useState(false);
@@ -391,198 +371,112 @@ const NotionLikePage = ({ isOpen = true, onClose, newsData, newsTitle, nodes = [
       <motion.div className="fixed inset-0 z-50 flex items-center justify-center" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
         <motion.div className="absolute inset-0 bg-black bg-opacity-50 backdrop-blur-sm" onClick={onClose} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} />
         <motion.div
-          className="relative w-full h-full flex flex-col"
+          className="relative w-full h-full flex"
           style={{ backgroundColor: 'var(--bg-primary)', border: '1px solid var(--border-primary)' }}
           initial={{ opacity: 0, scale: 0.98, y: 10 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.98, y: 10 }}
           onClick={(e) => e.stopPropagation()}
         >
-          <style>{`
-            /* Aparência do editor BlockNote dentro do container Notion-like */
-            .notion-editor { min-height: 100vh; }
-            .notion-editor .bn-container,
-            .notion-editor .bn-editor,
-            .notion-editor .ProseMirror {
-              background-color: var(--bg-primary) !important;
-              color: var(--text-primary) !important;
-              min-height: 100vh !important;
-            }
-            .notion-editor .ProseMirror {
-              padding: 28px 32px !important;
-              line-height: 1.7 !important;
-              font-family: "Nunito Sans", "Inter", sans-serif !important;
-            }
-            /* Oculta side menu e slash menu (substituídos por toolbar superior) */
-            .notion-editor .bn-side-menu,
-            .notion-editor .bn-slash-menu,
-            .notion-editor .bn-floating-toolbar {
-              display: none !important;
-            }
+          {/* MainSidebar na esquerda */}
+          <MainSidebar />
+          
+          {/* Container principal do editor */}
+          <div className="flex-1 flex flex-col">
+            <style>{`
+              /* Aparência do editor BlockNote dentro do container Notion-like */
+              .notion-editor { min-height: 100vh; }
+              .notion-editor .bn-container,
+              .notion-editor .bn-editor,
+              .notion-editor .ProseMirror {
+                background-color: var(--bg-primary) !important;
+                color: var(--text-primary) !important;
+                min-height: 100vh !important;
+              }
+              .notion-editor .ProseMirror {
+                padding: 28px 32px !important;
+                line-height: 1.7 !important;
+                font-family: "Nunito Sans", "Inter", sans-serif !important;
+              }
+              /* Oculta side menu e slash menu (substituídos por toolbar superior) */
+              .notion-editor .bn-side-menu,
+              .notion-editor .bn-slash-menu,
+              .notion-editor .bn-floating-toolbar {
+                display: none !important;
+              }
 
-            /* Splitter */
-            .splitter-handle {
-              background-color: #6b7280; /* gray-500 */
-            }
-            .splitter-handle:hover,
-            .splitter-handle.active { background-color: #9ca3af; /* gray-400 */ }
+              /* Splitter */
+              .splitter-handle {
+                background-color: #6b7280; /* gray-500 */
+              }
+              .splitter-handle:hover,
+              .splitter-handle.active { background-color: #9ca3af; /* gray-400 */ }
 
-            /* Inventário (aba retraída + painel) */
-            .inventory-toggle {
-              position: absolute;
-              top: 50%;
-              right: 0;
-              transform: translateY(-50%);
-              z-index: 60;
-            }
-            .inventory-panel {
-              position: absolute;
-              top: 64px; /* abaixo do header */
-              right: 0;
-              bottom: 0;
-              width: 320px;
-              z-index: 55;
-              background-color: var(--bg-secondary);
-              border-left: 1px solid var(--border-primary);
-              box-shadow: -8px 0 24px rgba(0,0,0,0.3);
-            }
-          `}</style>
+
+            `}</style>
+            
             {/* Header */}
-          <div className="flex items-center justify-between p-4 border-b" style={{ backgroundColor: 'var(--bg-secondary)', borderColor: 'var(--border-primary)' }}>
+            <div className="flex items-center justify-between p-4 border-b" style={{ backgroundColor: 'var(--bg-secondary)', borderColor: 'var(--border-primary)' }}>
               <div className="flex items-center gap-3">
-              <FileText size={22} style={{ color: 'var(--primary-green)' }} />
+                <FileText size={22} style={{ color: 'var(--primary-green)' }} />
                 <div>
-                <div className="text-sm font-semibold" style={{ color: 'var(--text-primary)', fontFamily: '"Nunito Sans", "Inter", sans-serif' }}>Editor Estruturado</div>
-                <div className="text-xs" style={{ color: 'var(--text-secondary)', fontFamily: '"Nunito Sans", "Inter", sans-serif' }}>{newsTitle || ''}</div>
+                  <div className="text-sm font-semibold" style={{ color: 'var(--text-primary)', fontFamily: '"Nunito Sans", "Inter", sans-serif' }}>Editor Estruturado</div>
+                  <div className="text-xs" style={{ color: 'var(--text-secondary)', fontFamily: '"Nunito Sans", "Inter", sans-serif' }}>{newsTitle || ''}</div>
                 </div>
               </div>
               <div className="flex items-center gap-2">
-              <button onClick={handleSave} className="px-3 py-1.5 rounded border" title="Salvar" style={{ backgroundColor: 'var(--bg-tertiary)', borderColor: 'var(--border-primary)', color: 'var(--text-secondary)' }}>
-                <div className="flex items-center gap-2"><Save size={16} /><span className="text-sm">Salvar</span></div>
-              </button>
-              <button onClick={onClose} className="p-2 rounded border" title="Fechar" style={{ backgroundColor: 'var(--bg-tertiary)', borderColor: 'var(--border-primary)', color: 'var(--text-secondary)' }}>
-                <X size={16} />
-              </button>
+                <button onClick={handleSave} className="px-3 py-1.5 rounded border" title="Salvar" style={{ backgroundColor: 'var(--bg-tertiary)', borderColor: 'var(--border-primary)', color: 'var(--text-secondary)' }}>
+                  <div className="flex items-center gap-2"><Save size={16} /><span className="text-sm">Salvar</span></div>
+                </button>
+                <button onClick={onClose} className="p-2 rounded border" title="Fechar" style={{ backgroundColor: 'var(--bg-tertiary)', borderColor: 'var(--border-primary)', color: 'var(--text-secondary)' }}>
+                  <X size={16} />
+                </button>
               </div>
             </div>
 
-          {/* Corpo: três painéis com splitter central (restaura funcionalidade) */}
-          <div className="flex-1 flex overflow-hidden" ref={containerRef}>
-            {/* Painel Esquerdo - timeline de segmentos com chips (dados/estrutura) */}
-            <motion.div
-              className="border-r overflow-y-auto"
-              style={{ borderColor: 'var(--border-primary)', width: isLeftCollapsed ? 40 : 220 }}
-              initial={{ opacity: 0, x: -20 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: 0.1 }}
-            >
-              <div className="p-2">
-                <div className="flex items-center justify-between mb-2">
-                  {!isLeftCollapsed && (
-                    <h3 className="text-sm font-medium" style={{ color: 'var(--text-primary)', fontFamily: '"Nunito Sans", "Inter", sans-serif' }}>Estrutura do Conteúdo</h3>
-                  )}
-                  <motion.button
-                    onClick={() => setIsLeftCollapsed((v) => !v)}
-                    className="p-1.5 rounded border"
-                    whileTap={{ scale: 0.95 }}
-                    title={isLeftCollapsed ? 'Expandir' : 'Recolher'}
-                    style={{ borderColor: 'var(--border-primary)', color: 'var(--text-secondary)' }}
-                  >
-                    {isLeftCollapsed ? <ChevronRight size={14} /> : <ChevronLeft size={14} />}
-                  </motion.button>
-                </div>
-                {!isLeftCollapsed && (
-                  <div className="relative">
-                    <div className="absolute left-3 top-1 bottom-1 w-px" style={{ backgroundColor: 'var(--border-primary)' }} />
-                    {['summary','body','conclusion'].map((id) => (
-                      <div key={id} className="relative pl-8 pb-4">
-                        {/* Dot */}
-                        <div className="absolute left-2 top-2">
-                          <div
-                            className="w-3 h-3 rounded-full border-2"
-                            style={{
-                              borderColor: ((filteredSection === id) || (recentlyAdded?.sectionId === id)) ? 'var(--primary-green)' : 'var(--border-primary)',
-                              backgroundColor: ((filteredSection === id) || (recentlyAdded?.sectionId === id)) ? 'var(--primary-green-transparent)' : 'var(--bg-primary)'
-                            }}
-                          />
-                        </div>
-                        {/* Botão do título da seção (toggle filtro) com DropZone */}
-                        <DropZone sectionId={id}>
-                          <button
-                            className="w-full text-left px-3 py-2 rounded-lg border"
-                            onClick={() => {
-                              setFilteredSection((current) => current === id ? null : id);
-                              setActiveSection(id);
-                            }}
-                            style={{
-                              backgroundColor: ((filteredSection === id) || (recentlyAdded?.sectionId === id)) ? 'var(--bg-tertiary)' : 'var(--bg-primary)',
-                              borderColor: ((filteredSection === id) || (recentlyAdded?.sectionId === id)) ? 'var(--primary-green)' : 'var(--border-primary)',
-                              color: 'var(--text-primary)',
-                              fontFamily: '"Nunito Sans", "Inter", sans-serif'
-                            }}
-                          >
-                            {SECTION_TITLES[id]}
-                          </button>
-                        </DropZone>
-                        {/* Chips conectados (dados/estrutura) */}
-                        {Array.isArray(sortedSectionChildren[id]) && sortedSectionChildren[id].length > 0 && (
-                          <div className="mt-2 flex flex-wrap gap-1.5 pl-1">
-                            {sortedSectionChildren[id].map((child) => (
-                              <SidebarChip key={child.id} node={child} />
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </motion.div>
-
-            {/* Editor + Splitter + Biblioteca */}
-            <div className="flex-1 overflow-hidden flex" ref={rightPaneRef}>
+            {/* Corpo: dois painéis com splitter central */}
+            <div className="flex-1 flex overflow-hidden" ref={containerRef}>
+              {/* Editor + Splitter + Biblioteca */}
+              <div className="flex-1 overflow-hidden flex" ref={rightPaneRef}>
                 <div className="overflow-hidden" style={{ width: `${Math.round(splitRatio * 100)}%`, minWidth: EDITOR_MIN_PX, backgroundColor: '#000' }}>
-                <div className="h-full" style={{ height: '100%' }}>
-                  <DropZone sectionId={filteredSection || activeSection}>
-                    <BlockNoteEditor
-                      key={`bn-${filteredSection || 'all'}-${displayContent.length}`}
-                      ref={editorRef}
-                      initialContent={displayContent}
-                      onChange={setLastMarkdown}
-                      onScroll={filteredSection ? undefined : handleScrollSync}
-                      inventoryItems={inventoryItems}
-                      isInventoryOpen={isInventoryOpen}
-                      inventoryUnread={inventoryUnread}
-                      onToggleInventory={() => setIsInventoryOpen((v) => !v)}
-                      onCanvasItemDragStart={(payload) => { try { onCanvasItemDragStart?.(payload); } catch {} }}
-                    />
-                  </DropZone>
+                  <div className="h-full" style={{ height: '100%' }}>
+                    <DropZone sectionId={filteredSection || activeSection}>
+                      <BlockNoteEditor
+                        key={`bn-${filteredSection || 'all'}-${displayContent.length}`}
+                        ref={editorRef}
+                        initialContent={displayContent}
+                        onChange={setLastMarkdown}
+                        onScroll={filteredSection ? undefined : handleScrollSync}
+                        
+                        onCanvasItemDragStart={(payload) => { try { onCanvasItemDragStart?.(payload); } catch {} }}
+                      />
+                    </DropZone>
+                  </div>
+                </div>
+
+                <div onMouseDown={onStartResize} className={`splitter-handle cursor-col-resize ${isResizing ? 'active' : ''}`} style={{ width: 4, zIndex: 10, backgroundColor: '#6b7280' }} title="Arraste para redimensionar" />
+
+                <div className="overflow-hidden" style={{ width: `${Math.round((1 - splitRatio) * 100)}%`, minWidth: LIB_MIN_PX, backgroundColor: 'var(--bg-primary)' }}>
+                  <CanvasLibraryView
+                    compact
+                    sidebarOnRight
+                    enableSidebarToggle
+                    transparentSidebar
+                    newsData={newsData}
+                    onTransferItem={() => {}}
+                    onOpenCardModal={() => {}}
+                    onDragStart={(payload) => { try { onCanvasItemDragStart?.(payload); } catch {} }}
+                    onCanvasItemDragStart={() => {}}
+                    onAddToNotionSection={(sectionId, payload) => handleContentAdd(payload, sectionId)}
+            
+                  />
                 </div>
               </div>
-
-              <div onMouseDown={onStartResize} className={`splitter-handle cursor-col-resize ${isResizing ? 'active' : ''}`} style={{ width: 4, zIndex: 10, backgroundColor: '#6b7280' }} title="Arraste para redimensionar" />
-
-              <div className="overflow-hidden" style={{ width: `${Math.round((1 - splitRatio) * 100)}%`, minWidth: LIB_MIN_PX, backgroundColor: 'var(--bg-primary)' }}>
-                <CanvasLibraryView
-                  compact
-                  sidebarOnRight
-                  enableSidebarToggle
-                  transparentSidebar
-                  newsData={newsData}
-                  onTransferItem={() => {}}
-                  onOpenCardModal={() => {}}
-                  onDragStart={(payload) => { try { onCanvasItemDragStart?.(payload); } catch {} }}
-                  onCanvasItemDragStart={() => {}}
-                  onAddToNotionSection={(sectionId, payload) => handleContentAdd(payload, sectionId)}
-                  onAddToInventory={handleAddToInventory}
-                />
-              </div>
             </div>
-            
           </div>
-          </motion.div>
         </motion.div>
-      </AnimatePresence>
+      </motion.div>
+    </AnimatePresence>
   );
 };
 
