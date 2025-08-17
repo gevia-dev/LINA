@@ -1086,14 +1086,12 @@ const AdvancedCanvasEditor = ({
       />
 
       {/* Editor Estruturado estilo Notion */}
+      {console.log('🔍 AdvancedCanvasEditor - newsData sendo passado para NotionLikePage:', newsData)}
       <NotionLikePage
         isOpen={isNotionPageOpen}
         onClose={closeNotionPage}
         newsData={newsData}
         newsTitle={newsTitle}
-        nodes={nodes}
-        edges={edges}
-        onSaveNode={(nodeId, newContent) => updateNodeContent(nodeId, { content: newContent })}
         onCanvasItemDragStart={handleCanvasDragStart}
         onLinkDataToSection={handleLinkDataToSection}
       />

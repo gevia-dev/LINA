@@ -5,13 +5,51 @@ import CanvasLibraryView from './CanvasLibraryView';
 import BlockNoteEditor from './BlockNoteEditor';
 import MainSidebar from '../MainSidebar';
 
+// Estilos CSS para os marcadores de referência e grifo
+const referenceMarkerStyles = `
+  /* Estilos para os marcadores de referência simples */
+  .ProseMirror {
+    font-family: 'Inter', 'Nunito Sans', sans-serif;
+  }
+  
+  /* Estilizar números entre colchetes para parecerem marcadores de referência */
+  .ProseMirror p:contains('['), .ProseMirror h1:contains('['), .ProseMirror h2:contains('['), .ProseMirror h3:contains('[') {
+    line-height: 1.6;
+  }
+  
+  /* Adicionar espaçamento extra após marcadores de referência */
+  .ProseMirror p:contains('[') {
+    margin-bottom: 1em;
+  }
+  
+  /* Estilos para o grifo de hover - FORÇADO com !important */
+  .ProseMirror p[data-highlighted="true"] {
+    background-color: #FEF3C7 !important;
+    border: 1px solid #FCD34D !important;
+    border-radius: 4px !important;
+    padding: 4px 6px !important;
+    box-shadow: 0 2px 8px rgba(254, 243, 199, 0.6) !important;
+    transition: all 0.3s ease !important;
+  }
+  
+  /* Estilos para marcadores de referência quando grifados */
+  .ProseMirror .reference-marker-highlighted {
+    background-color: #32CD32 !important;
+    color: #000 !important;
+    font-weight: bold;
+    border-radius: 3px;
+    padding: 1px 3px;
+    transition: all 0.3s ease;
+  }
+`;
+
 const SECTION_TITLES = {
   summary: 'Introdução',
   body: 'Corpo',
   conclusion: 'Conclusão'
 };
 
-const NotionLikePage = ({ isOpen = true, onClose, newsData, newsTitle, nodes = [], edges = [], onSaveNode, onCanvasItemDragStart, onLinkDataToSection }) => {
+const NotionLikePage = ({ isOpen = true, onClose, newsData, newsTitle, onCanvasItemDragStart, onLinkDataToSection }) => {
   const editorRef = useRef(null);
   const containerRef = useRef(null);
   const rightPaneRef = useRef(null);
@@ -24,6 +62,9 @@ const NotionLikePage = ({ isOpen = true, onClose, newsData, newsTitle, nodes = [
   const [isLeftCollapsed, setIsLeftCollapsed] = useState(false);
   const [dragState, setDragState] = useState({ active: false });
   const [recentlyAdded, setRecentlyAdded] = useState(null);
+  
+  // Estado para armazenar o mapeamento entre marcadores e títulos
+  const [referenceMapping, setReferenceMapping] = useState(new Map());
 
   const EDITOR_MIN_PX = 480;
   const LIB_MIN_PX = 360;
@@ -61,62 +102,126 @@ const NotionLikePage = ({ isOpen = true, onClose, newsData, newsTitle, nodes = [
     );
   }, []);
 
-  // Mapeia filhos conectados (dados/estrutura) por seção de texto
+  // Como agora sempre priorizamos final_text, não precisamos mais mapear filhos dos nodes
   const sectionChildren = useMemo(() => {
-    const sectionIds = ['summary', 'body', 'conclusion'];
-    const map = { summary: [], body: [], conclusion: [] };
-    try {
-      if (!Array.isArray(edges) || !Array.isArray(nodes)) return map;
-      const idToNode = new Map(nodes.map((n) => [n.id, n]));
-      edges.forEach((e) => {
-        if (sectionIds.includes(e?.target)) {
-          const child = idToNode.get(e.source);
-          if (child) map[e.target].push(child);
-        }
-      });
-    } catch {}
-    return map;
-  }, [nodes, edges]);
+    return { summary: [], body: [], conclusion: [] };
+  }, []);
 
+  // Como não temos mais filhos dos nodes, retornar arrays vazios
   const sortedSectionChildren = useMemo(() => {
-    const isStructureNode = (n) => {
-      const role = n?.data?.nodeType || n?.data?.coreKey || n?.type;
-      return role === 'estrutura' || n?.data?.nodeType === 'estrutura' || n?.data?.coreKey === 'micro_estrutura' || n?.data?.isStructureNode === true;
-    };
-    const sortFn = (a, b) => Number(isStructureNode(b)) - Number(isStructureNode(a));
     return {
-      summary: [...(sectionChildren.summary || [])].sort(sortFn),
-      body: [...(sectionChildren.body || [])].sort(sortFn),
-      conclusion: [...(sectionChildren.conclusion || [])].sort(sortFn)
+      summary: [],
+      body: [],
+      conclusion: []
     };
-  }, [sectionChildren]);
+  }, []);
 
-  // Monta conteúdo do editor a partir dos nodes principais
+  // Função CORRIGIDA para processar o texto mantendo mapeamento das referências
+  const processFinalText = useCallback((text) => {
+    if (!text || typeof text !== 'string') return { processedText: text, mapping: new Map() };
+    
+    // Regex para encontrar trechos ///<texto>///
+    const regex = /\/\/\/<([^>]+)>\/\/\//g;
+    let processedText = text;
+    let referenceNumber = 1;
+    const mapping = new Map();
+    
+    // Substituir cada trecho marcado por um marcador visual simples E guardar o mapeamento
+    processedText = processedText.replace(regex, (fullMatch, content) => {
+      const marker = `[${referenceNumber}]`;
+      
+      // IMPORTANTE: Guardar o mapeamento entre o marcador e o conteúdo original
+      mapping.set(marker, content.trim());
+      mapping.set(content.trim(), marker); // Mapeamento bidirecional
+      
+      console.log(`📍 Mapeamento criado: ${marker} <-> "${content.trim()}"`);
+      
+      referenceNumber++;
+      return marker;
+    });
+    
+    console.log(`🗺️ Mapeamento total criado com ${mapping.size / 2} referências`);
+    
+    return { processedText, mapping };
+  }, []);
+
+  // Monta conteúdo do editor - sempre priorizar final_text do banco
   const editorContent = useMemo(() => {
-    const findContent = (id) => String(nodes.find((n) => n.id === id)?.data?.content || '');
-    const summaryMD = findContent('summary');
-    const bodyMD = findContent('body');
-    const conclusionMD = findContent('conclusion');
-    const parts = [];
-    parts.push(`# ${SECTION_TITLES.summary}`);
-    if (summaryMD) parts.push(summaryMD.trim());
-    parts.push('');
-    parts.push(`# ${SECTION_TITLES.body}`);
-    if (bodyMD) parts.push(bodyMD.trim());
-    parts.push('');
-    parts.push(`# ${SECTION_TITLES.conclusion}`);
-    if (conclusionMD) parts.push(conclusionMD.trim());
-    return parts.join('\n');
-  }, [nodes]);
+    // Debug: verificar se final_text está sendo recebido
+    console.log('🔍 NotionLikePage - newsData:', newsData);
+    console.log('🔍 NotionLikePage - final_text:', newsData?.final_text);
+    
+    // SEMPRE usar final_text do banco de dados se disponível
+    if (newsData?.final_text && typeof newsData.final_text === 'string' && newsData.final_text.trim()) {
+      console.log('✅ Usando final_text do banco de dados');
+      const { processedText, mapping } = processFinalText(newsData.final_text.trim());
+      
+      // Armazenar o mapeamento no estado
+      setReferenceMapping(mapping);
+      
+      console.log('🔍 NotionLikePage - texto processado:', processedText);
+      console.log('🔍 NotionLikePage - mapeamento criado:', mapping);
+      
+      return processedText;
+    }
+    
+    // Se não tiver final_text, mostrar mensagem informativa
+    console.log('⚠️ final_text não disponível - mostrando mensagem informativa');
+    setReferenceMapping(new Map()); // Limpar mapeamento
+    return `# Editor Estruturado
+
+Este editor está configurado para mostrar o conteúdo da coluna "final_text" do banco de dados.
+
+Se você está vendo esta mensagem, significa que:
+- A coluna "final_text" não está preenchida para esta notícia, ou
+- Houve um problema ao carregar os dados do banco
+
+Verifique o console para mais detalhes sobre o carregamento dos dados.`;
+  }, [newsData?.final_text, processFinalText]);
 
   const sectionMarkdownMap = useMemo(() => {
-    const findContent = (id) => String(nodes.find((n) => n.id === id)?.data?.content || '');
+    // SEMPRE usar final_text se disponível
+    if (newsData?.final_text && typeof newsData.final_text === 'string' && newsData.final_text.trim()) {
+      const { processedText } = processFinalText(newsData.final_text.trim());
+      const lines = processedText.split('\n');
+      const sections = { summary: '', body: '', conclusion: '' };
+      let currentSection = null;
+      
+      for (const line of lines) {
+        const trimmedLine = line.trim();
+        // Detectar seções por diferentes formatos de heading
+        if (trimmedLine === '# Introdução' || trimmedLine === '## Introdução' || trimmedLine === '### Introdução') {
+          currentSection = 'summary';
+        } else if (trimmedLine === '# Corpo' || trimmedLine === '## Corpo' || trimmedLine === '### Corpo') {
+          currentSection = 'body';
+        } else if (trimmedLine === '# Conclusão' || trimmedLine === '## Conclusão' || trimmedLine === '### Conclusão') {
+          currentSection = 'conclusion';
+        } else if (currentSection && trimmedLine) {
+          // Adicionar linha ao conteúdo da seção atual
+          sections[currentSection] += (sections[currentSection] ? '\n' : '') + line;
+        }
+      }
+      
+      // Processar cada seção
+      const processedSections = {};
+      Object.keys(sections).forEach(sectionKey => {
+        if (sections[sectionKey]) {
+          processedSections[sectionKey] = `# ${SECTION_TITLES[sectionKey]}\n${sections[sectionKey].trim()}`;
+        } else {
+          processedSections[sectionKey] = `# ${SECTION_TITLES[sectionKey]}`;
+        }
+      });
+      
+      return processedSections;
+    }
+    
+    // Se não tiver final_text, retornar seções vazias
     return {
-      summary: [`# ${SECTION_TITLES.summary}`, findContent('summary').trim()].filter(Boolean).join('\n'),
-      body: [`# ${SECTION_TITLES.body}`, findContent('body').trim()].filter(Boolean).join('\n'),
-      conclusion: [`# ${SECTION_TITLES.conclusion}`, findContent('conclusion').trim()].filter(Boolean).join('\n')
+      summary: `# ${SECTION_TITLES.summary}`,
+      body: `# ${SECTION_TITLES.body}`,
+      conclusion: `# ${SECTION_TITLES.conclusion}`
     };
-  }, [nodes]);
+  }, [newsData?.final_text, processFinalText]);
 
   const displayContent = useMemo(() => {
     if (!filteredSection) return editorContent;
@@ -127,29 +232,169 @@ const NotionLikePage = ({ isOpen = true, onClose, newsData, newsTitle, nodes = [
     setLastMarkdown(editorContent);
   }, [editorContent]);
 
+  // FUNÇÃO FINAL para grifar texto com força máxima
+  const handleHighlightText = useCallback(async (title, phrase, action) => {
+    console.log(`🎨 handleHighlightText: ${action} - title: "${title}", phrase: "${phrase}"`);
+    console.log(`🗺️ Mapeamento disponível:`, referenceMapping);
+
+    if (!referenceMapping || referenceMapping.size === 0) {
+      console.log('❌ Nenhum mapeamento disponível');
+      return;
+    }
+
+    // Procurar pelo título no mapeamento
+    let targetMarker = null;
+    
+    if (referenceMapping.has(title)) {
+      targetMarker = referenceMapping.get(title);
+      console.log(`✅ Encontrado marcador direto para "${title}": ${targetMarker}`);
+    } else {
+      // Busca por correspondência parcial
+      for (const [key, value] of referenceMapping.entries()) {
+        if (typeof key === 'string' && key.includes(title)) {
+          targetMarker = value;
+          console.log(`✅ Encontrado marcador por correspondência parcial "${title}" em "${key}": ${targetMarker}`);
+          break;
+        }
+        if (typeof value === 'string' && value.includes(title)) {
+          targetMarker = key;
+          console.log(`✅ Encontrado marcador por correspondência parcial "${title}" em "${value}": ${targetMarker}`);
+          break;
+        }
+      }
+    }
+
+    if (!targetMarker) {
+      console.log(`❌ Nenhum marcador encontrado para "${title}"`);
+      return;
+    }
+
+    try {
+      // Usar diretamente a phrase que vem do canvas - já é a frase correta
+      const fraseCompleta = phrase || '';
+      
+      console.log(`🎯 Frase a ser grifada: "${fraseCompleta}"`);
+      
+      if (!fraseCompleta || fraseCompleta.length < 10) {
+        console.log(`❌ Frase muito curta: "${fraseCompleta}"`);
+        throw new Error('Frase inválida');
+      }
+
+      // Procurar por partes da frase no DOM
+      const editorElement = document.querySelector('.ProseMirror');
+      if (!editorElement) {
+        console.log('❌ Elemento do editor não encontrado');
+        return;
+      }
+
+      // Pegar as primeiras palavras da frase para buscar
+      const fraseParcial = fraseCompleta.split(' ').slice(0, 30).join(' ');
+      console.log(`🔍 Buscando por: "${fraseParcial.substring(0, 100)}..."`);
+
+      // Encontrar todos os parágrafos
+      const paragraphs = editorElement.querySelectorAll('p');
+      
+      for (const paragraph of paragraphs) {
+        const paraText = paragraph.textContent || '';
+        
+        // Verificar se contém parte significativa da frase
+        if (paraText.includes(fraseParcial.substring(0, 50))) {
+          console.log(`✅ Parágrafo encontrado: "${paraText.substring(0, 100)}..."`);
+          
+          if (action === 'enter') {
+            // FORÇAR estilos com setProperty e !important
+            paragraph.style.setProperty('background-color', '#FEF3C7', 'important');
+            paragraph.style.setProperty('border', '1px solid #FCD34D', 'important');
+            paragraph.style.setProperty('border-radius', '4px', 'important');
+            paragraph.style.setProperty('padding', '4px 6px', 'important');
+            paragraph.style.setProperty('transition', 'all 0.3s ease', 'important');
+            paragraph.style.setProperty('box-shadow', '0 2px 8px rgba(254, 243, 199, 0.6)', 'important');
+            paragraph.setAttribute('data-highlighted', 'true');
+            console.log(`✅ Grifo aplicado ao parágrafo com !important`);
+          } else if (action === 'leave') {
+            // Remover propriedades
+            paragraph.style.removeProperty('background-color');
+            paragraph.style.removeProperty('border');
+            paragraph.style.removeProperty('border-radius');
+            paragraph.style.removeProperty('padding');
+            paragraph.style.removeProperty('box-shadow');
+            paragraph.removeAttribute('data-highlighted');
+            console.log(`✅ Grifo removido do parágrafo`);
+          }
+          break;
+        }
+      }
+      
+    } catch (error) {
+      console.error('❌ Erro ao aplicar grifo específico:', error);
+      
+      // Fallback: buscar pelo marcador no texto
+      console.log('🔄 Usando fallback: grifo pelo marcador...');
+      const editorElement = document.querySelector('.ProseMirror');
+      if (editorElement) {
+        const elements = editorElement.querySelectorAll('p, h1, h2, h3, h4, h5, h6');
+        
+        for (const element of elements) {
+          if (element.textContent && element.textContent.includes(targetMarker)) {
+            if (action === 'enter') {
+              element.style.setProperty('background-color', '#FEF3C7', 'important');
+              element.style.setProperty('border', '1px solid #FCD34D', 'important');
+              element.style.setProperty('border-radius', '4px', 'important');
+              element.style.setProperty('padding', '4px 6px', 'important');
+              element.setAttribute('data-highlighted', 'true');
+              console.log(`✅ Fallback: grifo aplicado ao parágrafo que contém "${targetMarker}"`);
+            } else if (action === 'leave') {
+              element.style.removeProperty('background-color');
+              element.style.removeProperty('border');
+              element.style.removeProperty('border-radius');
+              element.style.removeProperty('padding');
+              element.removeAttribute('data-highlighted');
+              console.log(`✅ Fallback: grifo removido do parágrafo que contém "${targetMarker}"`);
+            }
+            break;
+          }
+        }
+      }
+    }
+  }, [referenceMapping]);
+
+  // Escutar eventos de hover do canvas
+  useEffect(() => {
+    const handleCanvasItemHover = (event) => {
+      const { action, title, phrase } = event.detail;
+      
+      console.log(`🖱️ Canvas hover ${action}:`, { title, phrase });
+      
+      if (title) {
+        handleHighlightText(title, phrase, action);
+      }
+    };
+
+    window.addEventListener('canvas-item-hover', handleCanvasItemHover);
+    
+    return () => {
+      window.removeEventListener('canvas-item-hover', handleCanvasItemHover);
+    };
+  }, [handleHighlightText]);
+
   const handleContentAdd = useCallback((dragData, sectionId) => {
     try {
       if (!dragData || !sectionId) return;
-      const currentNode = nodes.find((n) => n.id === sectionId);
-      const current = String(currentNode?.data?.content || '');
-      const title = String(dragData?.title || '').trim();
-      const content = String(dragData?.content || '').trim();
-      const addition = [title && `### ${title}`, content].filter(Boolean).join('\n\n');
-      const updated = current ? `${current}\n\n${addition}` : addition;
-      // Evita chamadas múltiplas síncronas que causam re-render em cascata
-      Promise.resolve().then(() => {
-        try { if (typeof onSaveNode === 'function') onSaveNode(sectionId, updated); } catch {}
-        try { if (typeof onLinkDataToSection === 'function') onLinkDataToSection(sectionId, dragData); } catch {}
-        setRecentlyAdded({ sectionId, at: Date.now() });
-        setTimeout(() => setRecentlyAdded(null), 1200);
-      });
+      
+      // Como agora sempre priorizamos final_text, não vamos mais salvar nos nodes
+      // Apenas logar a ação para debug
+      console.log('📝 Conteúdo adicionado via drag & drop:', { sectionId, dragData });
+      
+      // Mostrar feedback visual
+      setRecentlyAdded({ sectionId, at: Date.now() });
+      setTimeout(() => setRecentlyAdded(null), 1200);
+      
+      // Chamar callback de link se disponível
+      if (typeof onLinkDataToSection === 'function') {
+        onLinkDataToSection(sectionId, dragData);
+      }
     } catch {}
-  }, [nodes, onSaveNode, onLinkDataToSection]);
-
-  // Inventário: adicionar sem abrir painel; mostra badge no botão
-
-
-
+  }, [onLinkDataToSection]);
 
   const useDragAndDrop = (onAdd) => {
     const [isActive, setIsActive] = useState(false);
@@ -199,10 +444,11 @@ const NotionLikePage = ({ isOpen = true, onClose, newsData, newsTitle, nodes = [
     return { isActive, onDragEnter, onDragOver, onDragLeave, onDrop };
   };
 
-  const DropZone = ({ sectionId, children }) => {
+  const DropZone = ({ sectionId, children, className = '' }) => {
     const dnd = useDragAndDrop((data) => handleContentAdd(data, sectionId));
     return (
       <div
+        className={`drop-zone ${className}`}
         onDragEnter={dnd.onDragEnter}
         onDragOver={dnd.onDragOver}
         onDragLeave={dnd.onDragLeave}
@@ -233,34 +479,30 @@ const NotionLikePage = ({ isOpen = true, onClose, newsData, newsTitle, nodes = [
     const markdown = await editorRef.current.getMarkdown();
     setLastMarkdown(markdown);
 
-    // Extrai blocos por headings específicos
-    const headingRegex = /^#\s+(Introdução|Corpo|Conclusão)\s*$/gmi;
-    const matches = [];
-    let m;
-    while ((m = headingRegex.exec(markdown)) !== null) {
-      matches.push({ title: m[1], index: m.index, endOfLine: headingRegex.lastIndex });
-    }
-    // Acrescenta sentinela final
-    matches.push({ title: '__END__', index: markdown.length, endOfLine: markdown.length });
+    // Como agora sempre priorizamos final_text, não salvamos mais nos nodes
+    console.log('💾 Conteúdo do editor salvo (apenas em memória):', markdown);
+    
+    // Mostrar feedback visual
+    alert('Conteúdo salvo em memória. Para persistir no banco, use a coluna "final_text" da tabela "Controle Geral".');
+  }, []);
 
-    const titleToId = {
-      Introdução: 'summary',
-      Corpo: 'body',
-      Conclusão: 'conclusion'
-    };
-
-    for (let i = 0; i < matches.length - 1; i += 1) {
-      const current = matches[i];
-      const next = matches[i + 1];
-      const lineEndIdx = markdown.indexOf('\n', current.endOfLine);
-      const contentStart = lineEndIdx === -1 ? current.endOfLine : lineEndIdx + 1;
-      const content = markdown.slice(contentStart, next.index).trim();
-      const sectionId = titleToId[current.title];
-      if (sectionId && typeof onSaveNode === 'function') {
-        onSaveNode(sectionId, content);
+  // Forçar atualização do layout quando o splitter mudar
+  useEffect(() => {
+    // Pequeno delay para garantir que o DOM foi atualizado
+    const timer = setTimeout(() => {
+      if (editorRef.current) {
+        // Forçar reflow do editor
+        const editorElement = document.querySelector('.notion-editor');
+        if (editorElement) {
+          editorElement.style.display = 'none';
+          editorElement.offsetHeight; // Força reflow
+          editorElement.style.display = 'flex';
+        }
       }
-    }
-  }, [onSaveNode]);
+    }, 100);
+    
+    return () => clearTimeout(timer);
+  }, [splitRatio]);
 
   // Captura global de dragover/drop para permitir soltar no editor (ProseMirror intercepta eventos)
   useEffect(() => {
@@ -296,7 +538,6 @@ const NotionLikePage = ({ isOpen = true, onClose, newsData, newsTitle, nodes = [
         if (types.includes('application/json') || types.includes('text/plain') || types.includes('application/x-lina-item') || types.includes('text/uri-list')) {
           e.preventDefault();
           e.dataTransfer.dropEffect = 'copy';
-          // Mantido leve para performance; logs removidos para evitar travamentos ao arrastar
         }
       } catch {}
     };
@@ -412,6 +653,183 @@ const NotionLikePage = ({ isOpen = true, onClose, newsData, newsTitle, nodes = [
               .splitter-handle:hover,
               .splitter-handle.active { background-color: #9ca3af; /* gray-400 */ }
 
+              /* Estilos para os marcadores de referência e grifo */
+              ${referenceMarkerStyles}
+
+              /* Estilos para o scroll do editor BlockNote */
+              .notion-editor {
+                height: 100%;
+                overflow: hidden;
+                display: flex;
+                flex-direction: column;
+                flex: 1;
+                min-height: 0;
+              }
+              
+              .notion-editor .bn-container {
+                height: 100%;
+                overflow: hidden;
+                display: flex;
+                flex-direction: column;
+                flex: 1;
+                min-height: 0;
+              }
+              
+              .notion-editor .bn-editor {
+                height: 100%;
+                overflow-y: auto !important;
+                overflow-x: hidden !important;
+                scrollbar-width: thin;
+                scrollbar-color: rgba(156, 163, 175, 0.5) transparent;
+                flex: 1;
+                min-height: 0;
+                max-height: none !important;
+              }
+              
+              .notion-editor .bn-editor::-webkit-scrollbar {
+                width: 8px;
+              }
+              
+              .notion-editor .bn-editor::-webkit-scrollbar-track {
+                background: transparent;
+              }
+              
+              .notion-editor .bn-editor::-webkit-scrollbar-thumb {
+                background: rgba(156, 163, 175, 0.5);
+                border-radius: 4px;
+              }
+              
+              .notion-editor .bn-editor::-webkit-scrollbar-thumb:hover {
+                background: rgba(156, 163, 175, 0.7);
+              }
+              
+              .notion-editor .ProseMirror {
+                min-height: 100%;
+                padding: 28px 32px;
+                line-height: 1.7;
+                font-family: "Nunito Sans", "Inter", sans-serif;
+              }
+              
+              /* Garantir que o container do editor tenha altura adequada */
+              .notion-editor .bn-container .bn-editor {
+                height: 100% !important;
+                max-height: none !important;
+              }
+              
+              /* Forçar scroll quando necessário */
+              .notion-editor .bn-editor .ProseMirror {
+                overflow: visible;
+              }
+              
+              /* Garantir que o DropZone se comporte corretamente com flexbox */
+              .drop-zone {
+                display: flex;
+                flex-direction: column;
+                flex: 1;
+                min-height: 0;
+                height: 100%;
+              }
+              
+              /* Garantir que o editor se adapte ao tamanho do container */
+              .notion-editor {
+                width: 100%;
+                height: 100%;
+                max-height: none;
+                position: relative;
+              }
+              
+              /* Garantir que o container do editor se adapte ao splitter */
+              .notion-editor .bn-container {
+                position: relative;
+                width: 100%;
+                height: 100%;
+                max-height: none;
+              }
+              
+              /* Garantir que o editor interno se adapte ao tamanho disponível */
+              .notion-editor .bn-editor {
+                position: relative;
+                width: 100%;
+                height: 100%;
+                max-height: none;
+                overflow-y: auto !important;
+                overflow-x: hidden !important;
+              }
+              
+              /* Sobrescrever estilos padrão do BlockNote que podem interferir no scroll */
+              .notion-editor .bn-container {
+                max-height: none !important;
+                height: 100% !important;
+              }
+              
+              .notion-editor .bn-editor {
+                max-height: none !important;
+                height: 100% !important;
+                overflow-y: auto !important;
+              }
+              
+              /* Garantir que o conteúdo interno tenha altura adequada */
+              .notion-editor .bn-editor .ProseMirror {
+                min-height: 100%;
+                padding-bottom: 120px;
+                margin-bottom: 80px;
+              }
+              
+              /* Adicionar espaço extra após o último elemento para garantir visibilidade */
+              .notion-editor .bn-editor .ProseMirror > *:last-child {
+                margin-bottom: 100px !important;
+              }
+              
+              /* Garantir que parágrafos tenham espaçamento adequado */
+              .notion-editor .bn-editor .ProseMirror p {
+                margin-bottom: 1.5em;
+              }
+              
+              /* Garantir que headings tenham espaçamento adequado */
+              .notion-editor .bn-editor .ProseMirror h1,
+              .notion-editor .bn-editor .ProseMirror h2,
+              .notion-editor .bn-editor .ProseMirror h3,
+              .notion-editor .bn-editor .ProseMirror h4,
+              .notion-editor .bn-editor .ProseMirror h5,
+              .notion-editor .bn-editor .ProseMirror h6 {
+                margin-bottom: 1em;
+                margin-top: 1.5em;
+              }
+              
+              /* Garantir que o último parágrafo tenha espaçamento extra */
+              .notion-editor .bn-editor .ProseMirror p:last-child {
+                margin-bottom: 120px !important;
+                min-height: 120px;
+              }
+              
+              /* Garantir que o último heading tenha espaçamento extra */
+              .notion-editor .bn-editor .ProseMirror h1:last-child,
+              .notion-editor .bn-editor .ProseMirror h2:last-child,
+              .notion-editor .bn-editor .ProseMirror h3:last-child,
+              .notion-editor .bn-editor .ProseMirror h4:last-child,
+              .notion-editor .bn-editor .ProseMirror h5:last-child,
+              .notion-editor .bn-editor .ProseMirror h6:last-child {
+                margin-bottom: 120px !important;
+                min-height: 120px;
+              }
+              
+              /* Estilos para o scrollbar personalizado */
+              .notion-editor .bn-editor::-webkit-scrollbar {
+                width: 12px;
+                background: transparent;
+              }
+              
+              .notion-editor .bn-editor::-webkit-scrollbar-thumb {
+                background: rgba(156, 163, 175, 0.6);
+                border-radius: 6px;
+                border: 2px solid transparent;
+                background-clip: content-box;
+              }
+              
+              .notion-editor .bn-editor::-webkit-scrollbar-thumb:hover {
+                background: rgba(156, 163, 175, 0.8);
+                background-clip: content-box;
+              }
 
             `}</style>
             
@@ -438,16 +856,15 @@ const NotionLikePage = ({ isOpen = true, onClose, newsData, newsTitle, nodes = [
             <div className="flex-1 flex overflow-hidden" ref={containerRef}>
               {/* Editor + Splitter + Biblioteca */}
               <div className="flex-1 overflow-hidden flex" ref={rightPaneRef}>
-                <div className="overflow-hidden" style={{ width: `${Math.round(splitRatio * 100)}%`, minWidth: EDITOR_MIN_PX, backgroundColor: '#000' }}>
-                  <div className="h-full" style={{ height: '100%' }}>
-                    <DropZone sectionId={filteredSection || activeSection}>
+                <div className="overflow-hidden flex flex-col" style={{ width: `${Math.round(splitRatio * 100)}%`, minWidth: EDITOR_MIN_PX, backgroundColor: '#000' }}>
+                  <div className="flex-1 min-h-0 flex flex-col" style={{ height: '100%' }}>
+                    <DropZone sectionId={filteredSection || activeSection} className="flex-1 min-h-0">
                       <BlockNoteEditor
                         key={`bn-${filteredSection || 'all'}-${displayContent.length}`}
                         ref={editorRef}
                         initialContent={displayContent}
                         onChange={setLastMarkdown}
                         onScroll={filteredSection ? undefined : handleScrollSync}
-                        
                         onCanvasItemDragStart={(payload) => { try { onCanvasItemDragStart?.(payload); } catch {} }}
                       />
                     </DropZone>
@@ -468,7 +885,6 @@ const NotionLikePage = ({ isOpen = true, onClose, newsData, newsTitle, nodes = [
                     onDragStart={(payload) => { try { onCanvasItemDragStart?.(payload); } catch {} }}
                     onCanvasItemDragStart={() => {}}
                     onAddToNotionSection={(sectionId, payload) => handleContentAdd(payload, sectionId)}
-            
                   />
                 </div>
               </div>
@@ -481,5 +897,3 @@ const NotionLikePage = ({ isOpen = true, onClose, newsData, newsTitle, nodes = [
 };
 
 export default NotionLikePage;
-
-

@@ -44,8 +44,10 @@ const CustomEdge = ({
 
   // Função para remover a edge
   const onEdgeDelete = () => {
-    if (data?.onDelete) {
+    if (data?.onDelete && typeof data.onDelete === 'function') {
       data.onDelete(id);
+    } else {
+      console.warn('[DEBUG] data.onDelete não encontrado ou não é função para edge:', id, data);
     }
   };
 
@@ -71,41 +73,51 @@ const CustomEdge = ({
             transform: `translate(-50%, -50%) translate(${labelX}px,${labelY}px)`,
             fontSize: 12,
             pointerEvents: 'all',
+            zIndex: 1000,
           }}
           className="nodrag nopan"
         >
           <button
-            onClick={onEdgeDelete}
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              onEdgeDelete();
+            }}
             className="edge-delete-button"
             style={{
               background: 'var(--bg-secondary)',
               border: '1px solid var(--border-primary)',
               borderRadius: '50%',
-              width: '24px',
-              height: '24px',
+              width: '32px',
+              height: '32px',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               cursor: 'pointer',
-              opacity: selected ? 1 : 0.4,
+              opacity: selected ? 1 : 0.7,
               transition: 'all 0.2s ease',
               boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
+              zIndex: 1001,
+              position: 'relative',
+              pointerEvents: 'all',
             }}
             onMouseEnter={(e) => {
               e.target.style.opacity = '1';
               e.target.style.transform = 'scale(1.1)';
               e.target.style.background = 'var(--bg-primary)';
               e.target.style.borderColor = 'var(--primary-red)';
+              e.target.style.zIndex = '1002';
             }}
             onMouseLeave={(e) => {
-              e.target.style.opacity = selected ? '1' : '0.4';
+              e.target.style.opacity = selected ? '1' : '0.7';
               e.target.style.transform = 'scale(1)';
               e.target.style.background = 'var(--bg-secondary)';
               e.target.style.borderColor = 'var(--border-primary)';
+              e.target.style.zIndex = '1001';
             }}
             title="Remover conexão"
           >
-            <Trash2 size={12} style={{ color: 'var(--text-secondary)' }} />
+            <Trash2 size={16} style={{ color: 'var(--text-secondary)' }} />
           </button>
         </div>
       </EdgeLabelRenderer>
@@ -151,28 +163,7 @@ const formatCategoryLabel = (value) => {
   }
 };
 
-// Node renderers
-const CategoryNode = ({ data }) => {
-  return (
-    <motion.div
-      whileHover={{ scale: 1.02 }}
-      transition={{ duration: 0.15 }}
-      className="rounded-lg"
-      style={{
-        backgroundColor: 'var(--bg-secondary)',
-        color: 'var(--text-primary)',
-        width: 200,
-        padding: 12,
-        borderWidth: 0
-      }}
-    >
-      <div className="flex items-center gap-2">
-        <Tags size={16} style={{ color: toPastelColor(data.color) }} />
-        <span className="text-sm font-semibold" style={{ fontFamily: '"Nunito Sans", "Inter", sans-serif' }}>{formatCategoryLabel(data.label)}</span>
-      </div>
-    </motion.div>
-  );
-};
+
 
 const KeyNode = ({ data }) => {
   return (
@@ -279,7 +270,6 @@ const SegmentNode = ({ data }) => {
         isConnectable={true}
         title={`Receber conexão em ${data.title}`}
         onConnect={(params) => {
-          console.log('[DEBUG] SegmentNode handle de entrada conectado:', params);
         }}
       />
 
@@ -299,7 +289,6 @@ const SegmentNode = ({ data }) => {
         isConnectable={true}
         title={`Conectar ${data.title}`}
         onConnect={(params) => {
-          console.log('[DEBUG] SegmentNode handle de saída conectado:', params);
         }}
       />
     </div>
@@ -307,6 +296,8 @@ const SegmentNode = ({ data }) => {
 };
 
 const ItemNode = React.memo(({ data }) => {
+  const [isHovered, setIsHovered] = useState(false);
+  
   useEffect(() => {
     if (import.meta.env?.DEV) console.debug('[CanvasLibraryView][ItemNode] mounted', { itemId: data?.itemId, title: data?.title, categoryKey: data?.categoryKey });
   }, [data?.itemId, data?.title, data?.categoryKey]);
@@ -332,16 +323,43 @@ const ItemNode = React.memo(({ data }) => {
       animate={{ opacity: 1 }}
       className="item-node-card rounded-lg border relative group"
       onDoubleClick={handleOpen}
-      onMouseEnter={() => { if (import.meta.env?.DEV) console.debug('[CanvasLibraryView][ItemNode] hover enter', { itemId: data?.itemId }); }}
-      onMouseLeave={() => { if (import.meta.env?.DEV) console.debug('[CanvasLibraryView][ItemNode] hover leave', { itemId: data?.itemId }); }}
+      onMouseEnter={() => { 
+        setIsHovered(true);
+        if (import.meta.env?.DEV) console.debug('[CanvasLibraryView][ItemNode] hover enter', { itemId: data?.itemId }); 
+        // Disparar evento customizado para grifar texto no editor
+        const event = new CustomEvent('canvas-item-hover', { 
+          detail: { 
+            itemId: data?.itemId, 
+            title: data?.title, 
+            phrase: data?.phrase,
+            action: 'enter'
+          } 
+        });
+        window.dispatchEvent(event);
+      }}
+      onMouseLeave={() => { 
+        setIsHovered(false);
+        if (import.meta.env?.DEV) console.debug('[CanvasLibraryView][ItemNode] hover leave', { itemId: data?.itemId }); 
+        // Disparar evento customizado para remover grifo do texto no editor
+        const event = new CustomEvent('canvas-item-hover', { 
+          detail: { 
+            itemId: data?.itemId, 
+            title: data?.title, 
+            phrase: data?.phrase,
+            action: 'leave'
+          } 
+        });
+        window.dispatchEvent(event);
+      }}
       style={{
-        backgroundColor: '#1212127a',
-        borderColor: 'var(--border-primary)',
+        backgroundColor: isHovered ? '#1a1a1a' : '#1212127a',
+        borderColor: isHovered ? 'var(--primary-green)' : 'var(--border-primary)',
         color: 'var(--text-primary)',
         width: 320,
         padding: 12,
-        boxShadow: 'none',
-        transition: 'transform 20s linear, box-shadow 20s linear, border-color 20s linear'
+        boxShadow: isHovered ? '0 0 20px rgba(22, 163, 74, 0.3)' : 'none',
+        transition: 'all 0.2s ease',
+        transform: isHovered ? 'scale(1.02)' : 'scale(1)'
       }}
     >
 
@@ -356,6 +374,12 @@ const ItemNode = React.memo(({ data }) => {
         <div className="flex items-center gap-2 mb-2">
           <Quote size={14} style={{ color: toPastelColor(data.color) }} />
           <span className="text-sm font-semibold truncate" style={{ fontFamily: '"Nunito Sans", "Inter", sans-serif' }}>{data.title}</span>
+          {isHovered && (
+            <div className="ml-auto flex items-center gap-1">
+              <div className="w-2 h-2 bg-yellow-400 rounded-full animate-pulse" title="Texto sendo grifado no editor"></div>
+              <span className="text-xs text-yellow-400">Grifando...</span>
+            </div>
+          )}
         </div>
         {/* Tag removida para um visual mais limpo */}
         <p className="text-sm pr-8" style={{ color: 'var(--text-secondary)', lineHeight: 1.6 }}>
@@ -380,7 +404,6 @@ const ItemNode = React.memo(({ data }) => {
         isConnectable={true}
         title="Entrada de Dados"
         onConnect={(params) => {
-          console.log('[DEBUG] ItemNode handle de entrada conectado:', params);
         }}
       />
 
@@ -400,7 +423,6 @@ const ItemNode = React.memo(({ data }) => {
         isConnectable={true}
         title="Saída de Dados"
         onConnect={(params) => {
-          console.log('[DEBUG] ItemNode handle de saída conectado:', params);
         }}
       />
     </motion.div>
@@ -408,7 +430,6 @@ const ItemNode = React.memo(({ data }) => {
 });
 
 const nodeTypes = {
-  categoryNode: CategoryNode,
   keyNode: KeyNode,
   itemNode: ItemNode,
   segmentNode: SegmentNode
@@ -511,17 +532,13 @@ const normalizeCoreQuotes = (core) => {
 
 // Build Category (by categoria_funcional) -> Key (parent::child) -> Items
 const buildHierarchy = (normalized) => {
-  if (!normalized) return { categories: {}, counts: {}, segments: {} };
+  if (!normalized) return { categories: {}, segments: {} };
   const categories = {};
-  const counts = {};
   const segments = {};
   
   // Busca por quotes_map nos dados para criar nodes de segmentação dinâmicos
   let quotesMap = null;
   
-  console.log('[DEBUG] buildHierarchy - normalized recebido:', normalized);
-  console.log('[DEBUG] buildHierarchy - normalized.quotes_map:', normalized.quotes_map);
-  console.log('[DEBUG] buildHierarchy - normalized.core_quotes?.quotes_map:', normalized.core_quotes?.quotes_map);
   
   // Tenta encontrar quotes_map em diferentes locais possíveis
   if (normalized.quotes_map) {
@@ -529,29 +546,19 @@ const buildHierarchy = (normalized) => {
     if (typeof normalized.quotes_map === 'string') {
       try {
         quotesMap = JSON.parse(normalized.quotes_map);
-        console.log('[DEBUG] buildHierarchy - quotes_map parseado de string para objeto:', quotesMap);
       } catch (e) {
-        console.warn('[DEBUG] buildHierarchy - Erro ao fazer parse do quotes_map:', e);
         quotesMap = null;
       }
     } else {
       quotesMap = normalized.quotes_map;
-      console.log('[DEBUG] buildHierarchy - quotes_map encontrado diretamente (já é objeto):', quotesMap);
     }
   } else if (normalized.core_quotes?.quotes_map) {
     quotesMap = normalized.core_quotes.quotes_map;
-    console.log('[DEBUG] buildHierarchy - quotes_map encontrado em core_quotes:', quotesMap);
   }
   
   // Se encontrou quotes_map, cria nodes de segmentação baseados nos headers
-  console.log('[DEBUG] buildHierarchy - VERIFICAÇÃO FINAL:');
-  console.log('[DEBUG] buildHierarchy - quotesMap existe?', !!quotesMap);
-  console.log('[DEBUG] buildHierarchy - typeof quotesMap:', typeof quotesMap);
-  console.log('[DEBUG] buildHierarchy - Object.keys(quotesMap):', quotesMap ? Object.keys(quotesMap) : 'N/A');
-  console.log('[DEBUG] buildHierarchy - Object.keys(quotesMap).length:', quotesMap ? Object.keys(quotesMap).length : 'N/A');
-  
+
   if (quotesMap && typeof quotesMap === 'object' && Object.keys(quotesMap).length > 0) {
-    console.log('[DEBUG] buildHierarchy - ✅ CONDIÇÃO ATENDIDA - Criando nodes baseados em quotes_map');
     Object.keys(quotesMap).forEach((header, index) => {
       const segmentId = `segment-header-${index}`;
       segments[segmentId] = {
@@ -565,15 +572,9 @@ const buildHierarchy = (normalized) => {
         connectedItems: [], // Será preenchido depois
         headerTitle: header // Título exato para matching
       };
-      console.log(`[DEBUG] buildHierarchy - Criado segment: ${segmentId} - "${header}" com ${quotesMap[header].length} sub-items`);
     });
   } else {
-    console.log('[DEBUG] buildHierarchy - ❌ CONDIÇÃO NÃO ATENDIDA - Usando fallback padrão');
-    console.log('[DEBUG] buildHierarchy - Usando fallback padrão (intro, corpo, conclusão)');
-    console.log('[DEBUG] buildHierarchy - quotesMap:', quotesMap);
-    console.log('[DEBUG] buildHierarchy - typeof quotesMap:', typeof quotesMap);
-    console.log('[DEBUG] buildHierarchy - Object.keys(quotesMap):', quotesMap ? Object.keys(quotesMap) : 'quotesMap é null/undefined');
-    
+
     // Fallback para nodes de segmentação padrão se não houver quotes_map
   segments.summary = {
     type: 'summary',
@@ -620,10 +621,7 @@ const buildHierarchy = (normalized) => {
       });
     });
   });
-  // counts
-  Object.keys(categories).forEach(tag => {
-    counts[tag] = Object.keys(categories[tag]).length;
-  });
+
   
   // FASE 2: Conectar automaticamente ItemNodes aos SegmentNodes baseado no título das frases
   if (quotesMap && typeof quotesMap === 'object' && Object.keys(quotesMap).length > 0) {
@@ -673,15 +671,12 @@ const buildHierarchy = (normalized) => {
           }
         });
         
-        console.log(`[DEBUG] buildHierarchy - Segment "${segment.title}" conectado a ${segment.connectedItems?.length || 0} ItemNodes`);
       }
     });
   }
   
-  console.log('[DEBUG] buildHierarchy - segments finais criados:', segments);
-  console.log('[DEBUG] buildHierarchy - categories criadas:', categories);
   
-  return { categories, counts, segments };
+  return { categories, segments };
 };
 
 const CanvasLibraryView = ({ newsData, onTransferItem, onOpenCardModal, onCanvasItemDragStart, onDragStart, onAddToNotionSection, compact = false, sidebarOnRight = false, enableSidebarToggle = false, initialSidebarCollapsed = false, transparentSidebar = false }) => {
@@ -691,9 +686,12 @@ const CanvasLibraryView = ({ newsData, onTransferItem, onOpenCardModal, onCanvas
   const [selectedTag, setSelectedTag] = useState('');
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(initialSidebarCollapsed);
   const [rfInstance, setRfInstance] = useState(null);
-  const [isMultiSelect, setIsMultiSelect] = useState(false);
-  const [activeTags, setActiveTags] = useState([]);
+  // const [isMultiSelect, setIsMultiSelect] = useState(false);
+  // const [activeTags, setActiveTags] = useState([]);
+  const [availableNodesByCategory, setAvailableNodesByCategory] = useState({});
+  const [usedItemIds, setUsedItemIds] = useState(new Set());
   const [isEditMode, setIsEditMode] = useState(false);
+  const [showEditModeNotification, setShowEditModeNotification] = useState(false);
   const onAddToNotionSectionRef = useRef(onAddToNotionSection);
 
   const savedPositionsRef = useRef(new Map());
@@ -739,11 +737,11 @@ const CanvasLibraryView = ({ newsData, onTransferItem, onOpenCardModal, onCanvas
   }, [isSidebarCollapsed]);
 
   const toggleMultiSelect = useCallback(() => {
-    setIsMultiSelect((prev) => {
-      const next = !prev;
-      if (next) setActiveTags([]);
-      return next;
-    });
+    // setIsMultiSelect((prev) => {
+    //   const next = !prev;
+    //   if (next) setActiveTags([]);
+    //   return next;
+    // });
   }, []);
 
   
@@ -784,8 +782,6 @@ const CanvasLibraryView = ({ newsData, onTransferItem, onOpenCardModal, onCanvas
       // Combina core_quotes e quotes_map se disponíveis
       let combined = {};
       
-      console.log('[DEBUG] newsData recebido:', newsData);
-      console.log('[DEBUG] quotes_map disponível:', newsData?.quotes_map);
       
       // Processa core_quotes
       const raw = newsData?.core_quotes;
@@ -804,10 +800,8 @@ const CanvasLibraryView = ({ newsData, onTransferItem, onOpenCardModal, onCanvas
       // Adiciona quotes_map se disponível
       if (newsData?.quotes_map) {
         combined.quotes_map = newsData.quotes_map;
-        console.log('[DEBUG] quotes_map adicionado ao combined:', combined.quotes_map);
       }
       
-      console.log('[DEBUG] combined final:', combined);
       return Object.keys(combined).length > 0 ? combined : null;
     } catch (e) {
       console.warn('[CanvasLibraryView] Erro ao processar dados:', e);
@@ -826,7 +820,7 @@ const CanvasLibraryView = ({ newsData, onTransferItem, onOpenCardModal, onCanvas
 
   useEffect(() => {
     setIsProcessing(true);
-    const { categories, counts, segments } = hierarchy;
+    const { categories, segments } = hierarchy;
     const g = new dagre.graphlib.Graph();
     g.setGraph({ rankdir: 'TB', nodesep: 40, ranksep: 80, marginx: 20, marginy: 20, ranker: 'tight-tree' });
     g.setDefaultEdgeLabel(() => ({}));
@@ -838,7 +832,6 @@ const CanvasLibraryView = ({ newsData, onTransferItem, onOpenCardModal, onCanvas
     const categoryWidth = 200;
     const categoryHeight = 64;
     const itemWidth = 320;
-    const itemHeight = 130;
     const gapY = 40; // Espaçamento vertical entre elementos
     const categoryGap = 120; // Espaçamento entre diferentes categorias
     const categoryHorizontalGap = 80; // Espaçamento horizontal entre elementos
@@ -899,7 +892,7 @@ const CanvasLibraryView = ({ newsData, onTransferItem, onOpenCardModal, onCanvas
             rfEdges.push(edge);
           }
 
-          // 2. Conecta os ItemNodes em sequência (em cadeia)
+          // 2. Conecta os ItemNodes em sequência (em cadeia) - CORREÇÃO AQUI
           for (let i = 0; i < segment.connectedItems.length - 1; i++) {
             const currentItem = segment.connectedItems[i];
             const nextItem = segment.connectedItems[i + 1];
@@ -910,7 +903,7 @@ const CanvasLibraryView = ({ newsData, onTransferItem, onOpenCardModal, onCanvas
                 id: edgeId,
                 source: currentItem.itemId,
                 target: nextItem.itemId,
-                sourceHandle: 'segment-output',
+                sourceHandle: 'data-output', // CORRIGIDO: era 'segment-output', agora é 'data-output'
                 targetHandle: 'data-input',
                 type: 'custom',
                 data: { 
@@ -924,72 +917,102 @@ const CanvasLibraryView = ({ newsData, onTransferItem, onOpenCardModal, onCanvas
               rfEdges.push(edge);
             }
           }
+          
+          // 3. ADICIONAL: Conecta o último ItemNode ao próximo SegmentNode (se houver)
+          const lastItem = segment.connectedItems[segment.connectedItems.length - 1];
+          const nextSegmentIndex = segment.headerIndex + 1;
+          const nextSegmentId = `segment-header-${nextSegmentIndex}`;
+          
+          // Verifica se existe o próximo segment
+          if (lastItem && segments[nextSegmentId]) {
+            const edgeId = `edge-${lastItem.itemId}-${nextSegmentId}`;
+            const edge = {
+              id: edgeId,
+              source: lastItem.itemId,
+              target: nextSegmentId,
+              sourceHandle: 'data-output',
+              targetHandle: 'segment-input',
+              type: 'custom',
+              data: { 
+                connectionType: 'item-to-segment',
+                onDelete: onEdgeDelete
+              },
+              style: { strokeWidth: 2 }
+            };
+            
+            console.log(`[DEBUG] Criando edge final: ${edgeId} (${lastItem.itemId} -> ${nextSegmentId})`);
+            rfEdges.push(edge);
+          }
         }
       }
     });
 
-    // Exibir todos os nós quando nenhuma tag estiver selecionada (visualização inicial completa)
-    const tagsToRender = isMultiSelect
-      ? activeTags.filter((t) => categories[t])
-      : (selectedTag && categories[selectedTag]) ? [selectedTag] : Object.keys(categories); // Exibir todas as categorias se nenhuma selecionada
+      // Exibir todos os nós quando nenhuma tag estiver selecionada (visualização inicial completa)
+  const tagsToRender = Object.keys(hierarchy.categories || []); // Sempre mostrar todas as categorias
       
-    // Log para debug: verificar por que tagsToRender está vazio
-    console.log('[DEBUG] Debug tagsToRender:', {
-      isMultiSelect,
-      activeTags,
-      selectedTag,
-      categories: Object.keys(categories),
-      tagsToRender
+  // Log para debug: verificar por que tagsToRender está vazio
+  console.log('[DEBUG] Debug tagsToRender:', {
+    selectedTag,
+    categories: Object.keys(categories),
+    tagsToRender
+  });
+
+    // FILTRO: Só criar ItemNodes que estão conectados aos segments
+    const connectedItemIds = new Set();
+
+    // Coletar todos os IDs dos items que estão conectados aos segments
+    Object.values(segments).forEach(segment => {
+      if (segment.connectedItems && segment.connectedItems.length > 0) {
+        segment.connectedItems.forEach(connectedItem => {
+          connectedItemIds.add(connectedItem.itemId);
+        });
+      }
     });
+
+    console.log('[DEBUG] Items conectados aos segments:', Array.from(connectedItemIds));
+    console.log('[DEBUG] Total de items conectados:', connectedItemIds.size);
 
     tagsToRender.forEach((tag) => {
       const keyObj = categories[tag];
       if (!keyObj) return;
+      
       const categoryId = `cat-${tag}`;
       const color = categoryColorFor(tag);
-      rfNodes.push({
-        id: categoryId,
-        type: 'categoryNode',
-        data: { label: tag, count: counts[tag], color },
-        position: { x: 0, y: 0 }
-      });
-      addGNode(categoryId, 200, 64);
+      
+
 
       Object.entries(keyObj).forEach(([k, items]) => {
         items.forEach((item) => {
-          // Usar o itemId que já é único e foi definido em buildHierarchy
-          const itemId = item.itemId;
-          console.log(`[DEBUG] Criando ItemNode com itemId: ${itemId} para item: "${item.title}"`);
-          // Verificar se este ItemNode está conectado a algum segment
-          const isConnectedToSegment = Object.values(segments).some(segment => 
-            segment.connectedItems?.some(connectedItem => 
-              connectedItem.itemId === item.itemId
-            )
-          );
+          // FILTRO: Só criar ItemNodes que estão conectados aos segments
+          if (connectedItemIds.has(item.itemId)) {
+            console.log(`[DEBUG] Criando ItemNode CONECTADO: ${item.itemId} para item: "${item.title}"`);
             
-          rfNodes.push({
-            id: itemId,
-            type: 'itemNode',
-            data: {
-              title: item.title,
-              phrase: item.phrase,
-              itemId: item.itemId,
-              categoryKey: item.categoryKey,
-              index: item.index,
-              color,
-                isConnectedToSegment,
-              onTransferItem,
-              onOpenCardModal,
-              onAddToNotionSection: (sectionId, payload) => {
-                try {
-                  const fn = onAddToNotionSectionRef.current;
-                  if (typeof fn === 'function') { fn(sectionId, payload); }
-                } catch {}
+            rfNodes.push({
+              id: item.itemId,
+              type: 'itemNode',
+              data: {
+                title: item.title,
+                phrase: item.phrase,
+                itemId: item.itemId,
+                categoryKey: item.categoryKey,
+                index: item.index,
+                color,
+                isConnected: true, // Marcar como conectado
+                onTransferItem,
+                onOpenCardModal,
+                onAddToNotionSection: (sectionId, payload) => {
+                  try {
+                    const fn = onAddToNotionSectionRef.current;
+                    if (typeof fn === 'function') { fn(sectionId, payload); }
+                  } catch {}
+                },
               },
-            },
-            position: { x: 0, y: 0 }
-          });
-          addGNode(itemId, 320, 130);
+              position: { x: 0, y: 0 }
+            });
+            addGNode(item.itemId, 320, 130);
+          } else {
+            console.log(`[DEBUG] ItemNode NÃO conectado (disponível na biblioteca): ${item.itemId} - "${item.title}"`);
+          }
         });
       });
     });
@@ -1001,113 +1024,96 @@ const CanvasLibraryView = ({ newsData, onTransferItem, onOpenCardModal, onCanvas
     // Log para debug: mostrar todas as edges criadas
     console.log('[DEBUG] Edges criadas:', rfEdges.map(e => ({ id: e.id, source: e.source, target: e.target })));
 
-    // Layout
+    // Layout simplificado: todos os nodes em linha vertical
     let withPositions = [];
-    
-    // Posiciona nodes de segmentação verticalmente à esquerda
-    const segmentNodes = rfNodes.filter(n => n.type === 'segmentNode');
-    
-    const segmentWidth = 280;
-    const segmentHeight = 120;
-    const segmentGap = 40;
-    const segmentStartX = -segmentWidth - 60; // Posiciona à esquerda do canvas
-    
-    segmentNodes.forEach((segment, index) => {
-      const y = index * (segmentHeight + segmentGap);
-      const positionedSegment = { ...segment, position: { x: segmentStartX, y } };
-      withPositions.push(positionedSegment);
+
+    // Configurações de layout vertical
+    const nodeWidth = 320; // Largura padrão para todos os nodes
+    const segmentHeight = 120; // Altura dos SegmentNodes
+    const itemHeight = 130; // Altura dos ItemNodes
+    const marginY = 40; // Margin vertical entre nodes
+    const startX = 0; // Todos os nodes no mesmo eixo X
+    let currentY = 0; // Posição Y atual
+
+    // Obter segments ordenados por headerIndex
+    const sortedSegmentKeys = Object.keys(segments).sort((a, b) => {
+      const segmentA = segments[a];
+      const segmentB = segments[b];
+      return (segmentA.headerIndex || 0) - (segmentB.headerIndex || 0);
+    });
+
+    console.log('[DEBUG] Layout vertical - Segments ordenados:', segmentKeys);
+
+    // Posicionar cada segment seguido dos seus ItemNodes conectados
+    sortedSegmentKeys.forEach((segmentKey) => {
+      const segment = segments[segmentKey];
+      if (!segment) return;
+
+      const segmentId = segment.itemId;
       
-      // Posicionar ItemNodes conectados em sequência vertical abaixo do SegmentNode
-      const segmentData = segments[segment.id];
-      if (segmentData && segmentData.connectedItems && segmentData.connectedItems.length > 0) {
-        console.log(`[DEBUG] Posicionando ${segmentData.connectedItems.length} ItemNodes conectados ao segment: ${segment.id}`);
+      // 1. Posicionar o SegmentNode
+      const segmentNode = rfNodes.find(n => n.id === segmentId);
+      if (segmentNode) {
+        const positionedSegment = { 
+          ...segmentNode, 
+          position: { x: startX, y: currentY } 
+        };
+        withPositions.push(positionedSegment);
+        console.log(`[DEBUG] SegmentNode posicionado: ${segmentId} em (${startX}, ${currentY})`);
         
-        let currentItemY = y + segmentHeight + gapY;
-        segmentData.connectedItems.forEach((connectedItem, itemIndex) => {
-          // Usar o itemId que já é único e foi definido em buildHierarchy
+        // Avançar Y para o próximo elemento
+        currentY += segmentHeight + marginY;
+      }
+
+      // 2. Posicionar os ItemNodes conectados em sequência vertical
+      if (segment.connectedItems && segment.connectedItems.length > 0) {
+        console.log(`[DEBUG] Posicionando ${segment.connectedItems.length} ItemNodes conectados ao segment: ${segmentId}`);
+        
+        segment.connectedItems.forEach((connectedItem, itemIndex) => {
           const itemId = connectedItem.itemId;
           console.log(`[DEBUG] Procurando ItemNode com ID: ${itemId}`);
+          
           const itemNode = rfNodes.find(n => n.id === itemId);
           
           if (itemNode) {
             console.log(`[DEBUG] ✅ ItemNode encontrado: ${itemId}`);
             const positionedItem = { 
               ...itemNode, 
-              position: { x: segmentStartX, y: currentItemY },
+              position: { x: startX, y: currentY },
               data: { ...itemNode.data }
             };
             withPositions.push(positionedItem);
-            currentItemY += itemHeight + gapY;
             
-            console.log(`[DEBUG] ItemNode posicionado: ${itemId} em (${segmentStartX}, ${currentItemY - itemHeight - gapY})`);
+            console.log(`[DEBUG] ItemNode posicionado: ${itemId} em (${startX}, ${currentY})`);
+            
+            // Avançar Y para o próximo elemento
+            currentY += itemHeight + marginY;
           } else {
             console.log(`[DEBUG] ❌ ItemNode NÃO encontrado: ${itemId}`);
           }
         });
       }
     });
-    
-    // Layout diferenciado para seleção única vs múltipla
-    
-    if (isMultiSelect) {
-      // Layout horizontal para múltiplas categorias - cada categoria vai para a direita
-      let currentX = 0;
-      
-      tagsToRender.forEach((tag) => {
-        const catId = `cat-${tag}`;
-        const catNode = rfNodes.find((n) => n.id === catId);
-        if (catNode) {
-          // Posiciona a tag da categoria horizontalmente
-          withPositions.push({ ...catNode, position: { x: currentX, y: 0 } });
-          
-          // Posiciona os nodes de dados relacionados à categoria, verticalmente abaixo da tag
-          const children = rfNodes.filter((n) => n.type === 'itemNode' && n.id.startsWith(`item-${tag}-`));
-          children.forEach((n, idx) => {
-            withPositions.push({ 
-              ...n, 
-              position: { x: currentX, y: categoryHeight + gapY + (idx * (itemHeight + gapY)) }, 
-              data: { ...n.data } 
-            });
-          });
-          
-          // Calcula a largura necessária para esta categoria
-          const maxItems = children.length;
-          const categoryTotalHeight = categoryHeight + (maxItems * (itemHeight + gapY)) + gapY;
-          
-          // Move para a próxima categoria à direita
-          currentX += Math.max(categoryWidth, itemWidth) + categoryHorizontalGap;
-        }
-      });
-    } else {
-      // Layout vertical para categoria única
-      let currentY = 0;
-      
-      tagsToRender.forEach((tag) => {
-        const catId = `cat-${tag}`;
-        const catNode = rfNodes.find((n) => n.id === catId);
-        if (catNode) {
-          // Posiciona a tag da categoria
-          withPositions.push({ ...catNode, position: { x: 0, y: currentY } });
-          currentY += categoryHeight + gapY;
-        }
-        
-        // Posiciona os nodes de dados relacionados à categoria, verticalmente
-        const children = rfNodes.filter((n) => n.type === 'itemNode' && n.id.startsWith(`item-${tag}-`));
-        children.forEach((n, idx) => {
-          withPositions.push({ 
-            ...n, 
-            position: { x: 0, y: currentY }, 
-            data: { ...n.data } 
-          });
-          currentY += itemHeight + gapY;
-        });
-        
-        // Adiciona espaçamento extra entre categorias
-        if (children.length > 0) {
-          currentY += categoryGap;
-        }
-      });
-    }
+
+
+
+    // Adicionar ItemNodes independentes que não estão conectados a segments
+    const independentItems = rfNodes.filter(n => 
+      n.type === 'itemNode' && 
+      !withPositions.find(positioned => positioned.id === n.id)
+    );
+    independentItems.forEach((itemNode) => {
+      const positionedItem = { 
+        ...itemNode, 
+        position: { x: startX + nodeWidth + 100, y: currentY }, // Posiciona à direita
+        data: { ...itemNode.data }
+      };
+      withPositions.push(positionedItem);
+      currentY += itemHeight + marginY;
+    });
+
+    console.log(`[DEBUG] Layout vertical concluído - Total de nodes posicionados: ${withPositions.length}`);
+    console.log(`[DEBUG] Altura total do canvas: ${currentY}px`);
 
     // Preserva posições arrastadas manualmente quando em modo edição
     const positioned = withPositions.map((n) => {
@@ -1133,7 +1139,7 @@ const CanvasLibraryView = ({ newsData, onTransferItem, onOpenCardModal, onCanvas
     });
     if (import.meta.env?.DEV) console.debug('[CanvasLibraryView] nodes/edges', { nodes: withPositions.length, edges: styledEdges.length });
     setIsProcessing(false);
-  }, [hierarchy, selectedTag, isMultiSelect, activeTags, categoryColorFor]);
+  }, [hierarchy, selectedTag, categoryColorFor]);
 
   const hasData = nodes.length > 0;
   const onNodesChange = useCallback((changes) => {
@@ -1179,25 +1185,34 @@ const CanvasLibraryView = ({ newsData, onTransferItem, onOpenCardModal, onCanvas
 
   // Handler para remover edges
   const onEdgeDelete = useCallback((edgeId) => {
-    console.log('[DEBUG] onEdgeDelete: removendo edge:', edgeId);
-    setEdges((currentEdges) => currentEdges.filter(edge => edge.id !== edgeId));
-  }, []);
+    console.log('[DEBUG] CanvasLibraryView.onEdgeDelete: removendo edge:', edgeId);
+    console.log('[DEBUG] Edges antes da remoção:', edges.length);
+    
+    setEdges((currentEdges) => {
+      const filtered = currentEdges.filter(edge => edge.id !== edgeId);
+      console.log('[DEBUG] Edges após remoção:', filtered.length);
+      return filtered;
+    });
+  }, [edges]);
 
 
 
-  // Ajusta viewport ao finalizar layout
+  // Ajusta viewport ao finalizar layout (APENAS na inicialização)
   useEffect(() => {
     if (!rfInstance || isProcessing) return;
     const center = () => {
       try {
         if (isEditMode || skipAutoCenterRef.current) return;
         const isFirstCenter = !didInitialCenter.current;
+        
+        // SÓ centraliza na primeira vez, não após adicionar nodes
+        if (!isFirstCenter) return;
+        
         // Centralização unificada para layout vertical
         const segmentNodes = nodes.filter(n => n.type === 'segmentNode');
         const hasSegments = segmentNodes.length > 0;
-        const hasCategories = nodes.filter(n => n.type === 'categoryNode').length > 0;
         
-        if (!hasSegments && !hasCategories) return;
+        if (!hasSegments) return;
         
         // Coleta todos os nodes para centralizar
         const allNodesToCenter = [];
@@ -1207,31 +1222,25 @@ const CanvasLibraryView = ({ newsData, onTransferItem, onOpenCardModal, onCanvas
           allNodesToCenter.push(...segmentNodes);
         }
         
-        // Adiciona nodes de categoria e seus dados relacionados
-        if (hasCategories) {
-          const categoryNodes = nodes.filter(n => n.type === 'categoryNode');
-          allNodesToCenter.push(...categoryNodes);
-          
-          // Adiciona alguns nodes de dados para melhor centralização
-          const itemNodes = nodes.filter(n => n.type === 'itemNode');
-          if (itemNodes.length > 0) {
-            // Adiciona apenas alguns nodes de dados para não sobrecarregar a visualização
-            const sampleItems = itemNodes.slice(0, Math.min(3, itemNodes.length));
-            allNodesToCenter.push(...sampleItems);
-          }
+        // Adiciona alguns nodes de dados para melhor centralização
+        const itemNodes = nodes.filter(n => n.type === 'itemNode');
+        if (itemNodes.length > 0) {
+          // Adiciona apenas alguns nodes de dados para não sobrecarregar a visualização
+          const sampleItems = itemNodes.slice(0, Math.min(3, itemNodes.length));
+          allNodesToCenter.push(...sampleItems);
         }
         
         if (allNodesToCenter.length > 0) {
           if (typeof rfInstance.fitView === 'function') {
             // Ajusta padding baseado no modo de seleção
-            const padding = isMultiSelect ? 0.2 : 0.4;
-            const maxZoom = isMultiSelect ? 0.6 : 0.8;
+            const padding = 0.4;
+            const maxZoom = 0.8;
             
             rfInstance.fitView({ 
               nodes: allNodesToCenter, 
               padding: padding, 
               includeHiddenNodes: false, 
-              duration: isFirstCenter ? 0 : 350, 
+              duration: 0, // Sem animação para primeira centralização
               maxZoom: maxZoom 
             });
             didInitialCenter.current = true;
@@ -1245,15 +1254,204 @@ const CanvasLibraryView = ({ newsData, onTransferItem, onOpenCardModal, onCanvas
     } else {
       setTimeout(center, 0);
     }
-  }, [rfInstance, isMultiSelect, selectedTag, isProcessing, nodes, isEditMode]);
+  }, [rfInstance, selectedTag, isProcessing, nodes, isEditMode]);
 
-  const handleCategoryClick = useCallback((t) => {
-    if (isMultiSelect) {
-      setActiveTags((prev) => prev.includes(t) ? prev.filter((x) => x !== t) : [...prev, t]);
-    } else {
-      setSelectedTag(t);
+  const handleCategoryClick = useCallback(async (categoryTag) => {
+    if (!rfInstance) return;
+    
+    try {
+      // Verificar se já existem nodes desta categoria no canvas
+      console.log(`[DEBUG] Verificando categoria "${categoryTag}" - Total de nodes no canvas: ${nodes.length}`);
+      
+      const existingCategoryNodes = nodes.filter(node => 
+        node.type === 'itemNode' && 
+        node.data.categoryKey && 
+        (node.data.categoryKey.includes(categoryTag) || node.data.categoryTag === categoryTag) &&
+        node.data.isFromLibrary // Só considerar os que vieram da biblioteca
+      );
+      
+      console.log(`[DEBUG] Nodes encontrados para categoria "${categoryTag}":`, existingCategoryNodes.map(n => ({ id: n.id, categoryKey: n.data.categoryKey, isFromLibrary: n.data.isFromLibrary })));
+      
+      const hasNodesInCanvas = existingCategoryNodes.length > 0;
+      
+      if (hasNodesInCanvas) {
+        // REMOVER: Se já tem nodes da categoria no canvas, remove todos
+        console.log(`[DEBUG] Removendo ${existingCategoryNodes.length} nodes da categoria "${categoryTag}"`);
+        
+        setNodes(prevNodes => {
+          const filtered = prevNodes.filter(node => 
+            !(node.type === 'itemNode' && 
+              node.data.categoryKey && 
+              (node.data.categoryKey.includes(categoryTag) || node.data.categoryTag === categoryTag) &&
+              node.data.isFromLibrary)
+          );
+          console.log(`[DEBUG] Nodes após remoção: ${filtered.length} (removidos: ${prevNodes.length - filtered.length})`);
+          return filtered;
+        });
+        
+        // Atualizar set de IDs usados
+        setUsedItemIds(prev => {
+          const newSet = new Set(prev);
+          existingCategoryNodes.forEach(node => newSet.delete(node.data.itemId));
+          console.log(`[DEBUG] IDs usados após remoção: ${newSet.size}`);
+          return newSet;
+        });
+        
+        console.log(`[DEBUG] Categoria "${categoryTag}" removida do canvas`);
+        return;
+      }
+      
+      // ADICIONAR: Se não tem nodes no canvas, adiciona os disponíveis
+      const viewport = rfInstance.getViewport();
+      const zoom = viewport.zoom;
+      
+      // Calcular posição central do viewport visível
+      const centerX = (-viewport.x + (window.innerWidth * 0.6) / 2) / zoom;
+      const centerY = (-viewport.y + window.innerHeight / 2) / zoom;
+      
+      console.log(`[DEBUG] Camera position - Center: (${centerX}, ${centerY}), Zoom: ${zoom}`);
+      
+      // Obter nodes disponíveis desta categoria
+      const categoryData = hierarchy.categories[categoryTag];
+      if (!categoryData) return;
+      
+      const availableNodes = [];
+      const currentUsedIds = new Set();
+      
+      // Coletar IDs dos nodes já posicionados no canvas
+      nodes.forEach(node => {
+        if (node.type === 'itemNode') {
+          currentUsedIds.add(node.data.itemId);
+        }
+      });
+      
+      // Encontrar nodes não utilizados desta categoria
+      Object.entries(categoryData).forEach(([categoryKey, items]) => {
+        items.forEach((item) => {
+          if (!currentUsedIds.has(item.itemId)) {
+            availableNodes.push({
+              ...item,
+              categoryTag,
+              categoryKey,
+              color: categoryColorFor(categoryTag)
+            });
+          }
+        });
+      });
+      
+      console.log(`[DEBUG] Categoria "${categoryTag}" - ${availableNodes.length} nodes disponíveis para adicionar`);
+      
+      if (availableNodes.length === 0) {
+        console.log(`[DEBUG] Nenhum node disponível para a categoria "${categoryTag}"`);
+        return;
+      }
+      
+      // Criar novos nodes posicionados em grid
+      const newNodes = [];
+      const gridCols = Math.ceil(Math.sqrt(availableNodes.length));
+      const nodeSpacing = 350;
+      const startX = centerX - ((gridCols - 1) * nodeSpacing) / 2;
+      const startY = centerY - ((Math.ceil(availableNodes.length / gridCols) - 1) * nodeSpacing) / 2;
+      
+      availableNodes.forEach((item, index) => {
+        const col = index % gridCols;
+        const row = Math.floor(index / gridCols);
+        const x = startX + col * nodeSpacing;
+        const y = startY + row * nodeSpacing;
+        
+        const newNode = {
+          id: item.itemId,
+          type: 'itemNode',
+          data: {
+            title: item.title,
+            phrase: item.phrase,
+            itemId: item.itemId,
+            categoryKey: item.categoryKey,
+            index: item.index,
+            color: item.color,
+            isFromLibrary: true, // Marcar como vindo da biblioteca
+            categoryTag: categoryTag, // Adicionar referência à categoria
+            onTransferItem,
+            onOpenCardModal,
+            onAddToNotionSection: (sectionId, payload) => {
+              try {
+                const fn = onAddToNotionSectionRef.current;
+                if (typeof fn === 'function') { fn(sectionId, payload); }
+              } catch {}
+            },
+          },
+          position: { x, y }
+        };
+        
+        newNodes.push(newNode);
+        console.log(`[DEBUG] Node criado: ${item.itemId} em (${x}, ${y})`);
+      });
+      
+      // Adicionar novos nodes ao canvas
+      setNodes(prevNodes => [...prevNodes, ...newNodes]);
+      
+      // Atualizar set de IDs usados
+      setUsedItemIds(prev => {
+        const newSet = new Set(prev);
+        availableNodes.forEach(item => newSet.add(item.itemId));
+        return newSet;
+      });
+      
+      // ATIVAR MODO DE EDIÇÃO automaticamente quando adicionar nodes
+      setIsEditMode(true);
+      
+      // Mostrar notificação temporária
+      setShowEditModeNotification(true);
+      setTimeout(() => setShowEditModeNotification(false), 3000); // Esconder após 3 segundos
+      
+      console.log(`[DEBUG] ${newNodes.length} nodes adicionados ao canvas da categoria "${categoryTag}"`);
+      console.log(`[DEBUG] Modo de edição ativado automaticamente`);
+      
+    } catch (error) {
+      console.error('[DEBUG] Erro ao processar categoria:', error);
     }
-  }, [isMultiSelect]);
+  }, [rfInstance, hierarchy, nodes, categoryColorFor, onTransferItem, onOpenCardModal, onAddToNotionSectionRef]);
+
+
+
+  // Modificar o estilo do botão de categoria para detectar estado no canvas
+  const getCategoryButtonStyle = useCallback((categoryTag) => {
+    const categoryData = hierarchy.categories[categoryTag];
+    if (!categoryData) return { available: 0, total: 0, inCanvas: false };
+    
+    let total = 0;
+    let available = 0;
+    
+    // Verificar se há nodes desta categoria no canvas
+    const hasNodesInCanvas = nodes.some(node => 
+      node.type === 'itemNode' && 
+      node.data.categoryKey && 
+      (node.data.categoryKey.includes(categoryTag) || node.data.categoryTag === categoryTag) &&
+      node.data.isFromLibrary
+    );
+    
+    Object.entries(categoryData).forEach(([categoryKey, items]) => {
+      items.forEach((item) => {
+        total++;
+        if (!usedItemIds.has(item.itemId)) {
+          available++;
+        }
+      });
+    });
+    
+    return { available, total, inCanvas: hasNodesInCanvas };
+  }, [hierarchy.categories, usedItemIds, nodes]);
+
+  // Adicionar useEffect para atualizar nodes usados
+  useEffect(() => {
+    const currentUsedIds = new Set();
+    nodes.forEach(node => {
+      if (node.type === 'itemNode') {
+        currentUsedIds.add(node.data.itemId);
+      }
+    });
+    setUsedItemIds(currentUsedIds);
+  }, [nodes]);
 
   return (
     <div className={`h-full flex flex-col canvas-library-view ${isEditMode ? 'is-edit-mode' : ''}`} style={{ backgroundColor: transparentSidebar ? 'transparent' : 'var(--bg-primary)' }}>
@@ -1313,17 +1511,62 @@ const CanvasLibraryView = ({ newsData, onTransferItem, onOpenCardModal, onCanvas
         
         /* Estilos para o botão de remoção de edges */
         .canvas-library-view .edge-delete-button {
-          z-index: 1000;
+          z-index: 1000 !important;
+          pointer-events: all !important;
+          position: relative !important;
+          cursor: pointer !important;
         }
         
         .canvas-library-view .edge-delete-button:hover {
           background: var(--bg-primary) !important;
           border-color: var(--primary-red) !important;
           box-shadow: 0 0 8px rgba(220, 53, 69, 0.3) !important;
+          z-index: 1002 !important;
         }
         
         .canvas-library-view .edge-delete-button:hover svg {
           color: #ffffff !important;
+        }
+        
+        /* Forçar interatividade do botão */
+        .canvas-library-view .edge-delete-button:active {
+          transform: scale(0.95) !important;
+        }
+        
+        /* Garantir que o EdgeLabelRenderer tenha prioridade */
+        .canvas-library-view .react-flow__edge-label-renderer {
+          z-index: 999 !important;
+          pointer-events: all !important;
+        }
+        
+        /* Prevenir interferência do React Flow */
+        .canvas-library-view .react-flow__edge {
+          pointer-events: none !important;
+        }
+        
+        .canvas-library-view .react-flow__edge-path {
+          pointer-events: none !important;
+        }
+        
+        /* Garantir que o botão seja clicável */
+        .canvas-library-view .edge-delete-button,
+        .canvas-library-view .edge-delete-button * {
+          pointer-events: all !important;
+          user-select: none !important;
+        }
+        
+        /* Garantir que o EdgeLabelRenderer seja interativo */
+        .canvas-library-view .react-flow__edge-label-renderer {
+          pointer-events: all !important;
+        }
+        
+        /* Prevenir interferência do React Flow nas edges */
+        .canvas-library-view .react-flow__edge {
+          pointer-events: none !important;
+        }
+        
+        .canvas-library-view .react-flow__edge-path {
+          pointer-events: none !important;
         }
         
         /* Popup hover opções */
@@ -1363,6 +1606,8 @@ const CanvasLibraryView = ({ newsData, onTransferItem, onOpenCardModal, onCanvas
                   : (sidebarOnRight ? <ChevronRight size={16} /> : <ChevronLeft size={16} />))}
               </motion.button>
             )}
+            {/* Botão de toggle multiselect removido/comentado */}
+            {/*
             <motion.button
               onClick={toggleMultiSelect}
               className={`p-1.5 rounded-lg border transition-colors`}
@@ -1377,6 +1622,7 @@ const CanvasLibraryView = ({ newsData, onTransferItem, onOpenCardModal, onCanvas
             >
               {isMultiSelect ? <CheckSquare size={16} /> : <Square size={16} />}
             </motion.button>
+            */}
           </div>
           {!isSidebarCollapsed && (
             <div className={`${compact ? 'px-2 pb-2' : 'px-3 pb-3'} overflow-auto`} style={{ flex: 1 }}>
@@ -1385,26 +1631,65 @@ const CanvasLibraryView = ({ newsData, onTransferItem, onOpenCardModal, onCanvas
                 allTags.map((t) => {
                   const base = categoryColorFor(t);
                   const pastel = toPastelColor(base);
-                  const isSelected = isMultiSelect ? activeTags.includes(t) : (t === selectedTag);
+                  const { available, total, inCanvas } = getCategoryButtonStyle(t);
+                  const hasAvailable = available > 0;
+                  const canInteract = hasAvailable || inCanvas;
+                  
                   return (
                     <motion.button
                       key={t}
                       onClick={() => handleCategoryClick(t)}
+                      disabled={!canInteract}
                       className={`w-full flex items-center gap-2 ${compact ? 'px-2 py-1.5' : 'px-3 py-2'} rounded text-left mb-1`}
-                      whileHover={{ scale: 1.01 }}
-                      whileTap={{ scale: 0.98 }}
+                      whileHover={canInteract ? { scale: 1.01 } : {}}
+                      whileTap={canInteract ? { scale: 0.98 } : {}}
                       style={{
-                        backgroundColor: isSelected ? 'var(--bg-tertiary)' : 'transparent',
-                        color: 'var(--text-primary)',
-                        border: `1px solid ${isSelected ? pastel : 'var(--border-primary)'}`
+                        backgroundColor: inCanvas ? 'var(--primary-green-transparent)' : (hasAvailable ? 'var(--bg-tertiary)' : 'var(--bg-secondary)'),
+                        color: inCanvas ? 'var(--primary-green)' : (hasAvailable ? 'var(--text-primary)' : 'var(--text-secondary)'),
+                        border: `1px solid ${inCanvas ? 'var(--primary-green)' : (hasAvailable ? pastel : 'var(--border-primary)')}`,
+                        opacity: canInteract ? 1 : 0.5,
+                        cursor: canInteract ? 'pointer' : 'not-allowed'
                       }}
-                      title={t}
+                      title={
+                        inCanvas 
+                          ? `Clique para remover categoria do canvas`
+                          : (hasAvailable 
+                              ? `Clique para adicionar ${available} nodes disponíveis` 
+                              : `Todos os ${total} nodes já estão no canvas`
+                            )
+                      }
                     >
-                      <span className="inline-block w-2.5 h-2.5 rounded-full" style={{ backgroundColor: pastel }} />
-                      {isMultiSelect && (
-                        isSelected ? <CheckSquare size={14} style={{ color: 'var(--primary-green)' }} /> : <Square size={14} style={{ color: 'var(--text-secondary)' }} />
+                      <span 
+                        className="inline-block w-2.5 h-2.5 rounded-full" 
+                        style={{ backgroundColor: pastel }} 
+                      />
+                      <span 
+                        className={`${compact ? 'text-xs' : 'text-sm'} truncate flex-1`} 
+                        style={{ fontFamily: '"Nunito Sans", "Inter", sans-serif' }}
+                      >
+                        {formatCategoryLabel(t)}
+                      </span>
+                      {inCanvas ? (
+                        <span 
+                          className="text-xs px-1.5 py-0.5 rounded-full" 
+                          style={{ 
+                            backgroundColor: 'var(--primary-green)',
+                            color: 'white'
+                          }}
+                        >
+                          ativo
+                        </span>
+                      ) : (
+                        <span 
+                          className="text-xs px-1.5 py-0.5 rounded-full" 
+                          style={{ 
+                            backgroundColor: hasAvailable ? 'var(--primary-green-transparent)' : 'var(--bg-primary)',
+                          color: hasAvailable ? 'var(--primary-green)' : 'var(--text-secondary)'
+                          }}
+                        >
+                          {available}/{total}
+                        </span>
                       )}
-                      <span className={`${compact ? 'text-xs' : 'text-sm'} truncate`} style={{ fontFamily: '"Nunito Sans", "Inter", sans-serif' }}>{formatCategoryLabel(t)}</span>
                     </motion.button>
                   );
                 })
@@ -1446,6 +1731,31 @@ const CanvasLibraryView = ({ newsData, onTransferItem, onOpenCardModal, onCanvas
             >
               {isEditMode ? <Save size={16} /> : <Edit3 size={16} />}
             </motion.button>
+            
+            {/* Notificação de modo de edição ativado automaticamente */}
+            {isEditMode && (
+              <motion.div
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="absolute top-12 left-0 bg-green-600 text-white text-xs px-2 py-1 rounded whitespace-nowrap"
+                style={{ zIndex: 30 }}
+              >
+                Modo de edição ativo
+              </motion.div>
+            )}
+            
+            {/* Notificação temporária quando ativado automaticamente */}
+            {showEditModeNotification && (
+              <motion.div
+                initial={{ opacity: 0, scale: 0.8 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.8 }}
+                className="absolute top-12 left-0 bg-blue-600 text-white text-xs px-3 py-2 rounded-lg shadow-lg whitespace-nowrap"
+                style={{ zIndex: 40 }}
+              >
+                ✨ Modo de edição ativado automaticamente!
+              </motion.div>
+            )}
           </div>
 
           {isProcessing ? (
@@ -1484,10 +1794,17 @@ const CanvasLibraryView = ({ newsData, onTransferItem, onOpenCardModal, onCanvas
               nodesDraggable={isEditMode}
               nodesConnectable={true}
               elementsSelectable={isEditMode}
+              edgesFocusable={true}
+              edgesUpdatable={false}
               className="h-full relative z-10"
               style={{ background: 'transparent' }}
               onNodesChange={onNodesChange}
               onConnect={onConnect}
+              onEdgeClick={(e, edge) => {
+                console.log('[DEBUG] Edge clicada:', edge.id);
+                console.log('[DEBUG] Edge data:', edge.data);
+                console.log('[DEBUG] Edge event:', e);
+              }}
               onNodeDrag={(e, node) => {
                 blockAutoCenter();
                 savedPositionsRef.current.set(node.id, node.position);
