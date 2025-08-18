@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useRef, useCallback, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { FileText, Save, X, Layers as LayersIcon, Quote as QuoteIcon, Braces as BracesIcon, ChevronLeft, ChevronRight, Library as LibraryIcon } from 'lucide-react';
+import { FileText, Save, X, Layers as LayersIcon, Quote as QuoteIcon, Braces as BracesIcon, ChevronLeft, ChevronRight, Library as LibraryIcon, Bug, TestTube, Target } from 'lucide-react';
 import CanvasLibraryView from './CanvasLibraryView';
 import BlockNoteEditor from './BlockNoteEditor';
 import MainSidebar from '../MainSidebar';
@@ -22,13 +22,15 @@ const referenceMarkerStyles = `
     margin-bottom: 1em;
   }
   
-  /* Estilos para o grifo de hover - FORÇADO com !important */
-  .ProseMirror p[data-highlighted="true"] {
-    background-color: #FEF3C7 !important;
-    border: 1px solid #FCD34D !important;
-    border-radius: 4px !important;
-    padding: 4px 6px !important;
-    box-shadow: 0 2px 8px rgba(254, 243, 199, 0.6) !important;
+  /* Garantir que seleções sejam visíveis */
+  .ProseMirror ::selection {
+    background-color: rgba(254, 243, 199, 0.8) !important;
+  }
+  
+  /* Estilos para texto com background aplicado via API do BlockNote */
+  .ProseMirror span[style*="background-color"] {
+    border-radius: 3px !important;
+    padding: 1px 2px !important;
     transition: all 0.3s ease !important;
   }
   
@@ -68,6 +70,356 @@ const NotionLikePage = ({ isOpen = true, onClose, newsData, newsTitle, onCanvasI
 
   const EDITOR_MIN_PX = 480;
   const LIB_MIN_PX = 360;
+
+  // FUNÇÃO HELPER PARA EXTRAIR TEXTO PLANO DE UM BLOCO
+  const extractBlockTextFlat = useCallback((block) => {
+    try {
+      if (!block || !block.content) return '';
+      
+      if (Array.isArray(block.content)) {
+        return block.content
+          .map(item => {
+            if (typeof item === 'string') return item;
+            if (item && typeof item === 'object') {
+              if (item.text) return item.text;
+              if (item.content) return item.content;
+            }
+            return '';
+          })
+          .join('');
+      }
+      
+      if (typeof block.content === 'string') {
+        return block.content;
+      }
+      
+      if (block.content && block.content.text) {
+        return block.content.text;
+      }
+      
+      return '';
+    } catch (error) {
+      console.error('❌ Erro ao extrair texto do bloco:', error);
+      return '';
+    }
+  }, []);
+
+  // NOVA FUNÇÃO para grifar texto específico no BlockNote
+  const highlightSpecificText = useCallback(async (editor, textToHighlight, shouldHighlight) => {
+    try {
+      console.log(`🎯 Procurando texto específico: "${textToHighlight.substring(0, 100)}..."`);
+      
+      const blocks = editor.topLevelBlocks || [];
+      
+      // Procurar o texto nos blocos do editor
+      for (let blockIndex = 0; blockIndex < blocks.length; blockIndex++) {
+        const block = blocks[blockIndex];
+        const blockText = extractBlockTextFlat(block);
+        
+        if (!blockText) continue;
+        
+        // Procurar o texto específico no bloco (busca mais flexível)
+        const textLower = textToHighlight.toLowerCase().trim();
+        const blockLower = blockText.toLowerCase().trim();
+        
+        // Buscar por substring - pegar primeiras palavras para matching
+        const searchWords = textLower.split(' ').slice(0, 8).join(' '); // Primeiras 8 palavras
+        const matchIndex = blockLower.indexOf(searchWords);
+        
+        if (matchIndex !== -1) {
+          console.log(`✅ Texto encontrado no bloco ${blockIndex} na posição ${matchIndex}`);
+          console.log(`📝 Texto do bloco: "${blockText.substring(0, 100)}..."`);
+          
+          // Calcular posições para seleção
+          const startOffset = matchIndex;
+          const endOffset = Math.min(
+            matchIndex + textToHighlight.length, 
+            blockText.length
+          );
+          
+          console.log(`📍 Seleção: ${startOffset}-${endOffset} no bloco ${block.id}`);
+          
+          // APLICAR SELEÇÃO + ESTILO usando API do BlockNote
+          if (editorRef.current.setTextCursor) {
+            const selection = {
+              blockId: block.id,
+              startOffset: startOffset,
+              endOffset: endOffset
+            };
+            
+            console.log(`🎯 Aplicando setTextCursor:`, selection);
+            
+            const cursorSet = editorRef.current.setTextCursor(selection);
+            if (cursorSet) {
+              // Aguardar seleção ser aplicada
+              await new Promise(resolve => setTimeout(resolve, 20));
+              
+              if (shouldHighlight) {
+                const styleApplied = editorRef.current.addStyles({
+                  backgroundColor: "yellow",
+                  textColor: "default"
+                });
+                
+                if (styleApplied) {
+                  console.log(`✅ Highlight INLINE aplicado via setTextCursor + addStyles`);
+                  
+                  // Limpar seleção após delay
+                  setTimeout(() => {
+                    try {
+                      if (editorRef.current.setSelection) {
+                        editorRef.current.setSelection(undefined);
+                      }
+                    } catch {}
+                  }, 100);
+                  
+                  return true;
+                } else {
+                  console.log(`❌ Falha ao aplicar addStyles`);
+                }
+              } else {
+                // Remover highlight
+                const styleRemoved = editorRef.current.removeStyles(["backgroundColor"]);
+                if (styleRemoved) {
+                  console.log(`✅ Highlight removido via removeStyles`);
+                  return true;
+                }
+              }
+            } else {
+              console.log(`❌ Falha ao aplicar setTextCursor`);
+            }
+          }
+          
+          // FALLBACK: Se setTextCursor não funcionar, tentar setSelection
+          if (editorRef.current.setSelection) {
+            console.log(`🔄 Tentando fallback com setSelection...`);
+            
+            // Calcular posição absoluta (aproximada)
+            let absoluteStart = 0;
+            for (let i = 0; i < blockIndex; i++) {
+              const prevBlock = blocks[i];
+              const prevBlockText = extractBlockTextFlat(prevBlock);
+              absoluteStart += prevBlockText.length + 1; // +1 para quebra de linha
+            }
+            absoluteStart += startOffset;
+            
+            const selectionSet = editorRef.current.setSelection({
+              type: "text",
+              from: absoluteStart,
+              to: absoluteStart + (endOffset - startOffset)
+            });
+            
+            if (selectionSet) {
+              await new Promise(resolve => setTimeout(resolve, 20));
+              
+              if (shouldHighlight) {
+                const styleApplied = editorRef.current.addStyles({
+                  backgroundColor: "yellow",
+                  textColor: "default"
+                });
+                
+                if (styleApplied) {
+                  console.log(`✅ Highlight aplicado via setSelection + addStyles`);
+                  
+                  setTimeout(() => {
+                    try {
+                      if (editorRef.current.setSelection) {
+                        editorRef.current.setSelection(undefined);
+                      }
+                    } catch {}
+                  }, 100);
+                  
+                  return true;
+                }
+              } else {
+                const styleRemoved = editorRef.current.removeStyles(["backgroundColor"]);
+                if (styleRemoved) {
+                  console.log(`✅ Highlight removido via setSelection + removeStyles`);
+                  return true;
+                }
+              }
+            }
+          }
+          
+          // Se chegou aqui, nenhum método de seleção funcionou
+          console.log(`❌ Todos os métodos de seleção falharam para o bloco ${blockIndex}`);
+          return false;
+        }
+      }
+      
+      console.log(`❌ Texto não encontrado em nenhum bloco do editor`);
+      return false;
+      
+    } catch (error) {
+      console.error('❌ Erro ao aplicar highlight específico:', error);
+      return false;
+    }
+  }, [extractBlockTextFlat]);
+
+  // FUNÇÃO PRINCIPAL CORRIGIDA - Grifo por marcadores
+  const handleHighlightText = useCallback(async (title, phrase, action) => {
+    console.log(`🎨 Grifo por Marcadores: ${action} - title: "${title}"`);
+    
+    if (!editorRef.current || !editorRef.current.editor) {
+      console.log('❌ Editor não disponível');
+      return;
+    }
+    
+    const editor = editorRef.current.editor;
+    
+    try {
+      // PASSO 1: Encontrar o marcador no final_text
+      const finalText = newsData?.final_text;
+      if (!finalText || typeof finalText !== 'string') {
+        console.log('❌ final_text não disponível');
+        return;
+      }
+      
+      console.log(`🔍 Procurando marcador para: "${title}"`);
+      
+      // Buscar pelo marcador ///<título>///
+      const markerPattern = `///<${title}>///`;
+      const markerIndex = finalText.indexOf(markerPattern);
+      
+      if (markerIndex === -1) {
+        console.log(`❌ Marcador "${markerPattern}" não encontrado no final_text`);
+        return;
+      }
+      
+      console.log(`✅ Marcador encontrado na posição: ${markerIndex}`);
+      
+      // PASSO 2: Encontrar o texto que VEM ANTES do marcador
+      // Procurar pelo início da frase (após o marcador anterior ou início do parágrafo)
+      
+      // Encontrar o marcador anterior (se existir)
+      const textBeforeMarker = finalText.substring(0, markerIndex);
+      const previousMarkerMatch = textBeforeMarker.match(/\/\/\/<[^>]+>\/\/\/([^/]*?)$/);
+      
+      let textStart;
+      if (previousMarkerMatch) {
+        // Se há um marcador anterior, começar após ele
+        const previousMarkerEnd = textBeforeMarker.lastIndexOf('///') + 3;
+        textStart = previousMarkerEnd;
+      } else {
+        // Se não há marcador anterior, procurar pelo início do parágrafo
+        const lastNewline = textBeforeMarker.lastIndexOf('\n');
+        const lastDoubleNewline = textBeforeMarker.lastIndexOf('\n\n');
+        textStart = Math.max(lastNewline + 1, lastDoubleNewline + 2, 0);
+      }
+      
+      // PASSO 3: Extrair o texto específico a ser grifado
+      const textToHighlight = finalText.substring(textStart, markerIndex).trim();
+      
+      console.log(`🎯 Texto a ser grifado: "${textToHighlight}"`);
+      
+      if (!textToHighlight || textToHighlight.length < 5) {
+        console.log(`❌ Texto muito curto para grifo: "${textToHighlight}"`);
+        return;
+      }
+      
+      // PASSO 4: Encontrar esse texto específico no editor BlockNote
+      const success = await highlightSpecificText(editor, textToHighlight, action === 'enter');
+      
+      if (success) {
+        console.log(`✅ Grifo aplicado com sucesso para: "${title}"`);
+      } else {
+        console.log(`❌ Falha ao aplicar grifo para: "${title}"`);
+      }
+      
+    } catch (error) {
+      console.error('❌ Erro no grifo por marcadores:', error);
+    }
+    
+  }, [newsData, highlightSpecificText]);
+
+  // FUNÇÃO DE TESTE específica para marcadores
+  const testMarkerHighlight = useCallback(() => {
+    console.log('🧪 === TESTE DE GRIFO POR MARCADORES ===');
+    
+    // Simular hover com um título real do exemplo
+    const testTitle = "Lançamento do Tênis Cloudzone Moon";
+    
+    console.log(`🧪 Testando grifo para título: "${testTitle}"`);
+    
+    handleHighlightText(testTitle, "", "enter");
+    
+    // Remover após 3 segundos
+    setTimeout(() => {
+      console.log(`🧪 Removendo grifo de teste...`);
+      handleHighlightText(testTitle, "", "leave");
+    }, 3000);
+    
+    console.log('🧪 === FIM TESTE MARCADORES ===');
+  }, [handleHighlightText]);
+
+  // FUNÇÃO DE DEBUG PARA SELEÇÃO
+  const debugTextSelection = useCallback(() => {
+    if (!editorRef.current || !editorRef.current.editor) {
+      console.log('❌ Editor não disponível para debug');
+      return;
+    }
+    
+    const editor = editorRef.current.editor;
+    
+    console.log('🔍 === DEBUG TEXT SELECTION ===');
+    
+    // Verificar métodos de seleção
+    console.log('🎯 Métodos de seleção disponíveis:');
+    console.log('- setTextCursor:', typeof editorRef.current.setTextCursor, editorRef.current.setTextCursor ? '✅' : '❌');
+    console.log('- setSelection:', typeof editorRef.current.setSelection, editorRef.current.setSelection ? '✅' : '❌');
+    console.log('- getSelection:', typeof editor.getSelection, editor.getSelection ? '✅' : '❌');
+    
+    // Verificar métodos de estilo
+    console.log('🎨 Métodos de estilo disponíveis:');
+    console.log('- addStyles:', typeof editorRef.current.addStyles, editorRef.current.addStyles ? '✅' : '❌');
+    console.log('- removeStyles:', typeof editorRef.current.removeStyles, editorRef.current.removeStyles ? '✅' : '❌');
+    console.log('- toggleStyles:', typeof editorRef.current.toggleStyles, editorRef.current.toggleStyles ? '✅' : '❌');
+    
+    // Verificar blocos
+    console.log('📄 Blocos disponíveis:');
+    const blocks = editor.topLevelBlocks || [];
+    console.log(`- Total de blocos: ${blocks.length}`);
+    
+    if (blocks.length > 0) {
+      const firstBlock = blocks[0];
+      const blockText = extractBlockTextFlat(firstBlock);
+      console.log(`- Primeiro bloco ID: ${firstBlock.id}`);
+      console.log(`- Primeiro bloco texto: "${blockText.substring(0, 100)}..."`);
+      console.log(`- Primeiro bloco length: ${blockText.length}`);
+    }
+    
+    // Verificar final_text e marcadores
+    console.log('🗺️ Verificação de marcadores:');
+    const finalText = newsData?.final_text;
+    if (finalText) {
+      console.log(`- final_text length: ${finalText.length}`);
+      const markers = finalText.match(/\/\/\/<[^>]+>\/\/\//g);
+      console.log(`- Marcadores encontrados: ${markers ? markers.length : 0}`);
+      if (markers && markers.length > 0) {
+        console.log(`- Primeiro marcador: ${markers[0]}`);
+      }
+    }
+    
+    console.log('🔍 === FIM DEBUG ===');
+  }, [newsData, extractBlockTextFlat]);
+
+  // FUNÇÃO DE TESTE SIMPLES
+  const testSimpleHighlight = useCallback(async () => {
+    console.log('🧪 === TESTE SIMPLES DE HIGHLIGHT ===');
+    
+    if (!editorRef.current || !editorRef.current.editor) {
+      console.log('❌ Editor não disponível');
+      return;
+    }
+    
+    // Usar método de teste do editor
+    if (editorRef.current.testTextSelection) {
+      await editorRef.current.testTextSelection("texto");
+    } else {
+      console.log('❌ testTextSelection não disponível');
+    }
+    
+    console.log('🧪 === FIM TESTE ===');
+  }, []);
 
   // Chips com o mesmo visual do MonitorNode (azul para dados, laranja para estrutura)
   const SidebarChip = useCallback(({ node }) => {
@@ -176,7 +528,9 @@ Se você está vendo esta mensagem, significa que:
 - A coluna "final_text" não está preenchida para esta notícia, ou
 - Houve um problema ao carregar os dados do banco
 
-Verifique o console para mais detalhes sobre o carregamento dos dados.`;
+Verifique o console para mais detalhes sobre o carregamento dos dados.
+
+Para testar o highlighting por marcadores, clique no botão "Teste Marcador".`;
   }, [newsData?.final_text, processFinalText]);
 
   const sectionMarkdownMap = useMemo(() => {
@@ -231,132 +585,6 @@ Verifique o console para mais detalhes sobre o carregamento dos dados.`;
   useEffect(() => {
     setLastMarkdown(editorContent);
   }, [editorContent]);
-
-  // FUNÇÃO FINAL para grifar texto com força máxima
-  const handleHighlightText = useCallback(async (title, phrase, action) => {
-    console.log(`🎨 handleHighlightText: ${action} - title: "${title}", phrase: "${phrase}"`);
-    console.log(`🗺️ Mapeamento disponível:`, referenceMapping);
-
-    if (!referenceMapping || referenceMapping.size === 0) {
-      console.log('❌ Nenhum mapeamento disponível');
-      return;
-    }
-
-    // Procurar pelo título no mapeamento
-    let targetMarker = null;
-    
-    if (referenceMapping.has(title)) {
-      targetMarker = referenceMapping.get(title);
-      console.log(`✅ Encontrado marcador direto para "${title}": ${targetMarker}`);
-    } else {
-      // Busca por correspondência parcial
-      for (const [key, value] of referenceMapping.entries()) {
-        if (typeof key === 'string' && key.includes(title)) {
-          targetMarker = value;
-          console.log(`✅ Encontrado marcador por correspondência parcial "${title}" em "${key}": ${targetMarker}`);
-          break;
-        }
-        if (typeof value === 'string' && value.includes(title)) {
-          targetMarker = key;
-          console.log(`✅ Encontrado marcador por correspondência parcial "${title}" em "${value}": ${targetMarker}`);
-          break;
-        }
-      }
-    }
-
-    if (!targetMarker) {
-      console.log(`❌ Nenhum marcador encontrado para "${title}"`);
-      return;
-    }
-
-    try {
-      // Usar diretamente a phrase que vem do canvas - já é a frase correta
-      const fraseCompleta = phrase || '';
-      
-      console.log(`🎯 Frase a ser grifada: "${fraseCompleta}"`);
-      
-      if (!fraseCompleta || fraseCompleta.length < 10) {
-        console.log(`❌ Frase muito curta: "${fraseCompleta}"`);
-        throw new Error('Frase inválida');
-      }
-
-      // Procurar por partes da frase no DOM
-      const editorElement = document.querySelector('.ProseMirror');
-      if (!editorElement) {
-        console.log('❌ Elemento do editor não encontrado');
-        return;
-      }
-
-      // Pegar as primeiras palavras da frase para buscar
-      const fraseParcial = fraseCompleta.split(' ').slice(0, 30).join(' ');
-      console.log(`🔍 Buscando por: "${fraseParcial.substring(0, 100)}..."`);
-
-      // Encontrar todos os parágrafos
-      const paragraphs = editorElement.querySelectorAll('p');
-      
-      for (const paragraph of paragraphs) {
-        const paraText = paragraph.textContent || '';
-        
-        // Verificar se contém parte significativa da frase
-        if (paraText.includes(fraseParcial.substring(0, 50))) {
-          console.log(`✅ Parágrafo encontrado: "${paraText.substring(0, 100)}..."`);
-          
-          if (action === 'enter') {
-            // FORÇAR estilos com setProperty e !important
-            paragraph.style.setProperty('background-color', '#FEF3C7', 'important');
-            paragraph.style.setProperty('border', '1px solid #FCD34D', 'important');
-            paragraph.style.setProperty('border-radius', '4px', 'important');
-            paragraph.style.setProperty('padding', '4px 6px', 'important');
-            paragraph.style.setProperty('transition', 'all 0.3s ease', 'important');
-            paragraph.style.setProperty('box-shadow', '0 2px 8px rgba(254, 243, 199, 0.6)', 'important');
-            paragraph.setAttribute('data-highlighted', 'true');
-            console.log(`✅ Grifo aplicado ao parágrafo com !important`);
-          } else if (action === 'leave') {
-            // Remover propriedades
-            paragraph.style.removeProperty('background-color');
-            paragraph.style.removeProperty('border');
-            paragraph.style.removeProperty('border-radius');
-            paragraph.style.removeProperty('padding');
-            paragraph.style.removeProperty('box-shadow');
-            paragraph.removeAttribute('data-highlighted');
-            console.log(`✅ Grifo removido do parágrafo`);
-          }
-          break;
-        }
-      }
-      
-    } catch (error) {
-      console.error('❌ Erro ao aplicar grifo específico:', error);
-      
-      // Fallback: buscar pelo marcador no texto
-      console.log('🔄 Usando fallback: grifo pelo marcador...');
-      const editorElement = document.querySelector('.ProseMirror');
-      if (editorElement) {
-        const elements = editorElement.querySelectorAll('p, h1, h2, h3, h4, h5, h6');
-        
-        for (const element of elements) {
-          if (element.textContent && element.textContent.includes(targetMarker)) {
-            if (action === 'enter') {
-              element.style.setProperty('background-color', '#FEF3C7', 'important');
-              element.style.setProperty('border', '1px solid #FCD34D', 'important');
-              element.style.setProperty('border-radius', '4px', 'important');
-              element.style.setProperty('padding', '4px 6px', 'important');
-              element.setAttribute('data-highlighted', 'true');
-              console.log(`✅ Fallback: grifo aplicado ao parágrafo que contém "${targetMarker}"`);
-            } else if (action === 'leave') {
-              element.style.removeProperty('background-color');
-              element.style.removeProperty('border');
-              element.style.removeProperty('border-radius');
-              element.style.removeProperty('padding');
-              element.removeAttribute('data-highlighted');
-              console.log(`✅ Fallback: grifo removido do parágrafo que contém "${targetMarker}"`);
-            }
-            break;
-          }
-        }
-      }
-    }
-  }, [referenceMapping]);
 
   // Escutar eventos de hover do canvas
   useEffect(() => {
@@ -653,7 +881,7 @@ Verifique o console para mais detalhes sobre o carregamento dos dados.`;
               .splitter-handle:hover,
               .splitter-handle.active { background-color: #9ca3af; /* gray-400 */ }
 
-              /* Estilos para os marcadores de referência e grifo */
+              /* Estilos para highlighting por marcadores */
               ${referenceMarkerStyles}
 
               /* Estilos para o scroll do editor BlockNote */
@@ -838,11 +1066,35 @@ Verifique o console para mais detalhes sobre o carregamento dos dados.`;
               <div className="flex items-center gap-3">
                 <FileText size={22} style={{ color: 'var(--primary-green)' }} />
                 <div>
-                  <div className="text-sm font-semibold" style={{ color: 'var(--text-primary)', fontFamily: '"Nunito Sans", "Inter", sans-serif' }}>Editor Estruturado</div>
+                  <div className="text-sm font-semibold" style={{ color: 'var(--text-primary)', fontFamily: '"Nunito Sans", "Inter", sans-serif' }}>Editor com Grifo por Marcadores</div>
                   <div className="text-xs" style={{ color: 'var(--text-secondary)', fontFamily: '"Nunito Sans", "Inter", sans-serif' }}>{newsTitle || ''}</div>
                 </div>
               </div>
               <div className="flex items-center gap-2">
+                <button 
+                  onClick={testMarkerHighlight} 
+                  className="px-3 py-1.5 rounded border" 
+                  title="Teste Grifo por Marcadores"
+                  style={{ backgroundColor: 'purple', borderColor: 'purple', color: 'white' }}
+                >
+                  <div className="flex items-center gap-2"><Target size={16} /><span className="text-sm">Teste Marcador</span></div>
+                </button>
+                <button 
+                  onClick={testSimpleHighlight} 
+                  className="px-3 py-1.5 rounded border" 
+                  title="Teste Simples de Seleção"
+                  style={{ backgroundColor: 'green', borderColor: 'green', color: 'white' }}
+                >
+                  <div className="flex items-center gap-2"><TestTube size={16} /><span className="text-sm">Teste</span></div>
+                </button>
+                <button 
+                  onClick={debugTextSelection} 
+                  className="px-3 py-1.5 rounded border" 
+                  title="Debug Métodos de Seleção"
+                  style={{ backgroundColor: 'blue', borderColor: 'blue', color: 'white' }}
+                >
+                  <div className="flex items-center gap-2"><Bug size={16} /><span className="text-sm">Debug</span></div>
+                </button>
                 <button onClick={handleSave} className="px-3 py-1.5 rounded border" title="Salvar" style={{ backgroundColor: 'var(--bg-tertiary)', borderColor: 'var(--border-primary)', color: 'var(--text-secondary)' }}>
                   <div className="flex items-center gap-2"><Save size={16} /><span className="text-sm">Salvar</span></div>
                 </button>
