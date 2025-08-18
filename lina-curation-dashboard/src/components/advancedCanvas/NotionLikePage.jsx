@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useRef, useCallback, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { FileText, Save, X, Layers as LayersIcon, Quote as QuoteIcon, Braces as BracesIcon, ChevronLeft, ChevronRight, Library as LibraryIcon } from 'lucide-react';
+import { FileText, Save, X, Layers as LayersIcon, Quote as QuoteIcon, Braces as BracesIcon, ChevronLeft, ChevronRight, Library as LibraryIcon, Bug, TestTube, Target } from 'lucide-react';
 import CanvasLibraryView from './CanvasLibraryView';
 import BlockNoteEditor from './BlockNoteEditor';
 import MainSidebar from '../MainSidebar';
@@ -272,10 +272,10 @@ const NotionLikePage = ({ isOpen = true, onClose, newsData, newsTitle, onCanvasI
 
       if (matchIndex !== -1) {
         try {
-  
+          console.log(`✅ Texto encontrado no bloco ${block.id} na posição ${matchIndex} (versão limpa)`);
           const startOffset = mapCleanToOriginalIndex(blockText, matchIndex);
           const endOffset   = mapCleanToOriginalIndex(blockText, matchIndex + cleanNeedle.length);
-          
+          console.log(`🔍 Posições mapeadas: start=${startOffset}, end=${endOffset}`);
           const success = editorRef.current.highlightText(block.id, startOffset, endOffset, shouldHighlight);
           if (success) return true;
         } catch (error) {
@@ -290,7 +290,7 @@ const NotionLikePage = ({ isOpen = true, onClose, newsData, newsTitle, onCanvasI
 
   // FUNÇÃO PRINCIPAL CORRIGIDA - Grifo por marcadores
   const handleHighlightText = useCallback(async (title, phrase, action) => {
-
+    console.log(`🎨 Grifo por Marcadores: ${action} - title: "${title}"`);
     const editor = editorRef.current?.editor;
     if (!editor || !editorRef.current?.highlightText) return;
 
@@ -298,7 +298,7 @@ const NotionLikePage = ({ isOpen = true, onClose, newsData, newsTitle, onCanvasI
     const target = getMarkerSentenceRange(editor, title);
     if (target) {
       const { block, start, end } = target;
-      
+      console.log(`🎯 Marcador em bloco ${block.id}; aplicando range ${start}-${end}`);
       editorRef.current.highlightText(block.id, start, end, action === 'enter');
       return;
     }
@@ -319,7 +319,95 @@ const NotionLikePage = ({ isOpen = true, onClose, newsData, newsTitle, onCanvasI
     }
   }, [newsData, getMarkerSentenceRange]);
 
+  // FUNÇÃO DE TESTE específica para marcadores
+  const testMarkerHighlight = useCallback(() => {
+    console.log('🧪 === TESTE DE GRIFO POR MARCADORES ===');
+    
+    // Simular hover com um título real do exemplo
+    const testTitle = "Lançamento do Tênis Cloudzone Moon";
+    
+    console.log(`🧪 Testando grifo para título: "${testTitle}"`);
+    
+    handleHighlightText(testTitle, "", "enter");
+    
+    // Remover após 3 segundos
+    setTimeout(() => {
+      console.log(`🧪 Removendo grifo de teste...`);
+      handleHighlightText(testTitle, "", "leave");
+    }, 3000);
+    
+    console.log('🧪 === FIM TESTE MARCADORES ===');
+  }, [handleHighlightText]);
 
+  // FUNÇÃO DE DEBUG PARA SELEÇÃO
+  const debugTextSelection = useCallback(() => {
+    if (!editorRef.current || !editorRef.current.editor) {
+      console.log('❌ Editor não disponível para debug');
+      return;
+    }
+    
+    const editor = editorRef.current.editor;
+    
+    console.log('🔍 === DEBUG TEXT SELECTION ===');
+    
+    // Verificar métodos de seleção
+    console.log('🎯 Métodos de seleção disponíveis:');
+    console.log('- setTextCursor:', typeof editorRef.current.setTextCursor, editorRef.current.setTextCursor ? '✅' : '❌');
+    console.log('- setSelection:', typeof editorRef.current.setSelection, editorRef.current.setSelection ? '✅' : '❌');
+    console.log('- getSelection:', typeof editor.getSelection, editor.getSelection ? '✅' : '❌');
+    
+    // Verificar métodos de estilo
+    console.log('🎨 Métodos de estilo disponíveis:');
+    console.log('- addStyles:', typeof editorRef.current.addStyles, editorRef.current.addStyles ? '✅' : '❌');
+    console.log('- removeStyles:', typeof editorRef.current.removeStyles, editorRef.current.removeStyles ? '✅' : '❌');
+    console.log('- toggleStyles:', typeof editorRef.current.toggleStyles, editorRef.current.toggleStyles ? '✅' : '❌');
+    
+    // Verificar blocos
+    console.log('📄 Blocos disponíveis:');
+    const blocks = editor.topLevelBlocks || [];
+    console.log(`- Total de blocos: ${blocks.length}`);
+    
+    if (blocks.length > 0) {
+      const firstBlock = blocks[0];
+      const blockText = extractBlockTextFlat(firstBlock);
+      console.log(`- Primeiro bloco ID: ${firstBlock.id}`);
+      console.log(`- Primeiro bloco texto: "${blockText.substring(0, 100)}..."`);
+      console.log(`- Primeiro bloco length: ${blockText.length}`);
+    }
+    
+    // Verificar final_text e marcadores
+    console.log('🗺️ Verificação de marcadores:');
+    const finalText = newsData?.final_text;
+    if (finalText) {
+      console.log(`- final_text length: ${finalText.length}`);
+      const markers = finalText.match(/\/\/\/<[^>]+>\/\/\//g);
+      console.log(`- Marcadores encontrados: ${markers ? markers.length : 0}`);
+      if (markers && markers.length > 0) {
+        console.log(`- Primeiro marcador: ${markers[0]}`);
+      }
+    }
+    
+    console.log('🔍 === FIM DEBUG ===');
+  }, [newsData, extractBlockTextFlat]);
+
+  // FUNÇÃO DE TESTE SIMPLES
+  const testSimpleHighlight = useCallback(async () => {
+    console.log('🧪 === TESTE SIMPLES DE HIGHLIGHT ===');
+    
+    if (!editorRef.current || !editorRef.current.editor) {
+      console.log('❌ Editor não disponível');
+      return;
+    }
+    
+    // Usar método de teste do editor
+    if (editorRef.current.testTextSelection) {
+      await editorRef.current.testTextSelection("texto");
+    } else {
+      console.log('❌ testTextSelection não disponível');
+    }
+    
+    console.log('🧪 === FIM TESTE ===');
+  }, []);
 
   // Chips com o mesmo visual do MonitorNode (azul para dados, laranja para estrutura)
   const SidebarChip = useCallback(({ node }) => {
@@ -386,13 +474,13 @@ const NotionLikePage = ({ isOpen = true, onClose, newsData, newsTitle, onCanvasI
       mapping.set(marker, content.trim());
       mapping.set(content.trim(), marker); // Mapeamento bidirecional
       
-      
+      console.log(`📍 Mapeamento criado: ${marker} <-> "${content.trim()}"`);
       
       referenceNumber++;
       return marker;
     });
     
-    
+    console.log(`🗺️ Mapeamento total criado com ${mapping.size / 2} referências`);
     
     return { processedText, mapping };
   }, []);
@@ -400,23 +488,25 @@ const NotionLikePage = ({ isOpen = true, onClose, newsData, newsTitle, onCanvasI
   // Monta conteúdo do editor - sempre priorizar final_text do banco
   const editorContent = useMemo(() => {
     // Debug: verificar se final_text está sendo recebido
-
+    console.log('🔍 NotionLikePage - newsData:', newsData);
+    console.log('🔍 NotionLikePage - final_text:', newsData?.final_text);
     
     // SEMPRE usar final_text do banco de dados se disponível
     if (newsData?.final_text && typeof newsData.final_text === 'string' && newsData.final_text.trim()) {
-
+      console.log('✅ Usando final_text do banco de dados');
       const { processedText, mapping } = processFinalText(newsData.final_text.trim());
       
       // Armazenar o mapeamento no estado
       setReferenceMapping(mapping);
       
-      
+      console.log('🔍 NotionLikePage - texto processado:', processedText);
+      console.log('🔍 NotionLikePage - mapeamento criado:', mapping);
       
       return processedText;
     }
     
     // Se não tiver final_text, mostrar mensagem informativa
-    
+    console.log('⚠️ final_text não disponível - mostrando mensagem informativa');
     setReferenceMapping(new Map()); // Limpar mapeamento
     return `# Editor Estruturado
 
@@ -489,7 +579,7 @@ Para testar o highlighting por marcadores, clique no botão "Teste Marcador".`;
     const handleCanvasItemHover = (event) => {
       const { action, title, phrase } = event.detail;
       
-  
+      console.log(`🖱️ Canvas hover ${action}:`, { title, phrase });
       
       if (title) {
         handleHighlightText(title, phrase, action);
@@ -509,7 +599,7 @@ Para testar o highlighting por marcadores, clique no botão "Teste Marcador".`;
       
       // Como agora sempre priorizamos final_text, não vamos mais salvar nos nodes
       // Apenas logar a ação para debug
-      
+      console.log('📝 Conteúdo adicionado via drag & drop:', { sectionId, dragData });
       
       // Mostrar feedback visual
       setRecentlyAdded({ sectionId, at: Date.now() });
@@ -606,7 +696,7 @@ Para testar o highlighting por marcadores, clique no botão "Teste Marcador".`;
     setLastMarkdown(markdown);
 
     // Como agora sempre priorizamos final_text, não salvamos mais nos nodes
-    
+    console.log('💾 Conteúdo do editor salvo (apenas em memória):', markdown);
     
     // Mostrar feedback visual
     alert('Conteúdo salvo em memória. Para persistir no banco, use a coluna "final_text" da tabela "Controle Geral".');
@@ -689,7 +779,7 @@ Para testar o highlighting por marcadores, clique no botão "Teste Marcador".`;
           }
           lastDropRef.current = { itemId: (data.itemId || data.id), sectionId: targetSection, at: now };
           handleContentAdd(data, targetSection);
-  
+          console.log('✅ Drop capturado com sucesso:', { section: targetSection, data });
         } else {
           const types = Array.from(e.dataTransfer?.types || []);
           console.debug('⚠️ Drop ignorado (tipos não suportados ou payload inválido):', types);
@@ -956,11 +1046,6 @@ Para testar o highlighting por marcadores, clique no botão "Teste Marcador".`;
                 background: rgba(156, 163, 175, 0.8);
                 background-clip: content-box;
               }
-              
-              /* CSS de reforço para marcadores transparentes */
-              .ProseMirror span[style*="color: transparent"] { 
-                color: transparent !important; 
-              }
 
             `}</style>
             
@@ -974,7 +1059,30 @@ Para testar o highlighting por marcadores, clique no botão "Teste Marcador".`;
                 </div>
               </div>
               <div className="flex items-center gap-2">
-
+                <button 
+                  onClick={testMarkerHighlight} 
+                  className="px-3 py-1.5 rounded border" 
+                  title="Teste Grifo por Marcadores"
+                  style={{ backgroundColor: 'purple', borderColor: 'purple', color: 'white' }}
+                >
+                  <div className="flex items-center gap-2"><Target size={16} /><span className="text-sm">Teste Marcador</span></div>
+                </button>
+                <button 
+                  onClick={testSimpleHighlight} 
+                  className="px-3 py-1.5 rounded border" 
+                  title="Teste Simples de Seleção"
+                  style={{ backgroundColor: 'green', borderColor: 'green', color: 'white' }}
+                >
+                  <div className="flex items-center gap-2"><TestTube size={16} /><span className="text-sm">Teste</span></div>
+                </button>
+                <button 
+                  onClick={debugTextSelection} 
+                  className="px-3 py-1.5 rounded border" 
+                  title="Debug Métodos de Seleção"
+                  style={{ backgroundColor: 'blue', borderColor: 'blue', color: 'white' }}
+                >
+                  <div className="flex items-center gap-2"><Bug size={16} /><span className="text-sm">Debug</span></div>
+                </button>
                 <button onClick={handleSave} className="px-3 py-1.5 rounded border" title="Salvar" style={{ backgroundColor: 'var(--bg-tertiary)', borderColor: 'var(--border-primary)', color: 'var(--text-secondary)' }}>
                   <div className="flex items-center gap-2"><Save size={16} /><span className="text-sm">Salvar</span></div>
                 </button>

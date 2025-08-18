@@ -353,11 +353,11 @@ const ItemNode = React.memo(({ data }) => {
       }}
       style={{
         backgroundColor: isHovered ? '#1a1a1a' : '#1212127a',
-        borderColor: isHovered ? 'var(--primary-green)' : 'var(--border-primary)',
+        borderColor: 'var(--border-primary)',
         color: 'var(--text-primary)',
         width: 420,
         padding: 16,
-        boxShadow: isHovered ? '0 0 20px rgba(22, 163, 74, 0.3)' : 'none',
+        boxShadow: isHovered ? '0 0 20px rgba(22, 163, 74, 0.4)' : 'none',
         transition: 'all 0.2s ease',
         transform: isHovered ? 'scale(1.02)' : 'scale(1)'
       }}
@@ -373,12 +373,6 @@ const ItemNode = React.memo(({ data }) => {
         />
         <div className="flex items-center gap-2 mb-2">
           <span className="text-sm font-semibold truncate" style={{ fontFamily: '"Nunito Sans", "Inter", sans-serif' }}>{data.title}</span>
-          {isHovered && (
-            <div className="ml-auto flex items-center gap-1">
-              <div className="w-2 h-2 bg-yellow-400 rounded-full animate-pulse" title="Texto sendo grifado no editor"></div>
-              <span className="text-xs text-yellow-400">Grifando...</span>
-            </div>
-          )}
         </div>
         {/* Tag removida para um visual mais limpo */}
         <p className="text-sm pr-8" style={{ color: 'var(--text-secondary)', lineHeight: 1.6 }}>
@@ -388,16 +382,16 @@ const ItemNode = React.memo(({ data }) => {
       {/* Botão removido conforme solicitação; transferência pode ser acionada via double click (abre modal) e ações subsequentes */}
       
       {/* Handle de entrada na parte superior */}
-      <Handle
-        type="target"
-        position={Position.Top}
-        id="data-input"
-        style={{
-          width: 10,
-          height: 10,
-          backgroundColor: 'var(--primary-green)',
-          border: '2px solid var(--bg-primary)',
-          borderRadius: '50%'
+              <Handle
+          type="target"
+          position={Position.Top}
+          id="data-input"
+          style={{
+            width: 10,
+            height: 10,
+            backgroundColor: '#16a34a',
+            border: '2px solid var(--bg-primary)',
+            borderRadius: '50%'
         }}
         className="item-connection-handle item-connection-handle-input"
         isConnectable={true}
@@ -1030,7 +1024,7 @@ const CanvasLibraryView = ({ newsData, onTransferItem, onOpenCardModal, onCanvas
     const nodeWidth = 420; // Largura padrão para todos os nodes (1.5x mais largo)
     const segmentHeight = 120; // Altura dos SegmentNodes
     const itemHeight = 130; // Altura dos ItemNodes
-    const marginY = 80; // Margin vertical entre nodes (aumentado de 40 para 80)
+    const marginY = 120; // Margin vertical entre nodes (aumentado para 120px)
     const startX = 0; // Todos os nodes no mesmo eixo X
     let currentY = 0; // Posição Y atual
 
@@ -1216,42 +1210,34 @@ const CanvasLibraryView = ({ newsData, onTransferItem, onOpenCardModal, onCanvas
         // Coleta todos os nodes para centralizar
         const allNodesToCenter = [];
         
-        // Adiciona nodes de segmentação (headers dinâmicos ou padrão) primeiro
+        // Adiciona nodes de segmentação (headers dinâmicos ou padrão)
         if (hasSegments) {
-          // Ordena os segments por posição Y para garantir que o primeiro seja o mais alto
-          const sortedSegments = segmentNodes.sort((a, b) => a.position.y - b.position.y);
-          allNodesToCenter.push(...sortedSegments);
+          allNodesToCenter.push(...segmentNodes);
         }
         
         // Adiciona alguns nodes de dados para melhor centralização
         const itemNodes = nodes.filter(n => n.type === 'itemNode');
         if (itemNodes.length > 0) {
-          // Ordena os ItemNodes por posição Y também
-          const sortedItemNodes = itemNodes.sort((a, b) => a.position.y - b.position.y);
-          const sampleItems = sortedItemNodes.slice(0, Math.min(3, sortedItemNodes.length));
+          // Adiciona apenas alguns nodes de dados para não sobrecarregar a visualização
+          const sampleItems = itemNodes.slice(0, Math.min(3, itemNodes.length));
           allNodesToCenter.push(...sampleItems);
         }
         
         if (allNodesToCenter.length > 0) {
           if (typeof rfInstance.fitView === 'function') {
-            // Foca no primeiro node vertical com zoom 30% maior
-            const firstNode = allNodesToCenter[0];
-            if (firstNode) {
-              // Calcula zoom 30% maior que o atual
-              const currentZoom = 0.8;
-              const newZoom = currentZoom * 1.3; // 30% maior
-              
-              // Centraliza no primeiro node com zoom aumentado
-              rfInstance.setViewport({
-                x: -firstNode.position.x + (window.innerWidth * 0.6) / 2,
-                y: -firstNode.position.y + window.innerHeight / 2,
-                zoom: newZoom
-              }, { duration: 0 });
-              
-              console.log(`[DEBUG] CanvasLibraryView - Foco no primeiro node: ${firstNode.id} com zoom: ${newZoom}`);
-              didInitialCenter.current = true;
-              return;
-            }
+            // Ajusta padding baseado no modo de seleção
+            const padding = 0.4;
+            const maxZoom = 0.8;
+            
+            rfInstance.fitView({ 
+              nodes: allNodesToCenter, 
+              padding: padding, 
+              includeHiddenNodes: false, 
+              duration: 0, // Sem animação para primeira centralização
+              maxZoom: maxZoom 
+            });
+            didInitialCenter.current = true;
+            return;
           }
         }
       } catch {}
@@ -1481,8 +1467,7 @@ const CanvasLibraryView = ({ newsData, onTransferItem, onOpenCardModal, onCanvas
         }
         .canvas-library-view .react-flow__node-itemNode:hover .item-node-card {
           transform: scale(1.15) !important;
-          box-shadow: 0 14px 34px rgba(255,255,255,0.12) !important;
-          border-color: rgba(255,255,255,0.5) !important;
+          box-shadow: 0 14px 34px rgba(22, 163, 74, 0.25) !important;
         }
         /* Nodes de segmentação sem animações */
         .canvas-library-view .react-flow__node-segmentNode {
@@ -1790,6 +1775,8 @@ const CanvasLibraryView = ({ newsData, onTransferItem, onOpenCardModal, onCanvas
                 style: { strokeWidth: 2, stroke: '#4A90E2' }
               }}
               proOptions={{ hideAttribution: true }}
+              fitView
+              fitViewOptions={{ padding: 0.2, includeHiddenNodes: false, maxZoom: 0.75 }}
               minZoom={0.2}
               maxZoom={1.5}
               zoomOnScroll

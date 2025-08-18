@@ -31,12 +31,12 @@
 
 :root {
   /* === CORES PRINCIPAIS === */
-  --primary-green: #2BB24C;
-  --primary-green-hover: #25A043;
-  --primary-green-transparent: #2BB24C50;
-  --primary-green-light: #2BB24C10;
-  --primary-green-bg: #2BB24C33;
-  --primary-green-selection: #2BB24C08;
+  --primary-green: #16a34a;
+  --primary-green-hover: #15803d;
+  --primary-green-transparent: #16a34a50;
+  --primary-green-light: #16a34a10;
+  --primary-green-bg: #16a34a33;
+  --primary-green-selection: #16a34a08;
 
   /* === BACKGROUNDS === */
   --bg-primary: #121212;        /* Background principal - preto escuro */
