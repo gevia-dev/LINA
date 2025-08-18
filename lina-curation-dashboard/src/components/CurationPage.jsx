@@ -26,7 +26,6 @@ const CurationPage = () => {
       const { data: { session } } = await supabase.auth.getSession();
       
       // Buscar dados diretamente na tabela lina_news (incluindo final_text)
-      console.log('🔍 CurationPage - buscando na tabela lina_news com ID:', newsId);
       const { data: linaNewsData, error: linaNewsError } = await supabase
         .from('lina_news')
         .select('news_id, core_structure, variant_structure, core_quotes, quotes_map, final_text')
@@ -45,13 +44,9 @@ const CurationPage = () => {
       }
 
       const linaRecord = linaNewsData[0];
-      console.log('🔍 CurationPage - linaRecord encontrado:', linaRecord);
-      console.log('🔍 CurationPage - final_text encontrado diretamente na lina_news:', linaRecord.final_text);
-      console.log('🔍 CurationPage - tipo do final_text:', typeof linaRecord.final_text);
 
       // Buscar apenas o título na tabela "Controle Geral" (se necessário)
       if (linaRecord.news_id) {
-        console.log('🔍 CurationPage - buscando título na tabela "Controle Geral" com news_id:', linaRecord.news_id);
         
         const { data: controleGeralData, error: controleGeralError } = await supabase
           .from('Controle Geral')
@@ -60,9 +55,6 @@ const CurationPage = () => {
 
         if (!controleGeralError && controleGeralData && controleGeralData.length > 0) {
           setNewsTitle(controleGeralData[0].title);
-          console.log('🔍 CurationPage - título encontrado:', controleGeralData[0].title);
-        } else {
-          console.warn('⚠️ Título não encontrado na tabela Controle Geral para news_id:', linaRecord.news_id);
         }
       }
 
@@ -70,7 +62,6 @@ const CurationPage = () => {
       setNewsData(linaRecord);
       
     } catch (error) {
-      console.error('Erro ao carregar dados da notícia:', error);
       setLoadError(error.message);
     } finally {
       setIsLoading(false);

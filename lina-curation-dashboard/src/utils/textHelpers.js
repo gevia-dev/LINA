@@ -124,3 +124,41 @@ export const extractPreview = (structuredData, fallbackText = '') => {
     return fallbackText;
   }
 };
+
+/**
+ * Remove marcadores numéricos de um texto
+ * @param {string} text - Texto para limpar
+ * @returns {string} - Texto sem marcadores [1], [10], etc.
+ */
+export const cleanText = (text) => {
+  if (!text) return '';
+  // Remove marcadores como [1], [10], etc.
+  return text.replace(/\[\d+\]/g, '');
+};
+
+/**
+ * Mapeia índice do texto limpo para posição no texto original com marcadores
+ * @param {string} originalText - Texto original com marcadores
+ * @param {number} cleanIndex - Índice no texto limpo
+ * @returns {number} - Posição correspondente no texto original
+ */
+export const mapCleanToOriginalIndex = (originalText, cleanIndex) => {
+  let cleanPos = 0;
+  let originalPos = 0;
+
+  while (cleanPos < cleanIndex && originalPos < originalText.length) {
+    // Verifica se a posição atual é o início de um marcador
+    if (originalText[originalPos] === '[' && /\[\d+\]/.test(originalText.substring(originalPos))) {
+      const match = /\[\d+\]/.exec(originalText.substring(originalPos));
+      if (match && originalText.substring(originalPos).startsWith(match[0])) {
+        // Se for um marcador, avança a posição original pelo tamanho do marcador
+        originalPos += match[0].length;
+        continue;
+      }
+    }
+    // Se não for um marcador, avança ambas as posições
+    cleanPos++;
+    originalPos++;
+  }
+  return originalPos;
+};

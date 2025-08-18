@@ -1,9 +1,12 @@
 import React, { useState, useMemo, useRef, useCallback, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { FileText, Save, X, Layers as LayersIcon, Quote as QuoteIcon, Braces as BracesIcon, ChevronLeft, ChevronRight, Library as LibraryIcon, Bug, TestTube, Target } from 'lucide-react';
+import { FileText, Save, X, Layers as LayersIcon, Quote as QuoteIcon, Braces as BracesIcon, ChevronLeft, ChevronRight, Library as LibraryIcon } from 'lucide-react';
 import CanvasLibraryView from './CanvasLibraryView';
 import BlockNoteEditor from './BlockNoteEditor';
 import MainSidebar from '../MainSidebar';
+import { cleanText, mapCleanToOriginalIndex } from '../../utils/textHelpers';
+
+
 
 // Estilos CSS para os marcadores de referência e grifo
 const referenceMarkerStyles = `
@@ -71,24 +74,22 @@ const NotionLikePage = ({ isOpen = true, onClose, newsData, newsTitle, onCanvasI
   const EDITOR_MIN_PX = 480;
   const LIB_MIN_PX = 360;
 
-  // FUNÇÃO HELPER PARA EXTRAIR TEXTO PLANO DE UM BLOCO
+  // FUNÇÃO HELPER PARA EXTRAIR TEXTO PLANO DE UM BLOCO - VERSÃO MELHORADA
   const extractBlockTextFlat = useCallback((block) => {
     try {
       if (!block || !block.content) return '';
       
       if (Array.isArray(block.content)) {
         let fullText = '';
-        let currentPos = 0;
         
         // Percorrer cada elemento inline e construir o texto completo
+        // PRESERVANDO a estrutura interna para mapeamento correto
         for (const item of block.content) {
           if (typeof item === 'string') {
             fullText += item;
-            currentPos += item.length;
           } else if (item && typeof item === 'object') {
             if (item.text) {
               fullText += item.text;
-              currentPos += item.text.length;
             } else if (item.content) {
               // Se o item tem conteúdo aninhado, extrair recursivamente
               if (Array.isArray(item.content)) {
@@ -100,10 +101,8 @@ const NotionLikePage = ({ isOpen = true, onClose, newsData, newsTitle, onCanvasI
                   })
                   .join('');
                 fullText += nestedText;
-                currentPos += nestedText.length;
               } else if (typeof item.content === 'string') {
                 fullText += item.content;
-                currentPos += item.content.length;
               }
             }
           }
@@ -127,397 +126,200 @@ const NotionLikePage = ({ isOpen = true, onClose, newsData, newsTitle, onCanvasI
     }
   }, []);
 
-  // NOVA FUNÇÃO para grifar texto específico no BlockNote
-  const highlightSpecificText = useCallback(async (editor, textToHighlight, shouldHighlight) => {
-    try {
-      console.log(`🎯 Procurando texto específico: "${textToHighlight.substring(0, 100)}..."`);
-      console.log(`🔍 Texto completo recebido: "${textToHighlight}"`);
-      console.log(`🔍 Tamanho do texto: ${textToHighlight.length}`);
-      
-      // Acessar o documento diretamente do editor
-      const blocks = editor.document || editor.topLevelBlocks || [];
-      
-      if (!blocks || blocks.length === 0) {
-        console.log('❌ Nenhum bloco disponível no editor');
-        return false;
+  // Remove um heading inicial (ex.: "## Título\n") do texto
+  const stripLeadingHeadingLines = (s = "") =>
+    s.replace(/^\s*#{1,6}\s+.*(\r?\n)+/g, '').trim();
+
+  // --- utils de sentença / cluster ---
+
+  // separador decimal (35.7 / 3,5)
+  const isDecimalSepAt = (s, i) => {
+    const c = s[i];
+    if (c !== '.' && c !== ',') return false;
+    const prev = s[i - 1], next = s[i + 1];
+    return /\d/.test(prev || '') && /\d/.test(next || '');
+  };
+
+  // procura o delimitador REAL de sentença para trás (., !, ?, …, \n)
+  // ignora decimais; NÃO considera ':' nem ';'
+  const findPrevSentenceDelimiter = (s, from) => {
+    for (let k = from; k >= 0; k--) {
+      if (isDecimalSepAt(s, k)) continue;
+      const ch = s[k];
+      if (ch === '.' || ch === '!' || ch === '?' || ch === '…' || ch === '\n') return k;
+    }
+    return -1;
+  };
+
+  // acha o primeiro [n] do cluster que termina em 'idx' (ex.: "... [5] [6]" com idx em "[6]" → posição de "[5]")
+  const findFirstMarkerInCluster = (text, idx) => {
+    const left = text.slice(0, idx);
+    const m = left.match(/(\s*\[\d+\]\s*)+$/);
+    if (!m) return idx; // sem cluster à esquerda
+    const tail = m[0]; // " [5] " ou " [5] [6] "
+    const firstBracketOffset = tail.search(/\[/);
+    return left.length - tail.length + (firstBracketOffset >= 0 ? firstBracketOffset : 0);
+  };
+
+  // pula prefixos inocentes no começo da sentença (espaços / aspas / parênteses)
+  const skipSentencePrefix = (text, start, hardEnd) => {
+    let i = start;
+    while (i < hardEnd && /\s/.test(text[i])) i++;
+    while (i < hardEnd && /[""'\(]/.test(text[i])) i++;
+    return i;
+  };
+
+  // range [start, end) da sentença "alvo do cluster" cujo primeiro marcador começa em clusterStartIdx
+  const getSentenceRangeByClusterStart = (text, clusterStartIdx) => {
+    // andar para trás a partir do caractere antes do cluster,
+    // pulando espaços/fechamentos e a pontuação final da frase atual (., !, ?, …)
+    let j = clusterStartIdx - 1;
+    while (j >= 0 && /\s/.test(text[j])) j--;
+    while (j >= 0 && /['"")')\]]/.test(text[j])) j--;
+    while (j >= 0 && (text[j] === '.' || text[j] === '!' || text[j] === '?' || text[j] === '…')) j--;
+
+    // agora sim: procurar o delimitador da sentença ANTERIOR
+    const prevDelim = findPrevSentenceDelimiter(text, j);
+    let start = (prevDelim >= 0) ? prevDelim + 1 : 0;
+    start = skipSentencePrefix(text, start, clusterStartIdx);
+
+    const end = clusterStartIdx; // fim comum do cluster
+    return [start, end];
+  };
+
+  // API principal: dado idx do "[n]" atual, devolve [start, end) unificado do cluster
+  const getSentenceRangeForMarker = (text, idx) => {
+    const clusterStartIdx = findFirstMarkerInCluster(text, idx);
+    return getSentenceRangeByClusterStart(text, clusterStartIdx);
+  };
+
+  // Encontra o bloco alvo para um determinado marcador [n]:
+  // - Procura o bloco que contém o marcador
+  // - Retorna o bloco-parágrafo imediatamente anterior (não-vazio)
+  const findBlockForMarker = useCallback((editor, marker) => {
+    const blocks = editor.topLevelBlocks || [];
+    for (let i = 0; i < blocks.length; i++) {
+      const block = blocks[i];
+      const text = extractBlockTextFlat(block);
+      if (!text) continue;
+
+      const idx = text.indexOf(marker);
+      if (idx !== -1) {
+        // subir para o parágrafo anterior não vazio, ignorando headings
+        let j = i - 1;
+        while (j >= 0) {
+          const prev = blocks[j];
+          const prevText = extractBlockTextFlat(prev).trim();
+          if (prevText && prev.type !== 'heading') {
+            return { block: prev, start: 0, end: prevText.length };
+          }
+          j--;
+        }
+        // fallback: dentro do próprio bloco, destacar o texto antes do marcador
+        if (idx > 0) {
+          return { block, start: 0, end: idx };
+        }
+        return null;
       }
-      
-      // Procurar o texto nos blocos do editor
-      for (let blockIndex = 0; blockIndex < blocks.length; blockIndex++) {
-        const block = blocks[blockIndex];
-        const blockText = extractBlockTextFlat(block);
-        
-        if (!blockText) continue;
-        
-        // Buscar pelo texto (matching mais preciso)
-        const textLower = textToHighlight.toLowerCase().trim();
-        const blockLower = blockText.toLowerCase();
-        
-        console.log(`🔍 Procurando por: "${textLower}"`);
-        console.log(`🔍 No bloco: "${blockLower.substring(0, 200)}..."`);
-        
-        // Tentar encontrar o texto exato primeiro
-        let matchIndex = blockLower.indexOf(textLower);
-        
-        // Se não encontrar exato, tentar com as primeiras palavras
-        if (matchIndex === -1) {
-          const searchWords = textLower.split(' ').slice(0, 8).join(' ');
-          console.log(`🔍 Tentando com primeiras palavras: "${searchWords}"`);
-          matchIndex = blockLower.indexOf(searchWords);
-        }
-        
-        // Se ainda não encontrar, tentar com palavras-chave mais específicas
-        if (matchIndex === -1) {
-          const keywords = textLower.split(' ').filter(word => word.length > 3).slice(0, 5);
-          const searchPhrase = keywords.join(' ');
-          console.log(`🔍 Tentando com palavras-chave: "${searchPhrase}"`);
-          matchIndex = blockLower.indexOf(searchPhrase);
-        }
-        
-        if (matchIndex !== -1) {
-          console.log(`✅ Texto encontrado no bloco ${blockIndex} na posição ${matchIndex}`);
-          console.log(`📝 Block ID: ${block.id}`);
-          console.log(`📝 Texto do bloco: "${blockText.substring(0, 100)}..."`);
-          console.log(`🔍 Estrutura do bloco:`, block);
-          console.log(`🔍 Conteúdo do bloco:`, block.content);
+    }
+    return null;
+  }, [extractBlockTextFlat]);
+
+  // Retorna { block, start, end } para o título -> [n], destacando somente a sentença antes do [n]
+  const getMarkerSentenceRange = useCallback((editor, title) => {
+    if (!title || !referenceMapping?.size) return null;
+    const marker = referenceMapping.get(String(title).trim()); // ex.: "[1]"
+    if (!marker) return null;
+
+    const blocks = editor.topLevelBlocks || [];
+    for (const block of blocks) {
+      // flatten seguro do bloco (usa sua extractBlockTextFlat)
+      const flat = extractBlockTextFlat(block) || '';
+      const idx = flat.indexOf(marker);
+      if (idx === -1) continue;
+
+      // flat = texto flatten do bloco; idx = posição do "[n]" atual
+      const [start, end] = getSentenceRangeForMarker(flat, idx);
+
+      return { block, start, end };
+    }
+    return null;
+  }, [referenceMapping, extractBlockTextFlat, getSentenceRangeForMarker]);
+
+  // NOVA FUNÇÃO para grifar texto específico no BlockNote - VERSÃO DEFINITIVA
+  const highlightSpecificText = useCallback(async (editor, textToHighlight, shouldHighlight) => {
+    if (!editor || !textToHighlight) return false;
+    if (!editorRef.current || !editorRef.current.highlightText) { console.error("❌ EditorRef ou método highlightText não disponível"); return false; }
+
+    const blocks = editor.topLevelBlocks;
+    const cleanNeedle = cleanText(String(textToHighlight)).toLowerCase();
+    if (!cleanNeedle) return false;
+
+    for (const block of blocks) {
+      const blockText = extractBlockTextFlat(block);
+      if (!blockText) continue;
+      const cleanBlockText = cleanText(blockText);
+      const cleanBlockLower = cleanBlockText.toLowerCase();
+
+      let matchIndex = -1;
+      matchIndex = cleanBlockLower.indexOf(cleanNeedle);
+
+      if (matchIndex === -1) {
+        const flexibleSearchText = cleanNeedle.replace(/\s+/g, ' ').trim();
+        const flexibleCleanBlock = cleanBlockLower.replace(/\s+/g, ' ').trim();
+        matchIndex = flexibleCleanBlock.indexOf(flexibleSearchText);
+      }
+
+      if (matchIndex !== -1) {
+        try {
+  
+          const startOffset = mapCleanToOriginalIndex(blockText, matchIndex);
+          const endOffset   = mapCleanToOriginalIndex(blockText, matchIndex + cleanNeedle.length);
           
-          // DEBUG: Mostrar estrutura detalhada dos elementos inline
-          if (Array.isArray(block.content)) {
-            console.log(`🔍 Elementos inline (${block.content.length}):`);
-            block.content.forEach((item, index) => {
-              console.log(`  [${index}] Tipo: ${typeof item}, Conteúdo:`, item);
-              if (item && typeof item === 'object') {
-                console.log(`    - Props:`, item.props);
-                console.log(`    - Text:`, item.text);
-                console.log(`    - Content:`, item.content);
-              }
-            });
-          }
-          
-          // Calcular as posições exatas para seleção
-          // matchIndex é a posição onde o texto foi encontrado no bloco
-          const startOffset = matchIndex;
-          const endOffset = Math.min(
-            matchIndex + textToHighlight.length, // Usar textToHighlight (já limpo)
-            blockText.length
-          );
-          
-          console.log(`🔍 matchIndex: ${matchIndex}, textToHighlight length: ${textToHighlight.length}`);
-          console.log(`🔍 startOffset: ${startOffset}, endOffset: ${endOffset}`);
-          
-          console.log(`📍 Aplicando highlight: ${startOffset}-${endOffset} no bloco ${block.id}`);
-          
-          // USAR O NOVO MÉTODO highlightText DO EDITOR
-          if (editorRef.current && editorRef.current.highlightText) {
-            const success = editorRef.current.highlightText(
-              block.id,
-              startOffset,
-              endOffset,
-              shouldHighlight
-            );
-            
-            if (success) {
-              console.log(`✅ Highlight ${shouldHighlight ? 'aplicado' : 'removido'} com sucesso`);
-              return true;
-            } else {
-              console.log(`⚠️ Falha ao aplicar highlight, tentando método alternativo...`);
-              
-              // Tentar método alternativo
-              if (editorRef.current.selectAndHighlight) {
-                const altSuccess = editorRef.current.selectAndHighlight(
-                  block.id,
-                  startOffset,
-                  endOffset,
-                  shouldHighlight
-                );
-                
-                if (altSuccess) {
-                  console.log(`✅ Highlight aplicado via método alternativo`);
-                  return true;
-                }
-              }
-            }
-          }
-          
-          // FALLBACK: Tentar acessar o editor interno diretamente
-          if (editorRef.current && editorRef.current.editor) {
-            const internalEditor = editorRef.current.editor;
-            
-            // Tentar usar os métodos do BlockNote diretamente
-            try {
-              // Método 1: Usar setTextCursorPosition com a estrutura correta
-              internalEditor.setTextCursorPosition(
-                block.id, // ou block se for o objeto completo
-                startOffset
-              );
-              
-              // Estender a seleção
-              const selection = internalEditor.getSelection();
-              if (selection) {
-                // Modificar a seleção para incluir o range completo
-                internalEditor.updateSelection({
-                  ...selection,
-                  endOffset: endOffset
-                });
-              }
-              
-              // Aplicar estilo
-              if (shouldHighlight) {
-                internalEditor.addStyles({ backgroundColor: "yellow" });
-              } else {
-                internalEditor.removeStyles(["backgroundColor"]);
-              }
-              
-              console.log(`✅ Highlight aplicado via editor interno`);
-              return true;
-              
-            } catch (fallbackError) {
-              console.log('❌ Fallback também falhou:', fallbackError);
-              
-              // Último recurso: tentar via TipTap se disponível
-              if (internalEditor._tiptapEditor) {
-                try {
-                  const tiptap = internalEditor._tiptapEditor;
-                  
-                  // Calcular posição absoluta no documento
-                  let absoluteStart = 0;
-                  for (let i = 0; i < blockIndex; i++) {
-                    const prevBlock = blocks[i];
-                    const prevText = extractBlockTextFlat(prevBlock);
-                    absoluteStart += prevText.length + 1; // +1 para quebra de linha
-                  }
-                  absoluteStart += startOffset;
-                  
-                  // Aplicar seleção no TipTap
-                  tiptap.commands.setTextSelection({
-                    from: absoluteStart,
-                    to: absoluteStart + (endOffset - startOffset)
-                  });
-                  
-                  // Aplicar marca de highlight
-                  if (shouldHighlight) {
-                    tiptap.commands.setMark('highlight', { color: 'yellow' });
-                  } else {
-                    tiptap.commands.unsetMark('highlight');
-                  }
-                  
-                  console.log(`✅ Highlight aplicado via TipTap`);
-                  return true;
-                } catch (tiptapError) {
-                  console.log('❌ TipTap também falhou:', tiptapError);
-                }
-              }
-            }
-          }
-          
-          console.log(`❌ Todos os métodos de highlight falharam para o bloco ${blockIndex}`);
+          const success = editorRef.current.highlightText(block.id, startOffset, endOffset, shouldHighlight);
+          if (success) return true;
+        } catch (error) {
+          console.error("Erro ao aplicar highlight:", error);
           return false;
         }
       }
-      
-      console.log(`❌ Texto não encontrado em nenhum bloco do editor`);
-      return false;
-      
-    } catch (error) {
-      console.error('❌ Erro ao aplicar highlight específico:', error);
-      return false;
     }
+    console.log('❌ Texto não encontrado em nenhum bloco');
+    return false;
   }, [extractBlockTextFlat]);
 
   // FUNÇÃO PRINCIPAL CORRIGIDA - Grifo por marcadores
   const handleHighlightText = useCallback(async (title, phrase, action) => {
-    console.log(`🎨 Grifo por Marcadores: ${action} - title: "${title}"`);
-    
-    // Verificar se o editor está disponível
-    if (!editorRef.current) {
-      console.log('❌ EditorRef não disponível');
+
+    const editor = editorRef.current?.editor;
+    if (!editor || !editorRef.current?.highlightText) return;
+
+    // 1) Caminho novo: título -> [n] -> bloco -> sentença anterior
+    const target = getMarkerSentenceRange(editor, title);
+    if (target) {
+      const { block, start, end } = target;
+      
+      editorRef.current.highlightText(block.id, start, end, action === 'enter');
       return;
     }
-    
-    // Acessar o editor interno do BlockNote
-    const editor = editorRef.current.editor;
-    if (!editor) {
-      console.log('❌ Editor interno não disponível');
-      return;
-    }
-    
+
+    // 2) Fallback antigo (mantém se quiser cobrir casos sem marcador)
     try {
-      // PASSO 1: Encontrar o marcador no final_text
       const finalText = newsData?.final_text;
-      if (!finalText || typeof finalText !== 'string') {
-        console.log('❌ final_text não disponível');
-        return;
-      }
-      
-      console.log(`🔍 Procurando marcador para: "${title}"`);
-      
-      // Buscar pelo marcador ///<título>///
+      if (!finalText || typeof finalText !== 'string') return;
+
       const markerPattern = `///<${title}>///`;
       const markerIndex = finalText.indexOf(markerPattern);
-      
-      if (markerIndex === -1) {
-        console.log(`❌ Marcador "${markerPattern}" não encontrado no final_text`);
-        return;
-      }
-      
-      console.log(`✅ Marcador encontrado na posição: ${markerIndex}`);
-      
-      // PASSO 2: Encontrar o texto que VEM ANTES do marcador
-      const textBeforeMarker = finalText.substring(0, markerIndex);
-      
-      // Encontrar o início do texto a ser grifado
-      // Procurar pelo marcador anterior ou início do parágrafo
-      let textStart = 0;
-      
-      // Procurar o último marcador antes do atual
-      const lastMarkerMatch = textBeforeMarker.lastIndexOf('///');
-      if (lastMarkerMatch !== -1 && lastMarkerMatch < markerIndex - 3) {
-        // Se encontrou um marcador anterior, começar logo após ele
-        textStart = lastMarkerMatch + 3;
-        // Pular espaços em branco após o marcador anterior
-        while (textStart < markerIndex && /\s/.test(finalText[textStart])) {
-          textStart++;
-        }
-      } else {
-        // Se não há marcador anterior, procurar pelo início do parágrafo
-        const lastDoubleNewline = textBeforeMarker.lastIndexOf('\n\n');
-        const lastSingleNewline = textBeforeMarker.lastIndexOf('\n');
-        
-        if (lastDoubleNewline !== -1) {
-          textStart = lastDoubleNewline + 2;
-        } else if (lastSingleNewline !== -1) {
-          textStart = lastSingleNewline + 1;
-        } else {
-          textStart = 0;
-        }
-      }
-      
-      // PASSO 3: Extrair o texto específico a ser grifado
-      const textToHighlight = finalText.substring(textStart, markerIndex).trim();
-      
-      console.log(`🎯 Texto a ser grifado (${textStart}-${markerIndex}): "${textToHighlight}"`);
-      
-      if (!textToHighlight || textToHighlight.length < 5) {
-        console.log(`❌ Texto muito curto ou vazio para grifo: "${textToHighlight}"`);
-        return;
-      }
-      
-      // IMPORTANTE: Remover marcadores do texto processado antes de procurar
-      // Porque o editor mostra o texto processado (sem marcadores)
-      const processedFinalText = finalText.replace(/\/\/\/<[^>]+>\/\/\//g, (match, offset) => {
-        // Substituir marcadores por espaço para manter offsets aproximados
-        return offset < markerIndex ? '' : match;
-      });
-      
-      // Ajustar o texto a procurar removendo possíveis artefatos
-      const cleanTextToHighlight = textToHighlight.replace(/\[[\d]+\]/g, '').trim();
-      
-      console.log(`🔍 Texto limpo para busca: "${cleanTextToHighlight}"`);
-      
-      // PASSO 4: Encontrar esse texto específico no editor BlockNote
-      const success = await highlightSpecificText(editor, cleanTextToHighlight, action === 'enter');
-      
-      if (success) {
-        console.log(`✅ Grifo ${action === 'enter' ? 'aplicado' : 'removido'} com sucesso para: "${title}"`);
-      } else {
-        console.log(`❌ Falha ao ${action === 'enter' ? 'aplicar' : 'remover'} grifo para: "${title}"`);
-      }
-      
-    } catch (error) {
-      console.error('❌ Erro no grifo por marcadores:', error);
-    }
-    
-  }, [newsData, highlightSpecificText]);
+      if (markerIndex === -1) return;
 
-  // FUNÇÃO DE TESTE específica para marcadores
-  const testMarkerHighlight = useCallback(() => {
-    console.log('🧪 === TESTE DE GRIFO POR MARCADORES ===');
-    
-    // Simular hover com um título real do exemplo
-    const testTitle = "Lançamento do Tênis Cloudzone Moon";
-    
-    console.log(`🧪 Testando grifo para título: "${testTitle}"`);
-    
-    handleHighlightText(testTitle, "", "enter");
-    
-    // Remover após 3 segundos
-    setTimeout(() => {
-      console.log(`🧪 Removendo grifo de teste...`);
-      handleHighlightText(testTitle, "", "leave");
-    }, 3000);
-    
-    console.log('🧪 === FIM TESTE MARCADORES ===');
-  }, [handleHighlightText]);
+      // ... seu cálculo antigo de textStart/textToHighlight ...
+      // await highlightSpecificText(editor, cleanTextToHighlight, action === 'enter');
+    } catch (err) {
+      console.error('❌ Erro no grifo por marcadores:', err);
+    }
+  }, [newsData, getMarkerSentenceRange]);
 
-  // FUNÇÃO DE DEBUG PARA SELEÇÃO
-  const debugTextSelection = useCallback(() => {
-    if (!editorRef.current || !editorRef.current.editor) {
-      console.log('❌ Editor não disponível para debug');
-      return;
-    }
-    
-    const editor = editorRef.current.editor;
-    
-    console.log('🔍 === DEBUG TEXT SELECTION ===');
-    
-    // Verificar métodos de seleção
-    console.log('🎯 Métodos de seleção disponíveis:');
-    console.log('- setTextCursor:', typeof editorRef.current.setTextCursor, editorRef.current.setTextCursor ? '✅' : '❌');
-    console.log('- setSelection:', typeof editorRef.current.setSelection, editorRef.current.setSelection ? '✅' : '❌');
-    console.log('- getSelection:', typeof editor.getSelection, editor.getSelection ? '✅' : '❌');
-    
-    // Verificar métodos de estilo
-    console.log('🎨 Métodos de estilo disponíveis:');
-    console.log('- addStyles:', typeof editorRef.current.addStyles, editorRef.current.addStyles ? '✅' : '❌');
-    console.log('- removeStyles:', typeof editorRef.current.removeStyles, editorRef.current.removeStyles ? '✅' : '❌');
-    console.log('- toggleStyles:', typeof editorRef.current.toggleStyles, editorRef.current.toggleStyles ? '✅' : '❌');
-    
-    // Verificar blocos
-    console.log('📄 Blocos disponíveis:');
-    const blocks = editor.topLevelBlocks || [];
-    console.log(`- Total de blocos: ${blocks.length}`);
-    
-    if (blocks.length > 0) {
-      const firstBlock = blocks[0];
-      const blockText = extractBlockTextFlat(firstBlock);
-      console.log(`- Primeiro bloco ID: ${firstBlock.id}`);
-      console.log(`- Primeiro bloco texto: "${blockText.substring(0, 100)}..."`);
-      console.log(`- Primeiro bloco length: ${blockText.length}`);
-    }
-    
-    // Verificar final_text e marcadores
-    console.log('🗺️ Verificação de marcadores:');
-    const finalText = newsData?.final_text;
-    if (finalText) {
-      console.log(`- final_text length: ${finalText.length}`);
-      const markers = finalText.match(/\/\/\/<[^>]+>\/\/\//g);
-      console.log(`- Marcadores encontrados: ${markers ? markers.length : 0}`);
-      if (markers && markers.length > 0) {
-        console.log(`- Primeiro marcador: ${markers[0]}`);
-      }
-    }
-    
-    console.log('🔍 === FIM DEBUG ===');
-  }, [newsData, extractBlockTextFlat]);
 
-  // FUNÇÃO DE TESTE SIMPLES
-  const testSimpleHighlight = useCallback(async () => {
-    console.log('🧪 === TESTE SIMPLES DE HIGHLIGHT ===');
-    
-    if (!editorRef.current || !editorRef.current.editor) {
-      console.log('❌ Editor não disponível');
-      return;
-    }
-    
-    // Usar método de teste do editor
-    if (editorRef.current.testTextSelection) {
-      await editorRef.current.testTextSelection("texto");
-    } else {
-      console.log('❌ testTextSelection não disponível');
-    }
-    
-    console.log('🧪 === FIM TESTE ===');
-  }, []);
 
   // Chips com o mesmo visual do MonitorNode (azul para dados, laranja para estrutura)
   const SidebarChip = useCallback(({ node }) => {
@@ -584,13 +386,13 @@ const NotionLikePage = ({ isOpen = true, onClose, newsData, newsTitle, onCanvasI
       mapping.set(marker, content.trim());
       mapping.set(content.trim(), marker); // Mapeamento bidirecional
       
-      console.log(`📍 Mapeamento criado: ${marker} <-> "${content.trim()}"`);
+      
       
       referenceNumber++;
       return marker;
     });
     
-    console.log(`🗺️ Mapeamento total criado com ${mapping.size / 2} referências`);
+    
     
     return { processedText, mapping };
   }, []);
@@ -598,25 +400,23 @@ const NotionLikePage = ({ isOpen = true, onClose, newsData, newsTitle, onCanvasI
   // Monta conteúdo do editor - sempre priorizar final_text do banco
   const editorContent = useMemo(() => {
     // Debug: verificar se final_text está sendo recebido
-    console.log('🔍 NotionLikePage - newsData:', newsData);
-    console.log('🔍 NotionLikePage - final_text:', newsData?.final_text);
+
     
     // SEMPRE usar final_text do banco de dados se disponível
     if (newsData?.final_text && typeof newsData.final_text === 'string' && newsData.final_text.trim()) {
-      console.log('✅ Usando final_text do banco de dados');
+
       const { processedText, mapping } = processFinalText(newsData.final_text.trim());
       
       // Armazenar o mapeamento no estado
       setReferenceMapping(mapping);
       
-      console.log('🔍 NotionLikePage - texto processado:', processedText);
-      console.log('🔍 NotionLikePage - mapeamento criado:', mapping);
+      
       
       return processedText;
     }
     
     // Se não tiver final_text, mostrar mensagem informativa
-    console.log('⚠️ final_text não disponível - mostrando mensagem informativa');
+    
     setReferenceMapping(new Map()); // Limpar mapeamento
     return `# Editor Estruturado
 
@@ -689,7 +489,7 @@ Para testar o highlighting por marcadores, clique no botão "Teste Marcador".`;
     const handleCanvasItemHover = (event) => {
       const { action, title, phrase } = event.detail;
       
-      console.log(`🖱️ Canvas hover ${action}:`, { title, phrase });
+  
       
       if (title) {
         handleHighlightText(title, phrase, action);
@@ -709,7 +509,7 @@ Para testar o highlighting por marcadores, clique no botão "Teste Marcador".`;
       
       // Como agora sempre priorizamos final_text, não vamos mais salvar nos nodes
       // Apenas logar a ação para debug
-      console.log('📝 Conteúdo adicionado via drag & drop:', { sectionId, dragData });
+      
       
       // Mostrar feedback visual
       setRecentlyAdded({ sectionId, at: Date.now() });
@@ -806,7 +606,7 @@ Para testar o highlighting por marcadores, clique no botão "Teste Marcador".`;
     setLastMarkdown(markdown);
 
     // Como agora sempre priorizamos final_text, não salvamos mais nos nodes
-    console.log('💾 Conteúdo do editor salvo (apenas em memória):', markdown);
+    
     
     // Mostrar feedback visual
     alert('Conteúdo salvo em memória. Para persistir no banco, use a coluna "final_text" da tabela "Controle Geral".');
@@ -889,7 +689,7 @@ Para testar o highlighting por marcadores, clique no botão "Teste Marcador".`;
           }
           lastDropRef.current = { itemId: (data.itemId || data.id), sectionId: targetSection, at: now };
           handleContentAdd(data, targetSection);
-          console.log('✅ Drop capturado com sucesso:', { section: targetSection, data });
+  
         } else {
           const types = Array.from(e.dataTransfer?.types || []);
           console.debug('⚠️ Drop ignorado (tipos não suportados ou payload inválido):', types);
@@ -1156,6 +956,11 @@ Para testar o highlighting por marcadores, clique no botão "Teste Marcador".`;
                 background: rgba(156, 163, 175, 0.8);
                 background-clip: content-box;
               }
+              
+              /* CSS de reforço para marcadores transparentes */
+              .ProseMirror span[style*="color: transparent"] { 
+                color: transparent !important; 
+              }
 
             `}</style>
             
@@ -1169,30 +974,7 @@ Para testar o highlighting por marcadores, clique no botão "Teste Marcador".`;
                 </div>
               </div>
               <div className="flex items-center gap-2">
-                <button 
-                  onClick={testMarkerHighlight} 
-                  className="px-3 py-1.5 rounded border" 
-                  title="Teste Grifo por Marcadores"
-                  style={{ backgroundColor: 'purple', borderColor: 'purple', color: 'white' }}
-                >
-                  <div className="flex items-center gap-2"><Target size={16} /><span className="text-sm">Teste Marcador</span></div>
-                </button>
-                <button 
-                  onClick={testSimpleHighlight} 
-                  className="px-3 py-1.5 rounded border" 
-                  title="Teste Simples de Seleção"
-                  style={{ backgroundColor: 'green', borderColor: 'green', color: 'white' }}
-                >
-                  <div className="flex items-center gap-2"><TestTube size={16} /><span className="text-sm">Teste</span></div>
-                </button>
-                <button 
-                  onClick={debugTextSelection} 
-                  className="px-3 py-1.5 rounded border" 
-                  title="Debug Métodos de Seleção"
-                  style={{ backgroundColor: 'blue', borderColor: 'blue', color: 'white' }}
-                >
-                  <div className="flex items-center gap-2"><Bug size={16} /><span className="text-sm">Debug</span></div>
-                </button>
+
                 <button onClick={handleSave} className="px-3 py-1.5 rounded border" title="Salvar" style={{ backgroundColor: 'var(--bg-tertiary)', borderColor: 'var(--border-primary)', color: 'var(--text-secondary)' }}>
                   <div className="flex items-center gap-2"><Save size={16} /><span className="text-sm">Salvar</span></div>
                 </button>

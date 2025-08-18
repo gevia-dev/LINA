@@ -4,14 +4,16 @@ import { BlockNoteView } from '@blocknote/mantine';
 import '@blocknote/core/fonts/inter.css';
 import '@blocknote/mantine/style.css';
 
+
+
 const BlockNoteEditor = forwardRef(({ initialContent = '', onChange, onScroll, onCanvasItemDragStart }, ref) => {
-  console.log('🔍 BlockNoteEditor - renderizando com initialContent:', initialContent);
+
   
   // Converter texto markdown simples para blocos BlockNote
   const convertMarkdownToBlocks = (markdown) => {
     if (!markdown || typeof markdown !== 'string') return [];
     
-    console.log('🔍 BlockNoteEditor - convertendo markdown para blocos:', markdown);
+  
     
     const lines = markdown.split('\n');
     const blocks = [];
@@ -62,7 +64,7 @@ const BlockNoteEditor = forwardRef(({ initialContent = '', onChange, onScroll, o
       }
     );
     
-    console.log('🔍 BlockNoteEditor - blocos criados:', blocks);
+    
     return blocks;
   };
 
@@ -112,23 +114,13 @@ const BlockNoteEditor = forwardRef(({ initialContent = '', onChange, onScroll, o
           pink: { text: "#db2777", background: "#fce7f3" },
         },
       },
-    }
+    },
+    // Adiciona plugin ProseMirror para ocultar spans que representam [n]
+    domAttributes: {},
+    slashMenuItems: undefined
   });
 
-  // Debug: verificar métodos de seleção disponíveis
-  useEffect(() => {
-    if (editor) {
-      console.log('🔍 BlockNoteEditor - editor criado:', editor);
-      console.log('🔍 BlockNoteEditor - métodos de seleção disponíveis:');
-      console.log('  - setTextCursor:', typeof editor.setTextCursor);
-      console.log('  - setSelection:', typeof editor.setSelection);
-      console.log('  - getSelection:', typeof editor.getSelection);
-      console.log('  - addStyles:', typeof editor.addStyles);
-      console.log('  - removeStyles:', typeof editor.removeStyles);
-      console.log('  - toggleStyles:', typeof editor.toggleStyles);
-      console.log('🔍 BlockNoteEditor - topLevelBlocks:', editor.topLevelBlocks?.length || 0);
-    }
-  }, [editor]);
+
 
   // Função helper para extrair texto de um bloco (versão otimizada)
   const extractTextFromBlock = useCallback((block) => {
@@ -162,112 +154,125 @@ const BlockNoteEditor = forwardRef(({ initialContent = '', onChange, onScroll, o
     }
   }, []);
 
-  // Função para encontrar texto nos blocos (versão otimizada)
-  const findTextInBlocks = useCallback((searchText) => {
-    try {
-      const blocks = editor.topLevelBlocks || [];
-      
-      for (let i = 0; i < blocks.length; i++) {
-        const block = blocks[i];
-        const blockText = extractTextFromBlock(block);
-        
-        if (blockText && blockText.toLowerCase().includes(searchText.toLowerCase())) {
-          console.log(`✅ Texto encontrado no bloco ${i}: "${blockText.substring(0, 100)}..."`);
-          return {
-            blockIndex: i,
-            blockId: block.id,
-            blockText: blockText,
-            block: block
-          };
-        }
-      }
-      console.log(`❌ Texto "${searchText}" não encontrado nos blocos`);
-      return null;
-    } catch (error) {
-      console.error('❌ Erro ao procurar texto nos blocos:', error);
-      return null;
-    }
-  }, [editor, extractTextFromBlock]);
+  // Junta todos os inlines do parágrafo em um único text-node
+  const normalizeBlockInlines = useCallback((blockId) => {
+    if (!editor) return false;
+    const blocks = editor.document || editor.topLevelBlocks || [];
+    const idx = blocks.findIndex(b => b.id === blockId);
+    if (idx === -1) return false;
 
-  // Função para testar seleção de texto (para debug)
-  const testTextSelection = useCallback(async (testText = "exemplo") => {
+    const blk = blocks[idx];
+    if (blk.type !== 'paragraph') return false;
+
+    const joined = (blk.content || []).map(inl => inl.text || '').join('');
+    // Se já está normalizado (apenas 1 inline com o mesmo texto), não faça nada
+    if (blk.content && blk.content.length === 1 && (blk.content[0].text || '') === joined) return true;
+
+    editor.updateBlock(blockId, { content: [{ type: 'text', text: joined }] });
+    return true;
+  }, [editor]);
+
+  // Resegmenta o parágrafo SOMENTE nas fronteiras de marcador [n]
+  const resegmentAtMarkers = useCallback((blockId) => {
+    if (!editor) return false;
+    const blocks = editor.document || editor.topLevelBlocks || [];
+    const idx = blocks.findIndex(b => b.id === blockId);
+    if (idx === -1) return false;
+
+    const blk = blocks[idx];
+    if (blk.type !== 'paragraph') return false;
+
+    const txt = (blk.content || []).map(n => n.text || '').join('');
+    // split preservando os delimitadores [n]
+    const parts = txt.split(/(\[\d+\])/g).filter(Boolean);
+    // Garante que não houve split "no meio da palavra"
+    const content = parts.map(t => ({ type: 'text', text: t }));
+
+    // Evita update se já está do mesmo jeito
+    const same =
+      Array.isArray(blk.content) &&
+      blk.content.length === content.length &&
+      blk.content.every((n, i) => (n.text || '') === content[i].text);
+
+    if (!same) editor.updateBlock(blockId, { content });
+
+    return true;
+  }, [editor]);
+
+
+
+
+
+  // Regex pega clusters também: " [15] [16] " (com ou sem espaços)
+  const REF_RE = /\s*\[\d+\]\s*/g;
+
+  // Converte offsets relativos ao bloco -> posições absolutas no doc TipTap
+  const getDocRangeForBlockOffsets = useCallback((blockId, startOffset, endOffset) => {
+    const tiptap = editor?._tiptapEditor;
+    if (!tiptap) return null;
+
+    let from = -1, to = -1;
+    tiptap.state.doc.descendants((node, pos) => {
+      if (from !== -1 && to !== -1) return false;
+      if (node.type.name === 'blockContainer' && node.attrs?.id === blockId) {
+        const base = pos + 1; // início do conteúdo do bloco
+        from = base + startOffset;
+        to   = base + endOffset;
+        return false;
+      }
+      return true;
+    });
+    return (from >= 0 && to >= 0) ? { from, to } : null;
+  }, [editor]);
+
+  // Aplica "invisibilidade" só nos trechos que são [n] (clusters ou isolados)
+  const hideMarkersInBlock = useCallback((block) => {
     try {
-      console.log('🧪 === TESTE DE SELEÇÃO DE TEXTO ===');
-      
-      if (!editor || !editor.topLevelBlocks) {
-        console.log('❌ Editor não disponível');
-        return;
+      if (!editor || !block || block.type !== 'paragraph') return;
+      const tiptap = editor._tiptapEditor;
+      if (!tiptap) return;
+
+      // Texto flatten do bloco (não altera conteúdo)
+      const flat = (block.content || []).map(n => n?.text || '').join('');
+      REF_RE.lastIndex = 0;
+
+      let m;
+      while ((m = REF_RE.exec(flat)) !== null) {
+        const start = m.index;
+        const end   = start + m[0].length;
+
+        const abs = getDocRangeForBlockOffsets(block.id, start, end);
+        if (!abs) continue;
+
+        // Seleciona exatamente o [n] (ou cluster) e aplica estilo invisível
+        tiptap.commands.setTextSelection(abs);
+        // textColor aceita CSS válido; rgba(0,0,0,0) fica invisível em qualquer tema
+        editor.addStyles({ textColor: 'rgba(0,0,0,0)' });
       }
-      
-      const blocks = editor.topLevelBlocks;
-      console.log(`📄 Total de blocos: ${blocks.length}`);
-      
-      // Procurar texto nos blocos
-      let found = false;
-      for (let i = 0; i < blocks.length; i++) {
-        const block = blocks[i];
-        const blockText = extractTextFromBlock(block);
-        
-        if (blockText && blockText.toLowerCase().includes(testText.toLowerCase())) {
-          console.log(`✅ Texto "${testText}" encontrado no bloco ${i}`);
-          console.log(`📝 Conteúdo do bloco: "${blockText}"`);
-          
-          const textIndex = blockText.toLowerCase().indexOf(testText.toLowerCase());
-          
-          if (textIndex !== -1) {
-            console.log(`📍 Posição no texto: ${textIndex}-${textIndex + testText.length}`);
-            
-            // Testar setTextCursor
-            if (editor.setTextCursor) {
-              const selection = {
-                blockId: block.id,
-                startOffset: textIndex,
-                endOffset: textIndex + testText.length
-              };
-              
-              console.log(`🎯 Tentando setTextCursor:`, selection);
-              editor.setTextCursor(selection);
-              
-              // Aguardar e tentar aplicar estilo
-              setTimeout(() => {
-                if (editor.addStyles) {
-                  editor.addStyles({
-                    backgroundColor: "yellow",
-                    textColor: "default"
-                  });
-                  console.log(`✅ Estilo aplicado via addStyles`);
-                  
-                  // Limpar após 2 segundos
-                  setTimeout(() => {
-                    if (editor.removeStyles) {
-                      editor.removeStyles(["backgroundColor"]);
-                      console.log(`🧹 Estilo removido`);
-                    }
-                  }, 2000);
-                } else {
-                  console.log(`❌ addStyles não disponível`);
-                }
-              }, 100);
-              
-              found = true;
-              break;
-            } else {
-              console.log(`❌ setTextCursor não disponível`);
-            }
-          }
-        }
+
+      // limpa seleção (para não "ficar selecionado" visualmente)
+      if (tiptap.commands.clearSelection) {
+        tiptap.commands.clearSelection();
+      } else {
+        tiptap.commands.setTextSelection({ from: 0, to: 0 });
       }
-      
-      if (!found) {
-        console.log(`❌ Texto "${testText}" não encontrado em nenhum bloco`);
-      }
-      
-      console.log('🧪 === FIM TESTE ===');
-      
-    } catch (error) {
-      console.error('❌ Erro no teste de seleção:', error);
+    } catch (e) {
+      console.log('⚠️ hideMarkersInBlock falhou:', e);
     }
-  }, [editor, extractTextFromBlock]);
+  }, [editor, getDocRangeForBlockOffsets]);
+
+  // Aplica em todos os parágrafos do doc (chamar uma vez após montar)
+  const hideMarkersInAllBlocks = useCallback(() => {
+    try {
+      if (!editor) return;
+      const blocks = editor.document || editor.topLevelBlocks || [];
+      for (const b of blocks) {
+        hideMarkersInBlock(b);
+      }
+    } catch (e) {
+      console.log('⚠️ hideMarkersInAllBlocks falhou:', e);
+    }
+  }, [editor, hideMarkersInBlock]);
 
   useImperativeHandle(ref, () => ({
     getMarkdown: async () => {
@@ -310,40 +315,42 @@ const BlockNoteEditor = forwardRef(({ initialContent = '', onChange, onScroll, o
           return false;
         }
         
-        console.log(`🎯 highlightText chamado: block=${blockId}, range=${startOffset}-${endOffset}, highlight=${shouldHighlight}`);
+    
         
         // Verificar se o bloco existe
         const blocks = editor.document || editor.topLevelBlocks || [];
         const blockIndex = blocks.findIndex(b => b.id === blockId);
         
         if (blockIndex === -1) {
-          console.log(`❌ Bloco ${blockId} não encontrado`);
+  
           return false;
         }
         
-        const block = blocks[blockIndex];
-        console.log(`✅ Bloco encontrado:`, block);
+                let block = blocks[blockIndex];
+
+        // Reaplicar invisibilidade dos [n] deste bloco, para evitar "piscar" em re-renders
+        try { hideMarkersInBlock(block); } catch {}
+
+
+        // Releia o bloco após os updates (para garantir offsets estáveis)
+        const blocksNow = editor.document || editor.topLevelBlocks || [];
+        const blockNow = blocksNow.find(b => b.id === block.id) || block;
+        const totalLen = (blockNow.content || []).reduce((s, n) => s + (n.text?.length || 0), 0);
+
+        // Clamp defensivo
+        const a = Math.max(0, Math.min(startOffset, totalLen));
+        const b = Math.max(a, Math.min(endOffset, totalLen));
         
-        // DEBUG: Mostrar conteúdo do bloco e offsets
-        console.log(`🔍 Conteúdo do bloco:`, block.content);
-        console.log(`🔍 Offsets recebidos: start=${startOffset}, end=${endOffset}`);
-        
-        // Verificar se os offsets fazem sentido
-        const totalBlockLength = block.content.reduce((len, inline) => len + (inline.text?.length || 0), 0);
-        console.log(`🔍 Tamanho total do bloco: ${totalBlockLength}`);
-        
-        if (endOffset > totalBlockLength) {
-          console.log(`⚠️ AVISO: endOffset (${endOffset}) é maior que o tamanho do bloco (${totalBlockLength})`);
-        }
+
         
         // DEBUG: Mostrar texto exato que será destacado
         let blockText = '';
         let currentPos = 0;
-        for (const inline of block.content) {
+        for (const inline of blockNow.content) {
           const inlineText = inline.text || '';
-          if (currentPos + inlineText.length >= startOffset && currentPos < endOffset) {
-            const startInInline = Math.max(0, startOffset - currentPos);
-            const endInInline = Math.min(inlineText.length, endOffset - currentPos);
+          if (currentPos + inlineText.length >= a && currentPos < b) {
+            const startInInline = Math.max(0, a - currentPos);
+            const endInInline = Math.min(inlineText.length, b - currentPos);
             const textToHighlight = inlineText.substring(startInInline, endInInline);
             blockText += `[${textToHighlight}]`;
           } else {
@@ -351,247 +358,45 @@ const BlockNoteEditor = forwardRef(({ initialContent = '', onChange, onScroll, o
           }
           currentPos += inlineText.length;
         }
-        console.log(`🔍 Texto que será destacado: "${blockText}"`);
+
         
-        // MÉTODO 1: Usar a API de seleção do BlockNote corretamente
-        try {
-          // Função auxiliar para calcular posição absoluta no documento TipTap
-          const calculateAbsolutePos = (editor, blockId, startOffset, endOffset) => {
-            let pos = 0;
-            const blocks = editor.document || editor.topLevelBlocks || [];
-            
-            for (const block of blocks) {
-              // O TipTap adiciona 1 de posição para a "abertura" do nó do bloco
-              pos++;
-              
-              if (block.id === blockId) {
-                // CORREÇÃO: Os offsets já são posições absolutas dentro do bloco
-                // Não precisamos adicionar a posição base do bloco
-                const from = pos + startOffset;
-                const to = pos + endOffset;
-                
-                console.log(`📍 Posições calculadas CORRETAMENTE: from=${from}, to=${to}`);
-                console.log(`📍 Base do bloco: ${pos}, offsets: ${startOffset}-${endOffset}`);
-                console.log(`📍 Range final: ${from}-${to}`);
-                
-                return { from, to };
-              }
-              
-              // Adiciona o tamanho do conteúdo do bloco
-              const blockLength = block.content.reduce((len, inline) => len + (inline.text?.length || 0), 0);
-              pos += blockLength;
-              
-              // O TipTap adiciona 1 de posição para o "fechamento" do nó do bloco
-              pos++;
-            }
-            return null; // Bloco não encontrado
-          };
-          
-          // Calcular posição absoluta no documento
-          const range = calculateAbsolutePos(editor, blockId, startOffset, endOffset);
-          
-          if (range) {
-            console.log(`📍 Posições calculadas: from=${range.from}, to=${range.to}`);
-            
-            // Usar a API do TipTap para selecionar o texto
-            if (editor._tiptapEditor) {
-              const tiptapEditor = editor._tiptapEditor;
-              
-              // 1. Selecionar o texto programaticamente usando a API do TipTap
-              tiptapEditor.commands.setTextSelection(range);
-              
-              // 2. Aplicar o estilo usando a API do BlockNote
-              if (shouldHighlight) {
-                editor.addStyles({
-                  backgroundColor: "yellow",
-                  textColor: "black" // Garantir contraste
-                });
-                console.log('✅ Estilo aplicado via BlockNote API + TipTap selection');
-              } else {
-                // Corrigir: removeStyles espera um objeto, não um array
-                editor.removeStyles({
-                  backgroundColor: true,
-                  textColor: true
-                });
-                console.log('✅ Estilo removido via BlockNote API + TipTap selection');
-              }
-              
-              // 3. Limpar a seleção - usar comando correto do TipTap
-              if (tiptapEditor.commands.clearSelection) {
-                tiptapEditor.commands.clearSelection();
-              } else if (tiptapEditor.commands.blur) {
-                tiptapEditor.commands.blur();
-              }
-              
-          return true;
-            }
-        } else {
-            console.log('❌ Não foi possível calcular posições absolutas');
-          }
-        } catch (apiError) {
-          console.log('⚠️ Método BlockNote API falhou:', apiError);
+        // 🔧 2) Calcular posições absolutas no doc TipTap
+        const range = getDocRangeForBlockOffsets(blockNow.id, a, b);
+        if (!range) {
+          return false;
         }
-        
-        // MÉTODO 2: Acessar o TipTap editor interno (fallback)
-        if (editor._tiptapEditor) {
-          try {
+
+        // 🔧 3) Aplicar highlight via TipTap (igual "como antes")
             const tiptap = editor._tiptapEditor;
-            const doc = tiptap.state.doc;
-            
-            // Calcular posição absoluta no documento
-            let currentPos = 0;
-            let targetFromPos = -1;
-            let targetToPos = -1;
-            
-            // Percorrer o documento para encontrar as posições
-            doc.descendants((node, pos) => {
-              if (targetFromPos >= 0 && targetToPos >= 0) return false;
-              
-              // Verificar se é o bloco que procuramos
-              if (node.type.name === 'blockContainer') {
-                const nodeBlockId = node.attrs?.id;
-                if (nodeBlockId === blockId) {
-                  // Encontramos o bloco
-                  targetFromPos = pos + 1 + startOffset; // +1 para pular o próprio node
-                  targetToPos = pos + 1 + endOffset;
-        return false;
-      }
-              }
-              
-              return true;
-            });
-            
-            if (targetFromPos >= 0 && targetToPos >= 0) {
-              console.log(`📍 Posições TipTap: from=${targetFromPos}, to=${targetToPos}`);
-              
-              // Criar transação para aplicar o estilo
-              const tr = tiptap.state.tr;
-              
+        tiptap.commands.focus(undefined, { scrollIntoView: false }); // garante visibilidade
+        tiptap.commands.setTextSelection(range);
+
+        // Use a API do BlockNote para o mark de estilo (compatível com o schema dele)
               if (shouldHighlight) {
-                // Adicionar marca de highlight
-                const mark = tiptap.schema.marks.backgroundColor.create({
-                  backgroundColor: 'yellow'
-                });
-                tr.addMark(targetFromPos, targetToPos, mark);
-              } else {
-                // Remover marca de highlight - usar método correto
-                try {
-                  tr.removeMark(targetFromPos, targetToPos, tiptap.schema.marks.backgroundColor);
-                } catch (markError) {
-                  // Fallback: limpar todas as marcas de estilo
-                  tr.removeMark(targetFromPos, targetToPos);
-                }
-              }
-              
-              // Aplicar a transação
-              tiptap.view.dispatch(tr);
-              console.log('✅ Estilo aplicado via TipTap');
-          return true;
+          editor.addStyles({ backgroundColor: 'yellow', textColor: 'black' });
         } else {
-              console.log('❌ Não foi possível calcular posições no TipTap');
-            }
-          } catch (tiptapError) {
-            console.log('❌ Método TipTap falhou:', tiptapError);
-          }
+          editor.removeStyles({ backgroundColor: true, textColor: true });
         }
-        
-        // MÉTODO 3: Manipulação direta do DOM (último recurso)
-        try {
-          // Aguardar um tick para garantir que o DOM está atualizado
-          setTimeout(() => {
-            const blockElement = document.querySelector(`[data-block-id="${blockId}"]`);
-            if (blockElement) {
-              const textNodes = [];
-              const walker = document.createTreeWalker(
-                blockElement,
-                NodeFilter.SHOW_TEXT,
-                null,
-                false
-              );
-              
-              let node;
-              while (node = walker.nextNode()) {
-                textNodes.push(node);
-              }
-              
-              // Aplicar highlight nos nodes de texto
-              let currentOffset = 0;
-              textNodes.forEach(textNode => {
-                const nodeLength = textNode.textContent.length;
-                const nodeStart = currentOffset;
-                const nodeEnd = currentOffset + nodeLength;
-                
-                if (nodeEnd > startOffset && nodeStart < endOffset) {
-                  // Este node está dentro do range
-                  const parent = textNode.parentElement;
-                  if (shouldHighlight) {
-                    parent.style.backgroundColor = 'yellow';
-                    parent.style.color = 'black';
-                  } else {
-                    parent.style.backgroundColor = '';
-                    parent.style.color = '';
-                  }
-                }
-                
-                currentOffset += nodeLength;
-              });
-              
-              console.log('✅ Estilo aplicado via DOM');
-            }
-          }, 10);
-          
-          return true;
-        } catch (domError) {
-          console.log('❌ Método DOM falhou:', domError);
+
+        // 🔧 4) Limpar a seleção imediatamente para não ficar visível
+        if (tiptap.commands.clearSelection) {
+          tiptap.commands.clearSelection();
         }
+        // Fallback: se clearSelection não funcionar, usar blur
+        if (tiptap.commands.blur) {
+          tiptap.commands.blur();
+        }
+        return true;
         
         return false;
       } catch (error) {
-        console.error('❌ Erro geral em highlightText:', error);
+
         return false;
       }
     },
     
-    findTextInBlocks: findTextInBlocks,
-    testTextSelection: testTextSelection,
-    
-    // Método de debug
-    debugEditor: () => {
-      console.log('🔍 === DEBUG EDITOR BLOCKNOTE ===');
-      console.log('- Editor instance:', editor);
-      console.log('- Document:', editor.document || editor.topLevelBlocks);
-      console.log('- TipTap Editor:', editor._tiptapEditor);
-      console.log('- Available methods:', Object.keys(editor));
-      
-      // Testar cálculo de posições absolutas
-      if (editor.document && editor.document.length > 0) {
-        const firstBlock = editor.document[0];
-        console.log('- First block:', firstBlock);
-        console.log('- First block ID:', firstBlock.id);
-        console.log('- First block content:', extractTextFromBlock(firstBlock));
-        
-        // Calcular posição absoluta do primeiro bloco
-        let pos = 0;
-        for (const block of editor.document) {
-          pos++; // Abertura do nó
-          if (block.id === firstBlock.id) {
-            console.log(`- Posição absoluta do primeiro bloco: ${pos}`);
-            break;
-          }
-          pos += block.content.reduce((len, inline) => len + (inline.text?.length || 0), 0);
-          pos++; // Fechamento do nó
-        }
-      }
-      
-      // Verificar comandos TipTap disponíveis
-      if (editor._tiptapEditor) {
-        console.log('- TipTap commands:', Object.keys(editor._tiptapEditor.commands));
-        console.log('- TipTap state:', editor._tiptapEditor.state);
-      }
-      
-      console.log('🔍 === FIM DEBUG ===');
-    }
-  }), [editor, findTextInBlocks, testTextSelection, extractTextFromBlock]);
+
+  }), [editor, extractTextFromBlock]);
 
   useEffect(() => {
     if (onChange && editor.topLevelBlocks) {
@@ -618,6 +423,23 @@ const BlockNoteEditor = forwardRef(({ initialContent = '', onChange, onScroll, o
       return () => clearTimeout(timeoutId);
     }
   }, [editor.topLevelBlocks, onChange]);
+
+  // Oculta marcadores [n] após o editor estar pronto
+  useEffect(() => {
+    if (!editor || !editor._tiptapEditor) return;
+
+    // Oculta todos os marcadores na UI (sem mudar o conteúdo)
+    hideMarkersInAllBlocks();
+
+    // Se o doc mudar (ex.: setar novo conteúdo), reaplica
+    const interval = setInterval(() => {
+      try { hideMarkersInAllBlocks(); } catch {}
+    }, 300); // leve "watcher" (idempotente)
+
+    return () => clearInterval(interval);
+  }, [editor, hideMarkersInAllBlocks]);
+
+
 
   return (
     <div className="notion-editor w-full h-full overflow-hidden">

@@ -104,7 +104,6 @@ const AdvancedCanvasEditor = ({
       try {
         return jsonString ? JSON.parse(jsonString) : null;
       } catch (error) {
-        console.warn('❌ Erro ao fazer parse do JSON:', error);
         return null;
       }
     };
@@ -177,7 +176,6 @@ const AdvancedCanvasEditor = ({
       }
     } else if (type === 'micro' && category && newsData?.core_quotes) {
       // Para micro dados, coletar todos os cards da subcategoria atual (parent::child)
-      console.log("!!!!!!!!!!!!!CORE QUOTES: \n", newsData.coreQuotes)
       const coreQuotes = safeJsonParse(newsData.core_quotes);
       if (coreQuotes && typeof coreQuotes === 'object') {
         const [parentKey, childKey] = String(category).split('::');
@@ -1086,7 +1084,6 @@ const AdvancedCanvasEditor = ({
       />
 
       {/* Editor Estruturado estilo Notion */}
-      {console.log('🔍 AdvancedCanvasEditor - newsData sendo passado para NotionLikePage:', newsData)}
       <NotionLikePage
         isOpen={isNotionPageOpen}
         onClose={closeNotionPage}
