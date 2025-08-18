@@ -77,16 +77,39 @@ const NotionLikePage = ({ isOpen = true, onClose, newsData, newsTitle, onCanvasI
       if (!block || !block.content) return '';
       
       if (Array.isArray(block.content)) {
-        return block.content
-          .map(item => {
-            if (typeof item === 'string') return item;
-            if (item && typeof item === 'object') {
-              if (item.text) return item.text;
-              if (item.content) return item.content;
+        let fullText = '';
+        let currentPos = 0;
+        
+        // Percorrer cada elemento inline e construir o texto completo
+        for (const item of block.content) {
+          if (typeof item === 'string') {
+            fullText += item;
+            currentPos += item.length;
+          } else if (item && typeof item === 'object') {
+            if (item.text) {
+              fullText += item.text;
+              currentPos += item.text.length;
+            } else if (item.content) {
+              // Se o item tem conteúdo aninhado, extrair recursivamente
+              if (Array.isArray(item.content)) {
+                const nestedText = item.content
+                  .map(nestedItem => {
+                    if (typeof nestedItem === 'string') return nestedItem;
+                    if (nestedItem && nestedItem.text) return nestedItem.text;
+                    return '';
+                  })
+                  .join('');
+                fullText += nestedText;
+                currentPos += nestedText.length;
+              } else if (typeof item.content === 'string') {
+                fullText += item.content;
+                currentPos += item.content.length;
+              }
             }
-            return '';
-          })
-          .join('');
+          }
+        }
+        
+        return fullText;
       }
       
       if (typeof block.content === 'string') {
@@ -108,8 +131,16 @@ const NotionLikePage = ({ isOpen = true, onClose, newsData, newsTitle, onCanvasI
   const highlightSpecificText = useCallback(async (editor, textToHighlight, shouldHighlight) => {
     try {
       console.log(`🎯 Procurando texto específico: "${textToHighlight.substring(0, 100)}..."`);
+      console.log(`🔍 Texto completo recebido: "${textToHighlight}"`);
+      console.log(`🔍 Tamanho do texto: ${textToHighlight.length}`);
       
-      const blocks = editor.topLevelBlocks || [];
+      // Acessar o documento diretamente do editor
+      const blocks = editor.document || editor.topLevelBlocks || [];
+      
+      if (!blocks || blocks.length === 0) {
+        console.log('❌ Nenhum bloco disponível no editor');
+        return false;
+      }
       
       // Procurar o texto nos blocos do editor
       for (let blockIndex = 0; blockIndex < blocks.length; blockIndex++) {
@@ -118,130 +149,168 @@ const NotionLikePage = ({ isOpen = true, onClose, newsData, newsTitle, onCanvasI
         
         if (!blockText) continue;
         
-        // Procurar o texto específico no bloco (busca mais flexível)
+        // Buscar pelo texto (matching mais preciso)
         const textLower = textToHighlight.toLowerCase().trim();
-        const blockLower = blockText.toLowerCase().trim();
+        const blockLower = blockText.toLowerCase();
         
-        // Buscar por substring - pegar primeiras palavras para matching
-        const searchWords = textLower.split(' ').slice(0, 8).join(' '); // Primeiras 8 palavras
-        const matchIndex = blockLower.indexOf(searchWords);
+        console.log(`🔍 Procurando por: "${textLower}"`);
+        console.log(`🔍 No bloco: "${blockLower.substring(0, 200)}..."`);
+        
+        // Tentar encontrar o texto exato primeiro
+        let matchIndex = blockLower.indexOf(textLower);
+        
+        // Se não encontrar exato, tentar com as primeiras palavras
+        if (matchIndex === -1) {
+          const searchWords = textLower.split(' ').slice(0, 8).join(' ');
+          console.log(`🔍 Tentando com primeiras palavras: "${searchWords}"`);
+          matchIndex = blockLower.indexOf(searchWords);
+        }
+        
+        // Se ainda não encontrar, tentar com palavras-chave mais específicas
+        if (matchIndex === -1) {
+          const keywords = textLower.split(' ').filter(word => word.length > 3).slice(0, 5);
+          const searchPhrase = keywords.join(' ');
+          console.log(`🔍 Tentando com palavras-chave: "${searchPhrase}"`);
+          matchIndex = blockLower.indexOf(searchPhrase);
+        }
         
         if (matchIndex !== -1) {
           console.log(`✅ Texto encontrado no bloco ${blockIndex} na posição ${matchIndex}`);
+          console.log(`📝 Block ID: ${block.id}`);
           console.log(`📝 Texto do bloco: "${blockText.substring(0, 100)}..."`);
+          console.log(`🔍 Estrutura do bloco:`, block);
+          console.log(`🔍 Conteúdo do bloco:`, block.content);
           
-          // Calcular posições para seleção
+          // DEBUG: Mostrar estrutura detalhada dos elementos inline
+          if (Array.isArray(block.content)) {
+            console.log(`🔍 Elementos inline (${block.content.length}):`);
+            block.content.forEach((item, index) => {
+              console.log(`  [${index}] Tipo: ${typeof item}, Conteúdo:`, item);
+              if (item && typeof item === 'object') {
+                console.log(`    - Props:`, item.props);
+                console.log(`    - Text:`, item.text);
+                console.log(`    - Content:`, item.content);
+              }
+            });
+          }
+          
+          // Calcular as posições exatas para seleção
+          // matchIndex é a posição onde o texto foi encontrado no bloco
           const startOffset = matchIndex;
           const endOffset = Math.min(
-            matchIndex + textToHighlight.length, 
+            matchIndex + textToHighlight.length, // Usar textToHighlight (já limpo)
             blockText.length
           );
           
-          console.log(`📍 Seleção: ${startOffset}-${endOffset} no bloco ${block.id}`);
+          console.log(`🔍 matchIndex: ${matchIndex}, textToHighlight length: ${textToHighlight.length}`);
+          console.log(`🔍 startOffset: ${startOffset}, endOffset: ${endOffset}`);
           
-          // APLICAR SELEÇÃO + ESTILO usando API do BlockNote
-          if (editorRef.current.setTextCursor) {
-            const selection = {
-              blockId: block.id,
-              startOffset: startOffset,
-              endOffset: endOffset
-            };
+          console.log(`📍 Aplicando highlight: ${startOffset}-${endOffset} no bloco ${block.id}`);
+          
+          // USAR O NOVO MÉTODO highlightText DO EDITOR
+          if (editorRef.current && editorRef.current.highlightText) {
+            const success = editorRef.current.highlightText(
+              block.id,
+              startOffset,
+              endOffset,
+              shouldHighlight
+            );
             
-            console.log(`🎯 Aplicando setTextCursor:`, selection);
-            
-            const cursorSet = editorRef.current.setTextCursor(selection);
-            if (cursorSet) {
-              // Aguardar seleção ser aplicada
-              await new Promise(resolve => setTimeout(resolve, 20));
-              
-              if (shouldHighlight) {
-                const styleApplied = editorRef.current.addStyles({
-                  backgroundColor: "yellow",
-                  textColor: "default"
-                });
-                
-                if (styleApplied) {
-                  console.log(`✅ Highlight INLINE aplicado via setTextCursor + addStyles`);
-                  
-                  // Limpar seleção após delay
-                  setTimeout(() => {
-                    try {
-                      if (editorRef.current.setSelection) {
-                        editorRef.current.setSelection(undefined);
-                      }
-                    } catch {}
-                  }, 100);
-                  
-                  return true;
-                } else {
-                  console.log(`❌ Falha ao aplicar addStyles`);
-                }
-              } else {
-                // Remover highlight
-                const styleRemoved = editorRef.current.removeStyles(["backgroundColor"]);
-                if (styleRemoved) {
-                  console.log(`✅ Highlight removido via removeStyles`);
-                  return true;
-                }
-              }
+            if (success) {
+              console.log(`✅ Highlight ${shouldHighlight ? 'aplicado' : 'removido'} com sucesso`);
+              return true;
             } else {
-              console.log(`❌ Falha ao aplicar setTextCursor`);
-            }
-          }
-          
-          // FALLBACK: Se setTextCursor não funcionar, tentar setSelection
-          if (editorRef.current.setSelection) {
-            console.log(`🔄 Tentando fallback com setSelection...`);
-            
-            // Calcular posição absoluta (aproximada)
-            let absoluteStart = 0;
-            for (let i = 0; i < blockIndex; i++) {
-              const prevBlock = blocks[i];
-              const prevBlockText = extractBlockTextFlat(prevBlock);
-              absoluteStart += prevBlockText.length + 1; // +1 para quebra de linha
-            }
-            absoluteStart += startOffset;
-            
-            const selectionSet = editorRef.current.setSelection({
-              type: "text",
-              from: absoluteStart,
-              to: absoluteStart + (endOffset - startOffset)
-            });
-            
-            if (selectionSet) {
-              await new Promise(resolve => setTimeout(resolve, 20));
+              console.log(`⚠️ Falha ao aplicar highlight, tentando método alternativo...`);
               
-              if (shouldHighlight) {
-                const styleApplied = editorRef.current.addStyles({
-                  backgroundColor: "yellow",
-                  textColor: "default"
-                });
+              // Tentar método alternativo
+              if (editorRef.current.selectAndHighlight) {
+                const altSuccess = editorRef.current.selectAndHighlight(
+                  block.id,
+                  startOffset,
+                  endOffset,
+                  shouldHighlight
+                );
                 
-                if (styleApplied) {
-                  console.log(`✅ Highlight aplicado via setSelection + addStyles`);
-                  
-                  setTimeout(() => {
-                    try {
-                      if (editorRef.current.setSelection) {
-                        editorRef.current.setSelection(undefined);
-                      }
-                    } catch {}
-                  }, 100);
-                  
-                  return true;
-                }
-              } else {
-                const styleRemoved = editorRef.current.removeStyles(["backgroundColor"]);
-                if (styleRemoved) {
-                  console.log(`✅ Highlight removido via setSelection + removeStyles`);
+                if (altSuccess) {
+                  console.log(`✅ Highlight aplicado via método alternativo`);
                   return true;
                 }
               }
             }
           }
           
-          // Se chegou aqui, nenhum método de seleção funcionou
-          console.log(`❌ Todos os métodos de seleção falharam para o bloco ${blockIndex}`);
+          // FALLBACK: Tentar acessar o editor interno diretamente
+          if (editorRef.current && editorRef.current.editor) {
+            const internalEditor = editorRef.current.editor;
+            
+            // Tentar usar os métodos do BlockNote diretamente
+            try {
+              // Método 1: Usar setTextCursorPosition com a estrutura correta
+              internalEditor.setTextCursorPosition(
+                block.id, // ou block se for o objeto completo
+                startOffset
+              );
+              
+              // Estender a seleção
+              const selection = internalEditor.getSelection();
+              if (selection) {
+                // Modificar a seleção para incluir o range completo
+                internalEditor.updateSelection({
+                  ...selection,
+                  endOffset: endOffset
+                });
+              }
+              
+              // Aplicar estilo
+              if (shouldHighlight) {
+                internalEditor.addStyles({ backgroundColor: "yellow" });
+              } else {
+                internalEditor.removeStyles(["backgroundColor"]);
+              }
+              
+              console.log(`✅ Highlight aplicado via editor interno`);
+              return true;
+              
+            } catch (fallbackError) {
+              console.log('❌ Fallback também falhou:', fallbackError);
+              
+              // Último recurso: tentar via TipTap se disponível
+              if (internalEditor._tiptapEditor) {
+                try {
+                  const tiptap = internalEditor._tiptapEditor;
+                  
+                  // Calcular posição absoluta no documento
+                  let absoluteStart = 0;
+                  for (let i = 0; i < blockIndex; i++) {
+                    const prevBlock = blocks[i];
+                    const prevText = extractBlockTextFlat(prevBlock);
+                    absoluteStart += prevText.length + 1; // +1 para quebra de linha
+                  }
+                  absoluteStart += startOffset;
+                  
+                  // Aplicar seleção no TipTap
+                  tiptap.commands.setTextSelection({
+                    from: absoluteStart,
+                    to: absoluteStart + (endOffset - startOffset)
+                  });
+                  
+                  // Aplicar marca de highlight
+                  if (shouldHighlight) {
+                    tiptap.commands.setMark('highlight', { color: 'yellow' });
+                  } else {
+                    tiptap.commands.unsetMark('highlight');
+                  }
+                  
+                  console.log(`✅ Highlight aplicado via TipTap`);
+                  return true;
+                } catch (tiptapError) {
+                  console.log('❌ TipTap também falhou:', tiptapError);
+                }
+              }
+            }
+          }
+          
+          console.log(`❌ Todos os métodos de highlight falharam para o bloco ${blockIndex}`);
           return false;
         }
       }
@@ -259,12 +328,18 @@ const NotionLikePage = ({ isOpen = true, onClose, newsData, newsTitle, onCanvasI
   const handleHighlightText = useCallback(async (title, phrase, action) => {
     console.log(`🎨 Grifo por Marcadores: ${action} - title: "${title}"`);
     
-    if (!editorRef.current || !editorRef.current.editor) {
-      console.log('❌ Editor não disponível');
+    // Verificar se o editor está disponível
+    if (!editorRef.current) {
+      console.log('❌ EditorRef não disponível');
       return;
     }
     
+    // Acessar o editor interno do BlockNote
     const editor = editorRef.current.editor;
+    if (!editor) {
+      console.log('❌ Editor interno não disponível');
+      return;
+    }
     
     try {
       // PASSO 1: Encontrar o marcador no final_text
@@ -288,41 +363,64 @@ const NotionLikePage = ({ isOpen = true, onClose, newsData, newsTitle, onCanvasI
       console.log(`✅ Marcador encontrado na posição: ${markerIndex}`);
       
       // PASSO 2: Encontrar o texto que VEM ANTES do marcador
-      // Procurar pelo início da frase (após o marcador anterior ou início do parágrafo)
-      
-      // Encontrar o marcador anterior (se existir)
       const textBeforeMarker = finalText.substring(0, markerIndex);
-      const previousMarkerMatch = textBeforeMarker.match(/\/\/\/<[^>]+>\/\/\/([^/]*?)$/);
       
-      let textStart;
-      if (previousMarkerMatch) {
-        // Se há um marcador anterior, começar após ele
-        const previousMarkerEnd = textBeforeMarker.lastIndexOf('///') + 3;
-        textStart = previousMarkerEnd;
+      // Encontrar o início do texto a ser grifado
+      // Procurar pelo marcador anterior ou início do parágrafo
+      let textStart = 0;
+      
+      // Procurar o último marcador antes do atual
+      const lastMarkerMatch = textBeforeMarker.lastIndexOf('///');
+      if (lastMarkerMatch !== -1 && lastMarkerMatch < markerIndex - 3) {
+        // Se encontrou um marcador anterior, começar logo após ele
+        textStart = lastMarkerMatch + 3;
+        // Pular espaços em branco após o marcador anterior
+        while (textStart < markerIndex && /\s/.test(finalText[textStart])) {
+          textStart++;
+        }
       } else {
         // Se não há marcador anterior, procurar pelo início do parágrafo
-        const lastNewline = textBeforeMarker.lastIndexOf('\n');
         const lastDoubleNewline = textBeforeMarker.lastIndexOf('\n\n');
-        textStart = Math.max(lastNewline + 1, lastDoubleNewline + 2, 0);
+        const lastSingleNewline = textBeforeMarker.lastIndexOf('\n');
+        
+        if (lastDoubleNewline !== -1) {
+          textStart = lastDoubleNewline + 2;
+        } else if (lastSingleNewline !== -1) {
+          textStart = lastSingleNewline + 1;
+        } else {
+          textStart = 0;
+        }
       }
       
       // PASSO 3: Extrair o texto específico a ser grifado
       const textToHighlight = finalText.substring(textStart, markerIndex).trim();
       
-      console.log(`🎯 Texto a ser grifado: "${textToHighlight}"`);
+      console.log(`🎯 Texto a ser grifado (${textStart}-${markerIndex}): "${textToHighlight}"`);
       
       if (!textToHighlight || textToHighlight.length < 5) {
-        console.log(`❌ Texto muito curto para grifo: "${textToHighlight}"`);
+        console.log(`❌ Texto muito curto ou vazio para grifo: "${textToHighlight}"`);
         return;
       }
       
+      // IMPORTANTE: Remover marcadores do texto processado antes de procurar
+      // Porque o editor mostra o texto processado (sem marcadores)
+      const processedFinalText = finalText.replace(/\/\/\/<[^>]+>\/\/\//g, (match, offset) => {
+        // Substituir marcadores por espaço para manter offsets aproximados
+        return offset < markerIndex ? '' : match;
+      });
+      
+      // Ajustar o texto a procurar removendo possíveis artefatos
+      const cleanTextToHighlight = textToHighlight.replace(/\[[\d]+\]/g, '').trim();
+      
+      console.log(`🔍 Texto limpo para busca: "${cleanTextToHighlight}"`);
+      
       // PASSO 4: Encontrar esse texto específico no editor BlockNote
-      const success = await highlightSpecificText(editor, textToHighlight, action === 'enter');
+      const success = await highlightSpecificText(editor, cleanTextToHighlight, action === 'enter');
       
       if (success) {
-        console.log(`✅ Grifo aplicado com sucesso para: "${title}"`);
+        console.log(`✅ Grifo ${action === 'enter' ? 'aplicado' : 'removido'} com sucesso para: "${title}"`);
       } else {
-        console.log(`❌ Falha ao aplicar grifo para: "${title}"`);
+        console.log(`❌ Falha ao ${action === 'enter' ? 'aplicar' : 'remover'} grifo para: "${title}"`);
       }
       
     } catch (error) {

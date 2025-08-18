@@ -272,9 +272,8 @@ const BlockNoteEditor = forwardRef(({ initialContent = '', onChange, onScroll, o
   useImperativeHandle(ref, () => ({
     getMarkdown: async () => {
       try {
-        // Por enquanto, retornar texto simples dos blocos
-        if (editor.topLevelBlocks) {
-          return editor.topLevelBlocks.map(block => {
+        if (editor.document) {
+          return editor.document.map(block => {
             if (block.type === 'heading') {
               return `${'#'.repeat(block.props.level)} ${block.content?.[0]?.text || ''}`;
             } else if (block.type === 'paragraph') {
@@ -289,161 +288,305 @@ const BlockNoteEditor = forwardRef(({ initialContent = '', onChange, onScroll, o
         return '';
       }
     },
-    getBlocks: () => editor.topLevelBlocks || [],
+    
+    getBlocks: () => editor.document || editor.topLevelBlocks || [],
+    
     insertContent: (content) => {
       try {
         console.log('🔍 BlockNoteEditor - tentando inserir conteúdo:', content);
-        // Por enquanto, apenas logar a tentativa de inserção
       } catch (error) {
         console.error('Erro ao inserir conteúdo:', error);
       }
     },
+    
     // EXPOR A INSTÂNCIA DO EDITOR COMPLETA
     editor: editor,
     
-    // MÉTODOS ESPECÍFICOS PARA SELEÇÃO DE TEXTO (corrigidos)
-    setTextCursor: (selection) => {
+        // MÉTODO PRINCIPAL PARA HIGHLIGHT - VERSÃO CORRIGIDA
+    highlightText: (blockId, startOffset, endOffset, shouldHighlight = true) => {
       try {
-        if (editor.setTextCursor && typeof editor.setTextCursor === 'function') {
-          editor.setTextCursor(selection);
-          console.log('✅ setTextCursor executado:', selection);
-          return true;
-        } else {
-          console.log('❌ setTextCursor não disponível no editor');
+        if (!editor) {
+          console.log('❌ Editor não disponível');
           return false;
         }
-      } catch (e) {
-        console.error('❌ Erro em setTextCursor:', e);
+        
+        console.log(`🎯 highlightText chamado: block=${blockId}, range=${startOffset}-${endOffset}, highlight=${shouldHighlight}`);
+        
+        // Verificar se o bloco existe
+        const blocks = editor.document || editor.topLevelBlocks || [];
+        const blockIndex = blocks.findIndex(b => b.id === blockId);
+        
+        if (blockIndex === -1) {
+          console.log(`❌ Bloco ${blockId} não encontrado`);
+          return false;
+        }
+        
+        const block = blocks[blockIndex];
+        console.log(`✅ Bloco encontrado:`, block);
+        
+        // DEBUG: Mostrar conteúdo do bloco e offsets
+        console.log(`🔍 Conteúdo do bloco:`, block.content);
+        console.log(`🔍 Offsets recebidos: start=${startOffset}, end=${endOffset}`);
+        
+        // Verificar se os offsets fazem sentido
+        const totalBlockLength = block.content.reduce((len, inline) => len + (inline.text?.length || 0), 0);
+        console.log(`🔍 Tamanho total do bloco: ${totalBlockLength}`);
+        
+        if (endOffset > totalBlockLength) {
+          console.log(`⚠️ AVISO: endOffset (${endOffset}) é maior que o tamanho do bloco (${totalBlockLength})`);
+        }
+        
+        // DEBUG: Mostrar texto exato que será destacado
+        let blockText = '';
+        let currentPos = 0;
+        for (const inline of block.content) {
+          const inlineText = inline.text || '';
+          if (currentPos + inlineText.length >= startOffset && currentPos < endOffset) {
+            const startInInline = Math.max(0, startOffset - currentPos);
+            const endInInline = Math.min(inlineText.length, endOffset - currentPos);
+            const textToHighlight = inlineText.substring(startInInline, endInInline);
+            blockText += `[${textToHighlight}]`;
+          } else {
+            blockText += inlineText;
+          }
+          currentPos += inlineText.length;
+        }
+        console.log(`🔍 Texto que será destacado: "${blockText}"`);
+        
+        // MÉTODO 1: Usar a API de seleção do BlockNote corretamente
+        try {
+          // Função auxiliar para calcular posição absoluta no documento TipTap
+          const calculateAbsolutePos = (editor, blockId, startOffset, endOffset) => {
+            let pos = 0;
+            const blocks = editor.document || editor.topLevelBlocks || [];
+            
+            for (const block of blocks) {
+              // O TipTap adiciona 1 de posição para a "abertura" do nó do bloco
+              pos++;
+              
+              if (block.id === blockId) {
+                // CORREÇÃO: Os offsets já são posições absolutas dentro do bloco
+                // Não precisamos adicionar a posição base do bloco
+                const from = pos + startOffset;
+                const to = pos + endOffset;
+                
+                console.log(`📍 Posições calculadas CORRETAMENTE: from=${from}, to=${to}`);
+                console.log(`📍 Base do bloco: ${pos}, offsets: ${startOffset}-${endOffset}`);
+                console.log(`📍 Range final: ${from}-${to}`);
+                
+                return { from, to };
+              }
+              
+              // Adiciona o tamanho do conteúdo do bloco
+              const blockLength = block.content.reduce((len, inline) => len + (inline.text?.length || 0), 0);
+              pos += blockLength;
+              
+              // O TipTap adiciona 1 de posição para o "fechamento" do nó do bloco
+              pos++;
+            }
+            return null; // Bloco não encontrado
+          };
+          
+          // Calcular posição absoluta no documento
+          const range = calculateAbsolutePos(editor, blockId, startOffset, endOffset);
+          
+          if (range) {
+            console.log(`📍 Posições calculadas: from=${range.from}, to=${range.to}`);
+            
+            // Usar a API do TipTap para selecionar o texto
+            if (editor._tiptapEditor) {
+              const tiptapEditor = editor._tiptapEditor;
+              
+              // 1. Selecionar o texto programaticamente usando a API do TipTap
+              tiptapEditor.commands.setTextSelection(range);
+              
+              // 2. Aplicar o estilo usando a API do BlockNote
+              if (shouldHighlight) {
+                editor.addStyles({
+                  backgroundColor: "yellow",
+                  textColor: "black" // Garantir contraste
+                });
+                console.log('✅ Estilo aplicado via BlockNote API + TipTap selection');
+              } else {
+                // Corrigir: removeStyles espera um objeto, não um array
+                editor.removeStyles({
+                  backgroundColor: true,
+                  textColor: true
+                });
+                console.log('✅ Estilo removido via BlockNote API + TipTap selection');
+              }
+              
+              // 3. Limpar a seleção - usar comando correto do TipTap
+              if (tiptapEditor.commands.clearSelection) {
+                tiptapEditor.commands.clearSelection();
+              } else if (tiptapEditor.commands.blur) {
+                tiptapEditor.commands.blur();
+              }
+              
+          return true;
+            }
+        } else {
+            console.log('❌ Não foi possível calcular posições absolutas');
+          }
+        } catch (apiError) {
+          console.log('⚠️ Método BlockNote API falhou:', apiError);
+        }
+        
+        // MÉTODO 2: Acessar o TipTap editor interno (fallback)
+        if (editor._tiptapEditor) {
+          try {
+            const tiptap = editor._tiptapEditor;
+            const doc = tiptap.state.doc;
+            
+            // Calcular posição absoluta no documento
+            let currentPos = 0;
+            let targetFromPos = -1;
+            let targetToPos = -1;
+            
+            // Percorrer o documento para encontrar as posições
+            doc.descendants((node, pos) => {
+              if (targetFromPos >= 0 && targetToPos >= 0) return false;
+              
+              // Verificar se é o bloco que procuramos
+              if (node.type.name === 'blockContainer') {
+                const nodeBlockId = node.attrs?.id;
+                if (nodeBlockId === blockId) {
+                  // Encontramos o bloco
+                  targetFromPos = pos + 1 + startOffset; // +1 para pular o próprio node
+                  targetToPos = pos + 1 + endOffset;
         return false;
       }
-    },
-    
-    setSelection: (selection) => {
-      try {
-        if (editor.setSelection && typeof editor.setSelection === 'function') {
-          editor.setSelection(selection);
-          console.log('✅ setSelection executado:', selection);
+              }
+              
+              return true;
+            });
+            
+            if (targetFromPos >= 0 && targetToPos >= 0) {
+              console.log(`📍 Posições TipTap: from=${targetFromPos}, to=${targetToPos}`);
+              
+              // Criar transação para aplicar o estilo
+              const tr = tiptap.state.tr;
+              
+              if (shouldHighlight) {
+                // Adicionar marca de highlight
+                const mark = tiptap.schema.marks.backgroundColor.create({
+                  backgroundColor: 'yellow'
+                });
+                tr.addMark(targetFromPos, targetToPos, mark);
+              } else {
+                // Remover marca de highlight - usar método correto
+                try {
+                  tr.removeMark(targetFromPos, targetToPos, tiptap.schema.marks.backgroundColor);
+                } catch (markError) {
+                  // Fallback: limpar todas as marcas de estilo
+                  tr.removeMark(targetFromPos, targetToPos);
+                }
+              }
+              
+              // Aplicar a transação
+              tiptap.view.dispatch(tr);
+              console.log('✅ Estilo aplicado via TipTap');
           return true;
         } else {
-          console.log('❌ setSelection não disponível no editor');
-          return false;
+              console.log('❌ Não foi possível calcular posições no TipTap');
+            }
+          } catch (tiptapError) {
+            console.log('❌ Método TipTap falhou:', tiptapError);
+          }
         }
-      } catch (e) {
-        console.error('❌ Erro em setSelection:', e);
+        
+        // MÉTODO 3: Manipulação direta do DOM (último recurso)
+        try {
+          // Aguardar um tick para garantir que o DOM está atualizado
+          setTimeout(() => {
+            const blockElement = document.querySelector(`[data-block-id="${blockId}"]`);
+            if (blockElement) {
+              const textNodes = [];
+              const walker = document.createTreeWalker(
+                blockElement,
+                NodeFilter.SHOW_TEXT,
+                null,
+                false
+              );
+              
+              let node;
+              while (node = walker.nextNode()) {
+                textNodes.push(node);
+              }
+              
+              // Aplicar highlight nos nodes de texto
+              let currentOffset = 0;
+              textNodes.forEach(textNode => {
+                const nodeLength = textNode.textContent.length;
+                const nodeStart = currentOffset;
+                const nodeEnd = currentOffset + nodeLength;
+                
+                if (nodeEnd > startOffset && nodeStart < endOffset) {
+                  // Este node está dentro do range
+                  const parent = textNode.parentElement;
+                  if (shouldHighlight) {
+                    parent.style.backgroundColor = 'yellow';
+                    parent.style.color = 'black';
+                  } else {
+                    parent.style.backgroundColor = '';
+                    parent.style.color = '';
+                  }
+                }
+                
+                currentOffset += nodeLength;
+              });
+              
+              console.log('✅ Estilo aplicado via DOM');
+            }
+          }, 10);
+          
+          return true;
+        } catch (domError) {
+          console.log('❌ Método DOM falhou:', domError);
+        }
+        
         return false;
-      }
-    },
-    
-    addStyles: (styles) => {
-      try {
-        if (editor.addStyles && typeof editor.addStyles === 'function') {
-          editor.addStyles(styles);
-          console.log('✅ addStyles executado:', styles);
-          return true;
-        } else {
-          console.log('❌ addStyles não disponível no editor');
-          return false;
-        }
-      } catch (e) {
-        console.error('❌ Erro em addStyles:', e);
-        return false;
-      }
-    },
-    
-    removeStyles: (styleNames) => {
-      try {
-        if (editor.removeStyles && typeof editor.removeStyles === 'function') {
-          editor.removeStyles(styleNames);
-          console.log('✅ removeStyles executado:', styleNames);
-          return true;
-        } else {
-          console.log('❌ removeStyles não disponível no editor');
-          return false;
-        }
-      } catch (e) {
-        console.error('❌ Erro em removeStyles:', e);
-        return false;
-      }
-    },
-    
-    toggleStyles: (styles) => {
-      try {
-        if (editor.toggleStyles && typeof editor.toggleStyles === 'function') {
-          editor.toggleStyles(styles);
-          console.log('✅ toggleStyles executado:', styles);
-          return true;
-        } else {
-          console.log('❌ toggleStyles não disponível no editor');
-          return false;
-        }
-      } catch (e) {
-        console.error('❌ Erro em toggleStyles:', e);
+      } catch (error) {
+        console.error('❌ Erro geral em highlightText:', error);
         return false;
       }
     },
     
     findTextInBlocks: findTextInBlocks,
-    
-    // Método de teste para seleção
     testTextSelection: testTextSelection,
     
-    // Método para acessar métodos do editor diretamente
-    getEditorMethods: () => {
-      console.log('🔍 Métodos disponíveis no editor:', Object.keys(editor));
-      return {
-        setTextCursor: editor.setTextCursor,
-        setSelection: editor.setSelection,
-        getSelection: editor.getSelection,
-        addStyles: editor.addStyles,
-        removeStyles: editor.removeStyles,
-        toggleStyles: editor.toggleStyles,
-        updateBlock: editor.updateBlock,
-        insertBlocks: editor.insertBlocks,
-        removeBlocks: editor.removeBlocks,
-        replaceBlocks: editor.replaceBlocks,
-        topLevelBlocks: editor.topLevelBlocks
-      };
-    },
-    
-    // Método para debug completo do editor
+    // Método de debug
     debugEditor: () => {
-      console.log('🔍 === DEBUG EDITOR BLOCKNOTE (SELEÇÃO) ===');
+      console.log('🔍 === DEBUG EDITOR BLOCKNOTE ===');
       console.log('- Editor instance:', editor);
+      console.log('- Document:', editor.document || editor.topLevelBlocks);
+      console.log('- TipTap Editor:', editor._tiptapEditor);
       console.log('- Available methods:', Object.keys(editor));
-      console.log('- topLevelBlocks length:', editor.topLevelBlocks?.length || 0);
       
-      // Testar métodos de seleção específicos
-      const selectionMethods = [
-        'setTextCursor', 'setSelection', 'getSelection'
-      ];
+      // Testar cálculo de posições absolutas
+      if (editor.document && editor.document.length > 0) {
+        const firstBlock = editor.document[0];
+        console.log('- First block:', firstBlock);
+        console.log('- First block ID:', firstBlock.id);
+        console.log('- First block content:', extractTextFromBlock(firstBlock));
+        
+        // Calcular posição absoluta do primeiro bloco
+        let pos = 0;
+        for (const block of editor.document) {
+          pos++; // Abertura do nó
+          if (block.id === firstBlock.id) {
+            console.log(`- Posição absoluta do primeiro bloco: ${pos}`);
+            break;
+          }
+          pos += block.content.reduce((len, inline) => len + (inline.text?.length || 0), 0);
+          pos++; // Fechamento do nó
+        }
+      }
       
-      const styleMethods = [
-        'addStyles', 'removeStyles', 'toggleStyles'
-      ];
-      
-      const blockMethods = [
-        'updateBlock', 'insertBlocks', 'removeBlocks', 'replaceBlocks'
-      ];
-      
-      console.log('🎯 Métodos de seleção:');
-      selectionMethods.forEach(method => {
-        console.log(`  - ${method}:`, typeof editor[method], editor[method] ? '✅ Disponível' : '❌ Não disponível');
-      });
-      
-      console.log('🎨 Métodos de estilo:');
-      styleMethods.forEach(method => {
-        console.log(`  - ${method}:`, typeof editor[method], editor[method] ? '✅ Disponível' : '❌ Não disponível');
-      });
-      
-      console.log('📝 Métodos de bloco:');
-      blockMethods.forEach(method => {
-        console.log(`  - ${method}:`, typeof editor[method], editor[method] ? '✅ Disponível' : '❌ Não disponível');
-      });
-      
-      if (editor.topLevelBlocks && editor.topLevelBlocks.length > 0) {
-        console.log('📄 Primeiro bloco:', editor.topLevelBlocks[0]);
-        const firstBlockText = extractTextFromBlock(editor.topLevelBlocks[0]);
-        console.log('📝 Texto do primeiro bloco:', `"${firstBlockText}"`);
+      // Verificar comandos TipTap disponíveis
+      if (editor._tiptapEditor) {
+        console.log('- TipTap commands:', Object.keys(editor._tiptapEditor.commands));
+        console.log('- TipTap state:', editor._tiptapEditor.state);
       }
       
       console.log('🔍 === FIM DEBUG ===');
