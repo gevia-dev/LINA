@@ -5,13 +5,11 @@ import '@blocknote/core/fonts/inter.css';
 import '@blocknote/mantine/style.css';
 
 const BlockNoteEditor = forwardRef(({ initialContent = '', onChange, onScroll, onCanvasItemDragStart }, ref) => {
-  console.log('🔍 BlockNoteEditor - renderizando com initialContent:', initialContent);
   
   // Converter texto markdown simples para blocos BlockNote
   const convertMarkdownToBlocks = (markdown) => {
     if (!markdown || typeof markdown !== 'string') return [];
     
-    console.log('🔍 BlockNoteEditor - convertendo markdown para blocos:', markdown);
     
     const lines = markdown.split('\n');
     const blocks = [];
@@ -62,7 +60,6 @@ const BlockNoteEditor = forwardRef(({ initialContent = '', onChange, onScroll, o
       }
     );
     
-    console.log('🔍 BlockNoteEditor - blocos criados:', blocks);
     return blocks;
   };
 
@@ -118,15 +115,7 @@ const BlockNoteEditor = forwardRef(({ initialContent = '', onChange, onScroll, o
   // Debug: verificar métodos de seleção disponíveis
   useEffect(() => {
     if (editor) {
-      console.log('🔍 BlockNoteEditor - editor criado:', editor);
-      console.log('🔍 BlockNoteEditor - métodos de seleção disponíveis:');
-      console.log('  - setTextCursor:', typeof editor.setTextCursor);
-      console.log('  - setSelection:', typeof editor.setSelection);
-      console.log('  - getSelection:', typeof editor.getSelection);
-      console.log('  - addStyles:', typeof editor.addStyles);
-      console.log('  - removeStyles:', typeof editor.removeStyles);
-      console.log('  - toggleStyles:', typeof editor.toggleStyles);
-      console.log('🔍 BlockNoteEditor - topLevelBlocks:', editor.topLevelBlocks?.length || 0);
+
     }
   }, [editor]);
 
@@ -135,15 +124,13 @@ const BlockNoteEditor = forwardRef(({ initialContent = '', onChange, onScroll, o
     if (!editor) return;
 
     const tiptap = editor._tiptapEditor;
-    console.log('[BN] Editor pronto?', !!tiptap);
 
     if (!tiptap) return;
 
     try {
       const nodeNames = Object.keys(tiptap.schema.nodes || {});
       const markNames = Object.keys(tiptap.schema.marks || {});
-      console.log('[BN] Schema nodes:', nodeNames);
-      console.log('[BN] Schema marks:', markNames);
+
 
       if (!tiptap.schema.nodes?.text) {
         console.error('❌ Schema sem node "text". Isso geralmente indica conflito de versões do TipTap/PM ou extensão custom que sobrescreveu o schema.');
@@ -195,7 +182,6 @@ const BlockNoteEditor = forwardRef(({ initialContent = '', onChange, onScroll, o
         const blockText = extractTextFromBlock(block);
         
         if (blockText && blockText.toLowerCase().includes(searchText.toLowerCase())) {
-          console.log(`✅ Texto encontrado no bloco ${i}: "${blockText.substring(0, 100)}..."`);
           return {
             blockIndex: i,
             blockId: block.id,
@@ -215,7 +201,6 @@ const BlockNoteEditor = forwardRef(({ initialContent = '', onChange, onScroll, o
   // Função para testar seleção de texto (para debug)
   const testTextSelection = useCallback(async (testText = "exemplo") => {
     try {
-      console.log('🧪 === TESTE DE SELEÇÃO DE TEXTO ===');
       
       if (!editor || !editor.topLevelBlocks) {
         console.log('❌ Editor não disponível');
@@ -223,7 +208,6 @@ const BlockNoteEditor = forwardRef(({ initialContent = '', onChange, onScroll, o
       }
       
       const blocks = editor.topLevelBlocks;
-      console.log(`📄 Total de blocos: ${blocks.length}`);
       
       // Procurar texto nos blocos
       let found = false;
@@ -232,13 +216,10 @@ const BlockNoteEditor = forwardRef(({ initialContent = '', onChange, onScroll, o
         const blockText = extractTextFromBlock(block);
         
         if (blockText && blockText.toLowerCase().includes(testText.toLowerCase())) {
-          console.log(`✅ Texto "${testText}" encontrado no bloco ${i}`);
-          console.log(`📝 Conteúdo do bloco: "${blockText}"`);
           
           const textIndex = blockText.toLowerCase().indexOf(testText.toLowerCase());
           
           if (textIndex !== -1) {
-            console.log(`📍 Posição no texto: ${textIndex}-${textIndex + testText.length}`);
             
             // Testar setTextCursor
             if (editor.setTextCursor) {
@@ -248,7 +229,6 @@ const BlockNoteEditor = forwardRef(({ initialContent = '', onChange, onScroll, o
                 endOffset: textIndex + testText.length
               };
               
-              console.log(`🎯 Tentando setTextCursor:`, selection);
               editor.setTextCursor(selection);
               
               // Aguardar e tentar aplicar estilo
@@ -258,13 +238,11 @@ const BlockNoteEditor = forwardRef(({ initialContent = '', onChange, onScroll, o
                     backgroundColor: "yellow",
                     textColor: "default"
                   });
-                  console.log(`✅ Estilo aplicado via addStyles`);
                   
                   // Limpar após 2 segundos
                   setTimeout(() => {
                     if (editor.removeStyles) {
                       editor.removeStyles(["backgroundColor"]);
-                      console.log(`🧹 Estilo removido`);
                     }
                   }, 2000);
                 } else {
@@ -285,7 +263,6 @@ const BlockNoteEditor = forwardRef(({ initialContent = '', onChange, onScroll, o
         console.log(`❌ Texto "${testText}" não encontrado em nenhum bloco`);
       }
       
-      console.log('🧪 === FIM TESTE ===');
       
     } catch (error) {
       console.error('❌ Erro no teste de seleção:', error);
@@ -387,6 +364,61 @@ const BlockNoteEditor = forwardRef(({ initialContent = '', onChange, onScroll, o
       }
     },
     
+    // Método para substituir conteúdo completo
+    replaceContent: (newContent) => {
+      try {
+        if (!editor) return false;
+        
+        console.log('🔄 BlockNoteEditor - substituindo conteúdo:', newContent.length, 'caracteres');
+        
+        // Converter markdown para blocos
+        const blocks = convertMarkdownToBlocks(newContent);
+        
+        // Substituir conteúdo do editor
+        if (editor.replaceBlocks && editor.topLevelBlocks) {
+          editor.replaceBlocks(editor.topLevelBlocks, blocks);
+          console.log('✅ Conteúdo substituído com sucesso');
+          return true;
+        } else {
+          console.warn('⚠️ Editor não tem método replaceBlocks disponível');
+          return false;
+        }
+      } catch (error) {
+        console.error('❌ Erro ao substituir conteúdo:', error);
+        return false;
+      }
+    },
+    
+    // Método para atualizar conteúdo a partir de sequência
+    updateContentFromSequence: (sequenceText, mapping) => {
+      try {
+        if (!editor) return false;
+        
+        console.log('🔄 BlockNoteEditor - atualizando da sequência:', sequenceText.length, 'caracteres');
+        
+        // Processar texto da sequência
+        const blocks = convertMarkdownToBlocks(sequenceText);
+        
+        // Atualizar mapeamento de referências se fornecido
+        if (mapping) {
+          console.log('🔄 Mapeamento de referências atualizado:', mapping.size, 'referências');
+        }
+        
+        // Substituir blocos
+        if (editor.replaceBlocks && editor.topLevelBlocks) {
+          editor.replaceBlocks(editor.topLevelBlocks, blocks);
+          console.log('✅ Conteúdo da sequência aplicado com sucesso');
+          return true;
+        } else {
+          console.warn('⚠️ Editor não tem método replaceBlocks disponível');
+          return false;
+        }
+      } catch (error) {
+        console.error('❌ Erro ao atualizar da sequência:', error);
+        return false;
+      }
+    },
+    
     // EXPOR A INSTÂNCIA DO EDITOR COMPLETA
     editor: editor,
     
@@ -398,7 +430,6 @@ const BlockNoteEditor = forwardRef(({ initialContent = '', onChange, onScroll, o
           return false;
         }
         
-        console.log(`🎯 highlightText chamado: block=${blockId}, range=${startOffset}-${endOffset}, highlight=${shouldHighlight}`);
         
         // Verificar se o bloco existe
         const blocks = editor.document || editor.topLevelBlocks || [];
@@ -410,11 +441,8 @@ const BlockNoteEditor = forwardRef(({ initialContent = '', onChange, onScroll, o
         }
         
         let block = blocks[blockIndex];
-        console.log(`✅ Bloco encontrado:`, block);
         
         // DEBUG: Mostrar conteúdo do bloco e offsets
-        console.log(`🔍 Conteúdo do bloco:`, block.content);
-        console.log(`🔍 Offsets recebidos: start=${startOffset}, end=${endOffset}`);
 
         // 🔧 1) Normalizar e resegmentar o parágrafo via TipTap
         normalizeBlockInlines(block.id);
@@ -430,8 +458,6 @@ const BlockNoteEditor = forwardRef(({ initialContent = '', onChange, onScroll, o
         const b = Math.max(a, Math.min(endOffset, totalLen));
         
         // Verificar se os offsets fazem sentido
-        console.log(`🔍 Tamanho total do bloco após normalização: ${totalLen}`);
-        console.log(`🔍 Offsets após clamp: start=${a}, end=${b}`);
         
         if (endOffset > totalLen) {
           console.log(`⚠️ AVISO: endOffset (${endOffset}) é maior que o tamanho do bloco (${totalLen})`);
@@ -452,7 +478,6 @@ const BlockNoteEditor = forwardRef(({ initialContent = '', onChange, onScroll, o
           }
           currentPos += inlineText.length;
         }
-        console.log(`🔍 Texto que será destacado: "${blockText}"`);
         
         // 🔧 2) Calcular posições absolutas no doc TipTap
         const range = getDocRangeForBlockOffsets(blockNow.id, a, b);
@@ -469,10 +494,8 @@ const BlockNoteEditor = forwardRef(({ initialContent = '', onChange, onScroll, o
         // Use a API do BlockNote para o mark de estilo (compatível com o schema dele)
               if (shouldHighlight) {
           editor.addStyles({ backgroundColor: 'green', textColor: 'white' });
-          console.log('✅ Estilo aplicado via TipTap + BlockNote (com corpo resegmentado)');
         } else {
           editor.removeStyles({ backgroundColor: true, textColor: true });
-          console.log('✅ Estilo removido via TipTap + BlockNote');
         }
 
         // 🔧 4) Limpar a seleção imediatamente para não ficar visível
@@ -499,25 +522,18 @@ const BlockNoteEditor = forwardRef(({ initialContent = '', onChange, onScroll, o
     
     // Método de debug
     debugEditor: () => {
-      console.log('🔍 === DEBUG EDITOR BLOCKNOTE ===');
-      console.log('- Editor instance:', editor);
-      console.log('- Document:', editor.document || editor.topLevelBlocks);
-      console.log('- TipTap Editor:', editor._tiptapEditor);
-      console.log('- Available methods:', Object.keys(editor));
+
       
       // Testar cálculo de posições absolutas
       if (editor.document && editor.document.length > 0) {
         const firstBlock = editor.document[0];
-        console.log('- First block:', firstBlock);
-        console.log('- First block ID:', firstBlock.id);
-        console.log('- First block content:', extractTextFromBlock(firstBlock));
+
         
         // Calcular posição absoluta do primeiro bloco
         let pos = 0;
         for (const block of editor.document) {
           pos++; // Abertura do nó
           if (block.id === firstBlock.id) {
-            console.log(`- Posição absoluta do primeiro bloco: ${pos}`);
             break;
           }
           pos += block.content.reduce((len, inline) => len + (inline.text?.length || 0), 0);

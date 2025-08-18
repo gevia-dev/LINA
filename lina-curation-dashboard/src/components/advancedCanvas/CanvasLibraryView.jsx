@@ -4,6 +4,7 @@ import { motion } from 'framer-motion';
 import { FolderTree, Tags, Quote, ArrowRight, ChevronLeft, ChevronRight, CheckSquare, Square, Edit3, Save, Trash2 } from 'lucide-react';
 import dagre from 'dagre';
 import VantaBackground from './VantaBackground';
+import { useTextSequenceSync } from '../../utils/useTextSequenceSync';
 
 // Componente de edge customizado com botão de lixeira
 const CustomEdge = ({
@@ -325,7 +326,7 @@ const ItemNode = React.memo(({ data }) => {
       onDoubleClick={handleOpen}
       onMouseEnter={() => { 
         setIsHovered(true);
-        if (import.meta.env?.DEV) console.debug('[CanvasLibraryView][ItemNode] hover enter', { itemId: data?.itemId }); 
+
         // Disparar evento customizado para grifar texto no editor
         const event = new CustomEvent('canvas-item-hover', { 
           detail: { 
@@ -339,7 +340,6 @@ const ItemNode = React.memo(({ data }) => {
       }}
       onMouseLeave={() => { 
         setIsHovered(false);
-        if (import.meta.env?.DEV) console.debug('[CanvasLibraryView][ItemNode] hover leave', { itemId: data?.itemId }); 
         // Disparar evento customizado para remover grifo do texto no editor
         const event = new CustomEvent('canvas-item-hover', { 
           detail: { 
@@ -618,7 +618,6 @@ const buildHierarchy = (normalized) => {
   
   // FASE 2: Conectar automaticamente ItemNodes aos SegmentNodes baseado no título das frases
   if (quotesMap && typeof quotesMap === 'object' && Object.keys(quotesMap).length > 0) {
-    console.log('[DEBUG] buildHierarchy - 🔗 FASE 2: Conectando ItemNodes aos SegmentNodes...');
     
     // Criar mapa de títulos para busca eficiente e precisa
     const titleToItemMap = new Map();
@@ -635,12 +634,10 @@ const buildHierarchy = (normalized) => {
       });
     });
     
-    console.log(`[DEBUG] buildHierarchy - Mapa de títulos criado com ${titleToItemMap.size} itens`);
     
     // Para cada segment, encontrar os ItemNodes que pertencem a ele
     Object.entries(segments).forEach(([segmentKey, segment]) => {
       if (segment.type === 'header' && segment.subItems && segment.subItems.length > 0) {
-        console.log(`[DEBUG] buildHierarchy - Procurando ItemNodes para segment: "${segment.title}"`);
         
         // Para cada sub-item do segment, procurar ItemNodes com título correspondente
         segment.subItems.forEach((subItemTitle, subItemIndex) => {
@@ -658,7 +655,6 @@ const buildHierarchy = (normalized) => {
             
             if (!segment.connectedItems) segment.connectedItems = [];
             segment.connectedItems.push(foundItem);
-            console.log(`[DEBUG] buildHierarchy - ✅ ItemNode encontrado: "${itemNode.title}" -> Segment: "${segment.title}"`);
           } else {
             console.log(`[DEBUG] buildHierarchy - ⚠️ ItemNode não encontrado para: "${subItemTitle}"`);
           }
@@ -672,7 +668,22 @@ const buildHierarchy = (normalized) => {
   return { categories, segments };
 };
 
-const CanvasLibraryView = ({ newsData, onTransferItem, onOpenCardModal, onCanvasItemDragStart, onDragStart, onAddToNotionSection, compact = false, sidebarOnRight = false, enableSidebarToggle = false, initialSidebarCollapsed = false, transparentSidebar = false }) => {
+const CanvasLibraryView = ({ 
+  newsData, 
+  onTransferItem, 
+  onOpenCardModal, 
+  onCanvasItemDragStart, 
+  onDragStart, 
+  onAddToNotionSection, 
+  compact = false, 
+  sidebarOnRight = false, 
+  enableSidebarToggle = false, 
+  initialSidebarCollapsed = false, 
+  transparentSidebar = false,
+  onTextSequenceUpdate = () => {},
+  onSequencesUpdate = () => {},
+  editorRef = null
+}) => {
   const [nodes, setNodes] = useState([]);
   const [edges, setEdges] = useState([]);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -690,6 +701,25 @@ const CanvasLibraryView = ({ newsData, onTransferItem, onOpenCardModal, onCanvas
   const savedPositionsRef = useRef(new Map());
   const skipAutoCenterRef = useRef(false);
   const skipTimerRef = useRef(null);
+  
+  // Hook de sincronização de texto com conexões
+  const textSync = useTextSequenceSync({
+    nodes,
+    edges,
+    onTextUpdate: onTextSequenceUpdate,
+    onMappingUpdate: (mapping) => {
+      console.log('🔄 Mapeamento de referências atualizado:', mapping);
+    },
+    editorRef
+  });
+  
+  // Expor sequências atuais para componentes pai
+  useEffect(() => {
+    if (textSync.currentSequences.length > 0) {
+      console.log('🔄 Sequências atualizadas:', textSync.currentSequences.length, 'seções');
+      onSequencesUpdate(textSync.currentSequences);
+    }
+  }, [textSync.currentSequences, onSequencesUpdate]);
   
   useEffect(() => { onAddToNotionSectionRef.current = onAddToNotionSection; }, [onAddToNotionSection]);
 
@@ -855,13 +885,11 @@ const CanvasLibraryView = ({ newsData, onTransferItem, onOpenCardModal, onCanvas
           },
           position: { x: 0, y: 0 }
         };
-        console.log('[DEBUG] Criando SegmentNode:', segmentId, nodeData);
         rfNodes.push(nodeData);
         addGNode(segmentId, 420, 120);
         
         // Criar edges automáticas para ItemNodes conectados
         if (segment.connectedItems && segment.connectedItems.length > 0) {
-          console.log(`[DEBUG] Criando ${segment.connectedItems.length} edges para segment: ${segmentId}`);
           
           // 1. Conecta o SegmentNode ao primeiro ItemNode
           const firstItem = segment.connectedItems[0];
@@ -881,7 +909,6 @@ const CanvasLibraryView = ({ newsData, onTransferItem, onOpenCardModal, onCanvas
               style: { strokeWidth: 2 }
             };
             
-            console.log(`[DEBUG] Criando edge: ${edgeId} (${segmentId} -> ${firstItem.itemId})`);
             rfEdges.push(edge);
           }
 
@@ -906,7 +933,6 @@ const CanvasLibraryView = ({ newsData, onTransferItem, onOpenCardModal, onCanvas
                 style: { strokeWidth: 2 }
               };
               
-              console.log(`[DEBUG] Criando edge: ${edgeId} (${currentItem.itemId} -> ${nextItem.itemId})`);
               rfEdges.push(edge);
             }
           }
@@ -933,7 +959,6 @@ const CanvasLibraryView = ({ newsData, onTransferItem, onOpenCardModal, onCanvas
               style: { strokeWidth: 2 }
             };
             
-            console.log(`[DEBUG] Criando edge final: ${edgeId} (${lastItem.itemId} -> ${nextSegmentId})`);
             rfEdges.push(edge);
           }
         }
@@ -944,11 +969,7 @@ const CanvasLibraryView = ({ newsData, onTransferItem, onOpenCardModal, onCanvas
   const tagsToRender = Object.keys(hierarchy.categories || []); // Sempre mostrar todas as categorias
       
   // Log para debug: verificar por que tagsToRender está vazio
-  console.log('[DEBUG] Debug tagsToRender:', {
-    selectedTag,
-    categories: Object.keys(categories),
-    tagsToRender
-  });
+
 
     // FILTRO: Só criar ItemNodes que estão conectados aos segments
     const connectedItemIds = new Set();
@@ -962,8 +983,6 @@ const CanvasLibraryView = ({ newsData, onTransferItem, onOpenCardModal, onCanvas
       }
     });
 
-    console.log('[DEBUG] Items conectados aos segments:', Array.from(connectedItemIds));
-    console.log('[DEBUG] Total de items conectados:', connectedItemIds.size);
 
     tagsToRender.forEach((tag) => {
       const keyObj = categories[tag];
@@ -978,7 +997,6 @@ const CanvasLibraryView = ({ newsData, onTransferItem, onOpenCardModal, onCanvas
         items.forEach((item) => {
           // FILTRO: Só criar ItemNodes que estão conectados aos segments
           if (connectedItemIds.has(item.itemId)) {
-            console.log(`[DEBUG] Criando ItemNode CONECTADO: ${item.itemId} para item: "${item.title}"`);
             
             rfNodes.push({
               id: item.itemId,
@@ -1004,7 +1022,6 @@ const CanvasLibraryView = ({ newsData, onTransferItem, onOpenCardModal, onCanvas
             });
             addGNode(item.itemId, 420, 130);
           } else {
-            console.log(`[DEBUG] ItemNode NÃO conectado (disponível na biblioteca): ${item.itemId} - "${item.title}"`);
           }
         });
       });
@@ -1012,10 +1029,8 @@ const CanvasLibraryView = ({ newsData, onTransferItem, onOpenCardModal, onCanvas
     
     // Log para debug: mostrar todos os IDs dos ItemNodes criados
     const itemNodeIds = rfNodes.filter(n => n.type === 'itemNode').map(n => n.id);
-    console.log('[DEBUG] ItemNodes criados com IDs:', itemNodeIds);
     
     // Log para debug: mostrar todas as edges criadas
-    console.log('[DEBUG] Edges criadas:', rfEdges.map(e => ({ id: e.id, source: e.source, target: e.target })));
 
     // Layout simplificado: todos os nodes em linha vertical
     let withPositions = [];
@@ -1035,7 +1050,6 @@ const CanvasLibraryView = ({ newsData, onTransferItem, onOpenCardModal, onCanvas
       return (segmentA.headerIndex || 0) - (segmentB.headerIndex || 0);
     });
 
-    console.log('[DEBUG] Layout vertical - Segments ordenados:', segmentKeys);
 
     // Posicionar cada segment seguido dos seus ItemNodes conectados
     sortedSegmentKeys.forEach((segmentKey) => {
@@ -1052,7 +1066,6 @@ const CanvasLibraryView = ({ newsData, onTransferItem, onOpenCardModal, onCanvas
           position: { x: startX, y: currentY } 
         };
         withPositions.push(positionedSegment);
-        console.log(`[DEBUG] SegmentNode posicionado: ${segmentId} em (${startX}, ${currentY})`);
         
         // Avançar Y para o próximo elemento
         currentY += segmentHeight + marginY;
@@ -1060,16 +1073,13 @@ const CanvasLibraryView = ({ newsData, onTransferItem, onOpenCardModal, onCanvas
 
       // 2. Posicionar os ItemNodes conectados em sequência vertical
       if (segment.connectedItems && segment.connectedItems.length > 0) {
-        console.log(`[DEBUG] Posicionando ${segment.connectedItems.length} ItemNodes conectados ao segment: ${segmentId}`);
         
         segment.connectedItems.forEach((connectedItem, itemIndex) => {
           const itemId = connectedItem.itemId;
-          console.log(`[DEBUG] Procurando ItemNode com ID: ${itemId}`);
           
           const itemNode = rfNodes.find(n => n.id === itemId);
           
           if (itemNode) {
-            console.log(`[DEBUG] ✅ ItemNode encontrado: ${itemId}`);
             const positionedItem = { 
               ...itemNode, 
               position: { x: startX, y: currentY },
@@ -1077,12 +1087,10 @@ const CanvasLibraryView = ({ newsData, onTransferItem, onOpenCardModal, onCanvas
             };
             withPositions.push(positionedItem);
             
-            console.log(`[DEBUG] ItemNode posicionado: ${itemId} em (${startX}, ${currentY})`);
             
             // Avançar Y para o próximo elemento
             currentY += itemHeight + marginY;
           } else {
-            console.log(`[DEBUG] ❌ ItemNode NÃO encontrado: ${itemId}`);
           }
         });
       }
@@ -1105,8 +1113,6 @@ const CanvasLibraryView = ({ newsData, onTransferItem, onOpenCardModal, onCanvas
       currentY += itemHeight + marginY;
     });
 
-    console.log(`[DEBUG] Layout vertical concluído - Total de nodes posicionados: ${withPositions.length}`);
-    console.log(`[DEBUG] Altura total do canvas: ${currentY}px`);
 
     // Preserva posições arrastadas manualmente quando em modo edição
     const positioned = withPositions.map((n) => {
@@ -1147,8 +1153,7 @@ const CanvasLibraryView = ({ newsData, onTransferItem, onOpenCardModal, onCanvas
   }, []);
 
   // Handler padrão de conexão do React Flow
-  const onConnect = useCallback((params) => {
-    console.log('[DEBUG] onConnect: nova conexão criada:', params);
+  const onConnect = useCallback(async (params) => {
     
     // Determina o tipo de conexão baseado nos handles
     let connectionType = 'default';
@@ -1174,19 +1179,40 @@ const CanvasLibraryView = ({ newsData, onTransferItem, onOpenCardModal, onCanvas
     );
     
     setEdges(newEdge);
-  }, [edges]);
+    
+    // Sincronizar texto após nova conexão
+    try {
+      const result = await textSync.handleNewConnection(params);
+      if (result.success) {
+      } else {
+        console.warn('⚠️ Falha na sincronização:', result.error);
+      }
+    } catch (error) {
+      console.error('❌ Erro na sincronização:', error);
+    }
+  }, [edges, textSync]);
 
   // Handler para remover edges
-  const onEdgeDelete = useCallback((edgeId) => {
-    console.log('[DEBUG] CanvasLibraryView.onEdgeDelete: removendo edge:', edgeId);
-    console.log('[DEBUG] Edges antes da remoção:', edges.length);
+  const onEdgeDelete = useCallback(async (edgeId) => {
     
     setEdges((currentEdges) => {
       const filtered = currentEdges.filter(edge => edge.id !== edgeId);
       console.log('[DEBUG] Edges após remoção:', filtered.length);
       return filtered;
     });
-  }, [edges]);
+    
+    // Sincronizar texto após remoção de conexão
+    try {
+      const result = await textSync.handleConnectionRemoval(edgeId);
+      if (result.success) {
+        console.log('✅ Texto sincronizado após remoção de conexão');
+      } else {
+        console.warn('⚠️ Falha na sincronização após remoção:', result.error);
+      }
+    } catch (error) {
+      console.error('❌ Erro na sincronização após remoção:', error);
+    }
+  }, [edges, textSync]);
 
 
 
@@ -1708,7 +1734,7 @@ const CanvasLibraryView = ({ newsData, onTransferItem, onOpenCardModal, onCanvas
             enableAnimatedBackground={true}
           />
           {/* Botão de modo edição (canto superior esquerdo) */}
-          <div className="absolute top-2 left-2 z-20">
+          <div className="absolute top-2 left-2 z-20 flex gap-2">
             <motion.button
               onClick={() => setIsEditMode((v) => !v)}
               className="p-2 rounded-lg border"
@@ -1723,6 +1749,27 @@ const CanvasLibraryView = ({ newsData, onTransferItem, onOpenCardModal, onCanvas
             >
               {isEditMode ? <Save size={16} /> : <Edit3 size={16} />}
             </motion.button>
+            
+            {/* Indicador de sincronização de texto */}
+            <motion.div
+              className="p-2 rounded-lg border flex items-center gap-2"
+              style={{
+                backgroundColor: 'var(--bg-tertiary)',
+                borderColor: textSync.isProcessing ? 'var(--primary-green)' : 'var(--border-primary)',
+                color: textSync.isProcessing ? 'var(--primary-green)' : 'var(--text-secondary)'
+              }}
+              title={textSync.isProcessing ? 'Sincronizando texto...' : 'Texto sincronizado'}
+            >
+              <div 
+                className={`w-2 h-2 rounded-full ${textSync.isProcessing ? 'animate-pulse' : ''}`}
+                style={{ 
+                  backgroundColor: textSync.isProcessing ? 'var(--primary-green)' : 'var(--text-secondary)' 
+                }}
+              />
+              <span className="text-xs font-medium">
+                {textSync.isProcessing ? 'Sinc' : 'Sync'}
+              </span>
+            </motion.div>
             
             {/* Notificação de modo de edição ativado automaticamente */}
             {isEditMode && (
@@ -1761,8 +1808,6 @@ const CanvasLibraryView = ({ newsData, onTransferItem, onOpenCardModal, onCanvas
             </div>
           ) : hasData ? (
             <>
-              {console.log('[DEBUG] Renderizando ReactFlow com edges:', edges.length, edges)}
-              {console.log('[DEBUG] Edges detalhadas:', edges.map(e => ({ id: e.id, source: e.source, target: e.target, type: e.type })))}
               <ReactFlow
               onInit={handleInit}
               nodes={nodes}

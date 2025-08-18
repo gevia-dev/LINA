@@ -1091,6 +1091,8 @@ const AdvancedCanvasEditor = ({
         newsTitle={newsTitle}
         onCanvasItemDragStart={handleCanvasDragStart}
         onLinkDataToSection={handleLinkDataToSection}
+        nodes={nodes}
+        edges={edges}
       />
 
       {/* Indicador visual global de drag ativo */}
