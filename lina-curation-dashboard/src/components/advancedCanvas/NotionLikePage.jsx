@@ -77,11 +77,35 @@ const NotionLikePage = ({
   const [dragState, setDragState] = useState({ active: false });
   const [recentlyAdded, setRecentlyAdded] = useState(null);
   
+  // CORREÇÃO: Estado para controlar quando o editor deve ser atualizado
+  const [shouldUpdateEditor, setShouldUpdateEditor] = useState(false);
+  
   // Estado para armazenar o mapeamento entre marcadores e títulos
   const [referenceMapping, setReferenceMapping] = useState(new Map());
   
+  // Função para atualizar o referenceMapping quando novo texto é inserido
+  const updateReferenceMapping = useCallback((marker, title) => {
+    try {
+      console.log(`🗺️ Atualizando referenceMapping: ${marker} <-> "${title}"`);
+      
+      setReferenceMapping(prevMapping => {
+        const newMapping = new Map(prevMapping);
+        
+        // Adicionar mapeamento bidirecional
+        newMapping.set(marker, title.trim());
+        newMapping.set(title.trim(), marker);
+        
+        console.log(`✅ ReferenceMapping atualizado. Total: ${newMapping.size / 2} referências`);
+        return newMapping;
+      });
+      
+      console.log(`🔗 Novo mapeamento criado: ${marker} ↔ "${title}"`);
+      
+    } catch (error) {
+      console.error('❌ Erro ao atualizar referenceMapping:', error);
+    }
+  }, []);
   
-
   const EDITOR_MIN_PX = 480;
   const LIB_MIN_PX = 360;
   
@@ -499,14 +523,19 @@ const NotionLikePage = ({
   
 
 
-  // Simplificar editorContent - sempre usar final_text como base
+  // CORREÇÃO: Preservar conteúdo do editor e evitar reset desnecessário
   const editorContent = useMemo(() => {
-    console.log('🔍 NotionLikePage - newsData:', newsData);
-    console.log('🔍 NotionLikePage - final_text:', newsData?.final_text);
+    console.log('🔍 NotionLikePage - editorContent recalculado');
     
-    // Usar sempre o final_text como base, sem complexidades
+    // Se já temos conteúdo no editor (lastMarkdown), preservar
+    if (lastMarkdown && lastMarkdown.trim()) {
+      console.log('✅ Preservando conteúdo existente do editor:', lastMarkdown.length, 'caracteres');
+      return lastMarkdown;
+    }
+    
+    // Se não temos conteúdo salvo, usar final_text como base
     if (newsData?.final_text && typeof newsData.final_text === 'string' && newsData.final_text.trim()) {
-      console.log('✅ Usando final_text do banco de dados');
+      console.log('✅ Usando final_text do banco de dados (primeira vez)');
       const { processedText, mapping } = processFinalText(newsData.final_text.trim());
       setReferenceMapping(mapping);
       return processedText;
@@ -522,7 +551,7 @@ Este editor mostra o conteúdo da coluna "final_text" do banco de dados.
 Se você está vendo esta mensagem, verifique se a coluna "final_text" está preenchida.
 
 Para testar o highlighting por marcadores, clique no botão "Teste Marcador".`;
-  }, [newsData?.final_text, processFinalText]);
+  }, [newsData?.final_text, processFinalText, lastMarkdown]);
 
   const sectionMarkdownMap = useMemo(() => {
     // SEMPRE usar final_text se disponível
@@ -568,14 +597,50 @@ Para testar o highlighting por marcadores, clique no botão "Teste Marcador".`;
     };
   }, [newsData?.final_text, processFinalText]);
 
+  // CORREÇÃO: Preservar conteúdo do editor ao filtrar seções
   const displayContent = useMemo(() => {
+    // CORREÇÃO: Se o editor deve ser atualizado, usar lastMarkdown
+    if (shouldUpdateEditor && lastMarkdown && lastMarkdown.trim()) {
+      console.log('✅ Editor marcado para atualização, usando lastMarkdown');
+      return lastMarkdown;
+    }
+    
+    // Se temos conteúdo no editor, sempre priorizar
+    if (lastMarkdown && lastMarkdown.trim()) {
+      if (!filteredSection) return lastMarkdown;
+      
+      // Para seções filtradas, tentar extrair da seção mas preservar o resto
+      const sectionContent = sectionMarkdownMap[filteredSection];
+      if (sectionContent) {
+        console.log('✅ Mostrando seção filtrada:', filteredSection);
+        return sectionContent;
+      }
+      
+      // Se não encontrou a seção, manter conteúdo atual
+      console.log('⚠️ Seção não encontrada, mantendo conteúdo atual');
+      return lastMarkdown;
+    }
+    
+    // Fallback para primeira renderização
     if (!filteredSection) return editorContent;
     return sectionMarkdownMap[filteredSection] || editorContent;
-  }, [filteredSection, sectionMarkdownMap, editorContent]);
+  }, [filteredSection, sectionMarkdownMap, editorContent, lastMarkdown, shouldUpdateEditor]);
 
+  // CORREÇÃO: Só atualizar lastMarkdown na primeira renderização
   useEffect(() => {
-    setLastMarkdown(editorContent);
-  }, [editorContent]);
+    if (!lastMarkdown && editorContent) {
+      console.log('🔄 Inicializando lastMarkdown com conteúdo inicial');
+      setLastMarkdown(editorContent);
+    }
+  }, [editorContent, lastMarkdown]);
+
+  // CORREÇÃO: Resetar shouldUpdateEditor quando o editor for atualizado
+  useEffect(() => {
+    if (shouldUpdateEditor && lastMarkdown) {
+      console.log('🔄 Editor atualizado, resetando shouldUpdateEditor');
+      setShouldUpdateEditor(false);
+    }
+  }, [shouldUpdateEditor, lastMarkdown]);
 
   // Escutar eventos de hover do canvas
   useEffect(() => {
@@ -599,9 +664,10 @@ Para testar o highlighting por marcadores, clique no botão "Teste Marcador".`;
     try {
       if (!dragData || !sectionId) return;
       
-      // Como agora sempre priorizamos final_text, não vamos mais salvar nos nodes
-      // Apenas logar a ação para debug
       console.log('📝 Conteúdo adicionado via drag & drop:', { sectionId, dragData });
+      
+      // CORREÇÃO: Marcar que o editor deve ser atualizado
+      setShouldUpdateEditor(true);
       
       // Mostrar feedback visual
       setRecentlyAdded({ sectionId, at: Date.now() });
@@ -1104,12 +1170,30 @@ Para testar o highlighting por marcadores, clique no botão "Teste Marcador".`;
                   <div className="flex-1 min-h-0 flex flex-col" style={{ height: '100%' }}>
                     <DropZone sectionId={filteredSection || activeSection} className="flex-1 min-h-0">
                       <BlockNoteEditor
-                        key={`bn-${filteredSection || 'all'}-${displayContent.length}`}
+                        key="blocknote-editor-fixed" // KEY FIXO - não muda nunca
                         ref={editorRef}
                         initialContent={displayContent}
-                        onChange={setLastMarkdown}
+                        onChange={(newMarkdown) => {
+                          try {
+                            setLastMarkdown(newMarkdown);
+                            console.log('📝 Editor content changed, size:', newMarkdown?.length || 0);
+                            
+                            // CORREÇÃO: Marcar que o editor foi atualizado pelo usuário
+                            setShouldUpdateEditor(false);
+                            
+                            // Force re-render if needed
+                            if (editorRef.current && editorRef.current.editor) {
+                              const blocks = editorRef.current.editor.topLevelBlocks || [];
+                              console.log('📄 Current blocks count:', blocks.length);
+                            }
+                          } catch (error) {
+                            console.error('❌ Error in onChange:', error);
+                            setLastMarkdown(newMarkdown);
+                          }
+                        }}
                         onScroll={filteredSection ? undefined : handleScrollSync}
                         onCanvasItemDragStart={(payload) => { try { onCanvasItemDragStart?.(payload); } catch {} }}
+                        onReferenceUpdate={updateReferenceMapping}
                       />
                     </DropZone>
                   </div>
@@ -1131,6 +1215,7 @@ Para testar o highlighting por marcadores, clique no botão "Teste Marcador".`;
                     onAddToNotionSection={(sectionId, payload) => handleContentAdd(payload, sectionId)}
                     editorRef={editorRef}
                     referenceMapping={referenceMapping}
+                    onReferenceUpdate={updateReferenceMapping}
                   />
                 </div>
               </div>

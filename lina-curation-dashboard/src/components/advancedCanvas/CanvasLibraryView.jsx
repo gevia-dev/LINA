@@ -681,7 +681,8 @@ const CanvasLibraryView = ({
   initialSidebarCollapsed = false, 
   transparentSidebar = false,
   editorRef = null,
-  referenceMapping = null
+  referenceMapping = null,
+  onReferenceUpdate = null
 }) => {
   const [nodes, setNodes] = useState([]);
   const [edges, setEdges] = useState([]);
@@ -706,7 +707,8 @@ const CanvasLibraryView = ({
     nodes,
     edges,
     editorRef,
-    referenceMapping
+    referenceMapping,
+    onReferenceUpdate: onReferenceUpdate
   });
   
   useEffect(() => { onAddToNotionSectionRef.current = onAddToNotionSection; }, [onAddToNotionSection]);

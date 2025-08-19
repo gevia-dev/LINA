@@ -163,9 +163,10 @@ export const insertTextAtPosition = (editor, insertionInfo, newText) => {
  * @param {Array} edges - Array atual de edges
  * @param {Object} editorRef - Referência do editor
  * @param {Map} referenceMapping - Mapeamento de títulos para marcadores [n]
+ * @param {Function} onReferenceUpdate - Callback para atualizar referenceMapping
  * @returns {Object} Resultado da operação
  */
-export const handleCanvasConnection = async (connectionParams, nodes, edges, editorRef, referenceMapping = null) => {
+export const handleCanvasConnection = async (connectionParams, nodes, edges, editorRef, referenceMapping = null, onReferenceUpdate = null) => {
   const { source, target } = connectionParams;
   
   console.log('🔗 Processando nova conexão do canvas:', connectionParams);
@@ -240,7 +241,8 @@ export const handleCanvasConnection = async (connectionParams, nodes, edges, edi
       const success = await editorRef.current.insertTextAtPosition(
         searchText,
         textToInsert,
-        insertionInfo.position
+        insertionInfo.position,
+        onReferenceUpdate  // Passar callback para atualizar referenceMapping
       );
       
       if (success) {
