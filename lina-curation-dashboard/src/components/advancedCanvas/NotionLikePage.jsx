@@ -5,8 +5,7 @@ import CanvasLibraryView from './CanvasLibraryView';
 import BlockNoteEditor from './BlockNoteEditor';
 import MainSidebar from '../MainSidebar';
 import { cleanText, mapCleanToOriginalIndex } from '../../utils/textHelpers';
-import SequenceVisualizer from '../../utils/SequenceVisualizer';
-import { getOrderedSequenceFromConnections, reconstructFinalText } from '../../utils/connectionMappingUtils';
+
 
 
 
@@ -63,8 +62,7 @@ const NotionLikePage = ({
   newsTitle, 
   onCanvasItemDragStart, 
   onLinkDataToSection,
-  nodes = [],
-  edges = []
+
 }) => {
   const editorRef = useRef(null);
   const containerRef = useRef(null);
@@ -82,619 +80,26 @@ const NotionLikePage = ({
   // Estado para armazenar o mapeamento entre marcadores e títulos
   const [referenceMapping, setReferenceMapping] = useState(new Map());
   
-  // Estados para sincronização de texto com conexões
-  const [dynamicText, setDynamicText] = useState('');
-  const [isDynamicMode, setIsDynamicMode] = useState(false);
-  const [textMapping, setTextMapping] = useState(new Map());
-  const [showSequenceVisualizer, setShowSequenceVisualizer] = useState(false);
-  
-  // Estado para conteúdo derivado do canvas
-  const [canvasDerivedContent, setCanvasDerivedContent] = useState(null);
+
 
   const EDITOR_MIN_PX = 480;
   const LIB_MIN_PX = 360;
   
 
   
-  // Handler para atualizações de mapeamento
-  const handleMappingUpdate = useCallback((newMapping) => {
-    console.log('🔄 Mapeamento atualizado:', newMapping.size, 'referências');
-    setTextMapping(newMapping);
-    setReferenceMapping(newMapping); // Sincronizar com mapeamento existente
-  }, []);
-  
-  // Estado para armazenar sequências atuais
-  const [currentSequences, setCurrentSequences] = useState([]);
-  
-  // Handler para atualizações de sequências
-  const handleSequencesUpdate = useCallback((sequences) => {
-    console.log('🔄 Sequências atualizadas:', sequences.length, 'seções');
-    setCurrentSequences(sequences);
-  }, []);
-  
-  // Função para detectar e aplicar mudanças específicas no texto
-  const applyCanvasChangesToText = useCallback((canvasNodes, canvasEdges, currentText) => {
-    try {
-      // Validação e conversão segura do texto atual
-      const safeCurrentText = String(currentText || '').trim();
-      
-      if (!canvasNodes || canvasNodes.length === 0) {
-        console.log('ℹ️ Nenhum node no canvas para aplicar mudanças');
-        return { hasChanges: false, updatedText: safeCurrentText };
-      }
-      
-      // 1. Obter sequência ordenada das conexões
-      const sequencesBySegment = getOrderedSequenceFromConnections(canvasNodes, canvasEdges);
-      
-      if (sequencesBySegment.length === 0) {
-        console.log('ℹ️ Nenhuma sequência de conexões encontrada no canvas');
-        return { hasChanges: false, updatedText: safeCurrentText };
-      }
-      
-      // 2. Gerar novo texto baseado nas conexões
-      const { finalText: newText, newMapping } = reconstructFinalText(sequencesBySegment, textMapping);
-      
-      // 3. Atualizar o mapeamento
-      setTextMapping(newMapping);
-      setReferenceMapping(newMapping);
-      
-      // VERIFICAÇÃO CRÍTICA: Se o texto atual está vazio ou é muito diferente, pode ser carregamento inicial
-      if (!safeCurrentText || safeCurrentText.length < 100) {
-        console.log('🚀 Possível carregamento inicial - texto atual muito pequeno ou vazio');
-        console.log('📝 Configurando texto base sem marcar como "mudança"');
-        
-        return { 
-          hasChanges: false, 
-          updatedText: newText,
-          isInitialSetup: true 
-        };
-      }
-      
-      // 4. Comparar com texto atual para detectar mudanças específicas
-      const changes = detectTextChanges(safeCurrentText, newText, sequencesBySegment);
-      
-      if (changes.hasChanges) {
-        console.log('🔄 Mudanças detectadas:', changes.summary);
-        return {
-          hasChanges: true,
-          updatedText: applySelectiveChanges(currentText, changes),
-          changes
-        };
-      } else {
-        console.log('ℹ️ Nenhuma mudança detectada no texto');
-        return { hasChanges: false, updatedText: currentText };
-      }
-      
-    } catch (error) {
-      console.error('❌ Erro ao aplicar mudanças do canvas:', error);
-      return { hasChanges: false, updatedText: currentText };
-    }
-  }, [textMapping]);
-  
-  // Função para detectar mudanças específicas entre textos
-  const detectTextChanges = useCallback((oldText, newText, sequences) => {
-    const changes = {
-      hasChanges: false,
-      additions: [],
-      removals: [],
-      modifications: [],
-      summary: ''
-    };
-    
-    try {
-      // Validação e conversão segura dos textos
-      const safeOldText = String(oldText || '').trim();
-      const safeNewText = String(newText || '').trim();
-      
-      // Se ambos os textos estão vazios, não há mudanças
-      if (!safeOldText && !safeNewText) {
-        console.log('ℹ️ Ambos os textos estão vazios, nenhuma mudança detectada');
-        return changes;
-      }
-      
-      // Se apenas um dos textos está vazio, tudo é considerado mudança
-      if (!safeOldText && safeNewText) {
-        console.log('ℹ️ Texto antigo vazio, novo texto presente - considerando tudo como adição');
-        changes.additions = safeNewText.split('\n').filter(line => line.trim()).map((line, index) => ({
-          line,
-          index,
-          type: 'addition',
-          context: { before: [], after: [], section: null }
-        }));
-        changes.hasChanges = true;
-        changes.summary = `+${changes.additions.length}`;
-        return changes;
-      }
-      
-      if (safeOldText && !safeNewText) {
-        console.log('ℹ️ Texto antigo presente, novo texto vazio - considerando tudo como remoção');
-        changes.removals = safeOldText.split('\n').filter(line => line.trim()).map((line, index) => ({
-          line,
-          index,
-          type: 'removal',
-          context: { before: [], after: [], section: null }
-        }));
-        changes.hasChanges = true;
-        changes.summary = `-${changes.removals.length}`;
-        return changes;
-      }
-      
-      // Dividir textos em linhas para comparação
-      const oldLines = safeOldText.split('\n').filter(line => line.trim());
-      const newLines = safeNewText.split('\n').filter(line => line.trim());
-      
-      // Detectar adições (novas linhas)
-      newLines.forEach((line, index) => {
-        // Verificar se a linha é realmente nova (não apenas reordenada)
-        const isNewLine = !oldLines.some(oldLine => {
-          // Comparação inteligente: ignorar espaços extras e diferenças menores
-          const normalizedOld = oldLine.trim().toLowerCase();
-          const normalizedNew = line.trim().toLowerCase();
-          
-          // Se for uma linha muito similar, considerar como existente
-          if (normalizedOld === normalizedNew) return true;
-          
-          // Se uma linha contém a outra (com tolerância), considerar como existente
-          if (normalizedOld.includes(normalizedNew) || normalizedNew.includes(normalizedOld)) {
-            // Mas verificar se não é apenas uma parte muito pequena
-            const minLength = Math.min(normalizedOld.length, normalizedNew.length);
-            const maxLength = Math.max(normalizedOld.length, normalizedNew.length);
-            const similarityRatio = minLength / maxLength;
-            
-            // Se a similaridade for muito alta (>90%), considerar como existente
-            return similarityRatio > 0.9;
-          }
-          
-          // VERIFICAÇÃO CRÍTICA: Se a linha contém marcadores de referência similares
-          const oldMarkers = oldLine.match(/\[(\d+)\]/g) || [];
-          const newMarkers = line.match(/\[(\d+)\]/g) || [];
-          
-          if (oldMarkers.length > 0 && newMarkers.length > 0) {
-            // Se ambas têm marcadores, verificar se são similares
-            const oldMarkerSet = new Set(oldMarkers);
-            const newMarkerSet = new Set(newMarkers);
-            const commonMarkers = [...oldMarkerSet].filter(m => newMarkerSet.has(m));
-            
-            if (commonMarkers.length > 0) {
-              console.log('🔍 Marcadores similares detectados:', commonMarkers);
-              return true; // Considerar como existente
-            }
-          }
-          
-          return false;
-        });
-        
-        if (isNewLine) {
-          changes.additions.push({
-            line,
-            index,
-            type: 'addition',
-            context: getLineContext(line, newLines, index)
-          });
-        }
-      });
-      
-      // Detectar remoções (linhas que não existem mais)
-      oldLines.forEach((line, index) => {
-        const isRemovedLine = !newLines.some(newLine => {
-          const normalizedOld = line.trim().toLowerCase();
-          const normalizedNew = newLine.trim().toLowerCase();
-          
-          // Se for uma linha muito similar, considerar como existente
-          if (normalizedOld === normalizedNew) return true;
-          
-          // Se uma linha contém a outra (com tolerância), considerar como existente
-          if (normalizedOld.includes(normalizedNew) || normalizedNew.includes(normalizedOld)) {
-            // Mas verificar se não é apenas uma parte muito pequena
-            const minLength = Math.min(normalizedOld.length, normalizedNew.length);
-            const maxLength = Math.max(normalizedOld.length, normalizedNew.length);
-            const similarityRatio = minLength / maxLength;
-            
-            // Se a similaridade for muito alta (>90%), considerar como existente
-            return similarityRatio > 0.9;
-          }
-          
-          return false;
-        });
-        
-        if (isRemovedLine) {
-          changes.removals.push({
-            line,
-            index,
-            type: 'removal',
-            context: getLineContext(line, oldLines, index)
-          });
-        }
-      });
-      
-      // Detectar modificações (linhas com conteúdo similar mas diferente)
-      if (sequences && sequences.length > 0) {
-        sequences.forEach(({ segment, sequence }) => {
-          sequence.slice(1).forEach(node => {
-            if (node.type === 'itemNode') {
-              const oldLine = oldLines.find(line => 
-                line.includes(node.data.title) || line.includes(node.data.phrase)
-              );
-              const newLine = newLines.find(line => 
-                line.includes(node.data.title) || line.includes(node.data.phrase)
-              );
-              
-              if (oldLine && newLine && oldLine !== newLine) {
-                changes.modifications.push({
-                  oldLine,
-                  newLine,
-                  nodeTitle: node.data.title,
-                  type: 'modification'
-                });
-              }
-            }
-          });
-        });
-      }
-      
-      // Resumo das mudanças
-      changes.hasChanges = changes.additions.length > 0 || 
-                          changes.removals.length > 0 || 
-                          changes.modifications.length > 0;
-      
-      if (changes.hasChanges) {
-        changes.summary = `+${changes.additions.length} -${changes.removals.length} ~${changes.modifications.length}`;
-        
-        console.log('🔍 Resumo das mudanças detectadas:');
-        console.log('  ➕ Adições:', changes.additions.length);
-        console.log('  🗑️ Remoções:', changes.removals.length);
-        console.log('  ✏️ Modificações:', changes.modifications.length);
-        
 
-      }
-      
-    } catch (error) {
-      console.error('❌ Erro ao detectar mudanças:', error);
-    }
-    
-    return changes;
-  }, []);
-  
-  // Função auxiliar para obter contexto de uma linha
-  const getLineContext = useCallback((line, allLines, lineIndex) => {
-    try {
-      const context = {
-        before: [],
-        after: [],
-        section: null
-      };
-      
-      // Obter linhas antes e depois
-      if (lineIndex > 0) {
-        context.before = allLines.slice(Math.max(0, lineIndex - 2), lineIndex);
-      }
-      if (lineIndex < allLines.length - 1) {
-        context.after = allLines.slice(lineIndex + 1, Math.min(allLines.length, lineIndex + 3));
-      }
-      
-      // Identificar seção (header mais próximo)
-      for (let i = lineIndex; i >= 0; i--) {
-        if (allLines[i].startsWith('#')) {
-          context.section = allLines[i];
-          break;
-        }
-      }
-      
-      return context;
-    } catch (error) {
-      return { before: [], after: [], section: null };
-    }
-  }, []);
-  
-  // Função para aplicar mudanças seletivas no texto
-  const applySelectiveChanges = useCallback((currentText, changes) => {
-    try {
-      // Validação e conversão segura do texto atual
-      const safeCurrentText = String(currentText || '').trim();
-      if (!safeCurrentText) {
-        console.log('⚠️ Texto atual vazio, retornando texto vazio');
-        return '';
-      }
-      
-      let updatedText = safeCurrentText;
-      const lines = updatedText.split('\n');
-      
-      console.log('🔍 Aplicando mudanças seletivas:', {
-        totalLines: lines.length,
-        additions: changes.additions.length,
-        removals: changes.removals.length,
-        modifications: changes.modifications.length
-      });
-      
-      // ESTRATÉGIA SIMPLES: Inserir apenas a frase nova na posição correta
-      if (changes.additions.length > 0) {
-        console.log('🎯 Modo: Inserir frase nova na posição correta');
-        
-        // 1. Preservar texto original
-        const originalLines = lines.filter(line => line.trim());
-        
-        // 2. Para cada adição, encontrar a posição correta baseada na conexão do canvas
-        changes.additions.forEach(addition => {
-          // Encontrar o node que foi adicionado (baseado na frase)
-          const newNode = nodes.find(node => 
-            node.data?.phrase === addition.line || 
-            node.data?.title === addition.line
-          );
-          
-          if (newNode) {
-            // Encontrar posição de inserção baseada na conexão
-            const insertInfo = findInsertPositionFromCanvasConnection(newNode, nodes, edges);
-            
-            if (insertInfo && insertInfo.searchText) {
-              // Encontrar a linha no editor que contém o texto de busca
-              const targetLineIndex = originalLines.findIndex(line => 
-                line.toLowerCase().includes(insertInfo.searchText.toLowerCase())
-              );
-              
-              if (targetLineIndex !== -1) {
-                // Inserir a nova frase após a linha encontrada
-                const insertIndex = targetLineIndex + 1;
-                originalLines.splice(insertIndex, 0, addition.line);
-                console.log('✅ Frase inserida na posição correta:', insertIndex);
-              } else {
-                // Se não encontrar, inserir no final
-                originalLines.push(addition.line);
-                console.log('⚠️ Posição não encontrada, inserindo no final');
-              }
-            } else {
-              // Se não conseguir determinar posição, inserir no final
-              originalLines.push(addition.line);
-              console.log('⚠️ Posição não determinada, inserindo no final');
-            }
-          }
-        });
-        
-        const result = originalLines.join('\n');
-        console.log('✅ Frase nova inserida na posição correta');
-        return result;
-        
-      } else {
-        // Se não há adições, aplicar remoções e modificações normalmente
-        console.log('🔧 Modo: Aplicar remoções e modificações apenas');
-        
-        // Aplicar remoções primeiro (para não interferir nos índices)
-        changes.removals.forEach(({ line, context }) => {
-          const lineIndex = findBestMatchLine(lines, line, context);
-          if (lineIndex !== -1) {
-            console.log(`🗑️ Removendo linha ${lineIndex}: "${line.trim()}"`);
-            lines.splice(lineIndex, 1);
-          }
-        });
-        
-        // Aplicar modificações
-        changes.modifications.forEach(({ oldLine, newLine }) => {
-          const lineIndex = lines.findIndex(l => l.includes(oldLine.trim()));
-          if (lineIndex !== -1) {
-            console.log(`✏️ Modificando linha ${lineIndex}: "${oldLine.trim()}" → "${newLine.trim()}"`);
-            lines[lineIndex] = newLine;
-          }
-        });
-        
-        updatedText = lines.join('\n');
-        console.log('✅ Mudanças seletivas aplicadas com sucesso (modo modificação)');
-        return updatedText;
-      }
-      
-    } catch (error) {
-      console.error('❌ Erro ao aplicar mudanças seletivas:', error);
-      return currentText;
-    }
-  }, []);
-  
-  // Função para encontrar a melhor linha para remoção
-  const findBestMatchLine = useCallback((lines, targetLine, context) => {
-    try {
-      // Buscar por correspondência exata primeiro
-      let lineIndex = lines.findIndex(l => l.trim() === targetLine.trim());
-      if (lineIndex !== -1) return lineIndex;
-      
-      // Buscar por correspondência parcial
-      lineIndex = lines.findIndex(l => l.includes(targetLine.trim()));
-      if (lineIndex !== -1) return lineIndex;
-      
-      // Buscar por contexto (linhas próximas)
-      if (context && context.before.length > 0) {
-        for (let i = 0; i < lines.length; i++) {
-          const beforeLines = lines.slice(Math.max(0, i - 2), i);
-          const hasContext = context.before.some(ctxLine => 
-            beforeLines.some(line => line.includes(ctxLine.trim()))
-          );
-          if (hasContext) return i;
-        }
-      }
-      
-      return -1;
-    } catch (error) {
-      return -1;
-    }
-  }, []);
-  
-  // Função para encontrar a posição de inserção baseada na conexão do canvas
-  const findInsertPositionFromCanvasConnection = useCallback((newNode, nodes, edges) => {
-    try {
-      if (!newNode || !edges || edges.length === 0) return 0;
-      
-      // Encontrar a conexão que envolve o novo node
-      const connection = edges.find(edge => 
-        edge.source === newNode.id || edge.target === newNode.id
-      );
-      
-      if (!connection) return 0;
-      
-      // Determinar se é source ou target
-      const isSource = connection.source === newNode.id;
-      const connectedNodeId = isSource ? connection.target : connection.source;
-      
-      // Encontrar o node conectado
-      const connectedNode = nodes.find(n => n.id === connectedNodeId);
-      if (!connectedNode) return 0;
-      
-      // Buscar a posição no editor baseada no título/frase do node conectado
-      const searchText = connectedNode.data?.title || connectedNode.data?.phrase || '';
-      if (!searchText) return 0;
-      
-      console.log('🔍 Procurando posição para inserir após:', searchText);
-      
-      // Retornar a posição para inserção (será usada pelo TipTap)
-      return { searchText, position: 'after' };
-      
-    } catch (error) {
-      console.warn('⚠️ Erro ao encontrar posição de inserção:', error);
-      return 0;
-    }
-  }, []);
   
 
   
-  // Função para encontrar a melhor posição de inserção
-  const findBestInsertPosition = useCallback((lines, newLine, context) => {
-    try {
-      // Se for um header de seção, inserir antes da próxima seção
-      if (newLine.startsWith('#')) {
-        const sectionTitle = newLine.replace(/^#+\s*/, '').trim();
-        
-        // Buscar seção similar para inserir próxima
-        for (let i = 0; i < lines.length; i++) {
-          if (lines[i].startsWith('#')) {
-            const currentSection = lines[i].replace(/^#+\s*/, '').trim();
-            if (currentSection.toLowerCase().includes(sectionTitle.toLowerCase()) ||
-                sectionTitle.toLowerCase().includes(currentSection.toLowerCase())) {
-              return i + 1; // Inserir após a seção atual
-            }
-          }
-        }
-        
-        // Se não encontrar seção similar, inserir no final
-        return lines.length;
-      }
-      
-      // Se for uma frase/citação, inserir na seção apropriada
-      if (context && context.section) {
-        const sectionHeader = context.section;
-        const sectionIndex = lines.findIndex(l => l.includes(sectionHeader));
-        if (sectionIndex !== -1) {
-          // Encontrar o final da seção (próximo header ou fim do texto)
-          let endIndex = lines.length;
-          for (let i = sectionIndex + 1; i < lines.length; i++) {
-            if (lines[i].startsWith('#')) {
-              endIndex = i;
-              break;
-            }
-          }
-          return endIndex;
-        }
-      }
-      
-      // Padrão: inserir no final
-      return lines.length;
-      
-    } catch (error) {
-      return lines.length;
-    }
-  }, []);
-  
-  // Effect para aplicar mudanças seletivas quando canvas mudar
-  useEffect(() => {
-    if (nodes.length > 0 || edges.length > 0) {
 
-      // Obter texto atual do editor ou do estado
-      let currentText = '';
-      
-      try {
-        // Tentar obter do editor primeiro
-        if (editorRef.current?.getMarkdown) {
-          // Como getMarkdown é async, vamos usar o fallback direto por enquanto
-          currentText = canvasDerivedContent || newsData?.final_text || '';
-        } else {
-          currentText = canvasDerivedContent || newsData?.final_text || '';
-        }
-        
-        // Fallback para estados se o editor não retornar nada
-        if (!currentText) {
-          currentText = canvasDerivedContent || newsData?.final_text || '';
-        }
-      } catch (error) {
-        console.warn('⚠️ Erro ao obter texto do editor, usando fallback:', error);
-        currentText = canvasDerivedContent || newsData?.final_text || '';
-      }
-      
-      // VERIFICAÇÃO CRÍTICA: É a primeira vez que o canvas carrega?
-      const isInitialLoad = !canvasDerivedContent && nodes.length > 0 && edges.length > 0;
-      
-      if (isInitialLoad) {
-        console.log('🚀 CARREGAMENTO INICIAL DETECTADO - Configurando estado base');
-        
-        // 1. Gerar texto baseado nas conexões existentes
-        const sequencesBySegment = getOrderedSequenceFromConnections(nodes, edges);
-        if (sequencesBySegment.length > 0) {
-          const { finalText: baseText, newMapping } = reconstructFinalText(sequencesBySegment, textMapping);
-          
-          // 2. Configurar estado base sem marcar como "mudança"
-          setCanvasDerivedContent(baseText);
-          setTextMapping(newMapping);
-          setReferenceMapping(newMapping);
-          setIsDynamicMode(true);
-          
-          console.log('✅ Estado base configurado com', sequencesBySegment.length, 'sequências');
-          
-          // 3. Atualizar editor com o texto base
-          if (editorRef.current?.replaceContent) {
-            editorRef.current.replaceContent(baseText);
-            console.log('✅ Editor atualizado com estado base do canvas');
-          }
-          
-          return; // Sair sem processar como "mudança"
-        }
-      }
-      
-      // Aplicar mudanças seletivas apenas se não for carregamento inicial
-      const result = applyCanvasChangesToText(nodes, edges, currentText);
-      
-      if (result.isInitialSetup) {
-        console.log('🚀 Configuração inicial detectada - configurando estado base');
-        setCanvasDerivedContent(result.updatedText);
-        setIsDynamicMode(true);
-        
-        // Atualizar editor com o texto base
-        if (editorRef.current?.replaceContent) {
-          editorRef.current.replaceContent(result.updatedText);
-        }
-      } else if (result.hasChanges) {
-        console.log('🔄 Aplicando mudanças seletivas:', result.changes.summary);
-        
-        // Atualizar estado com texto modificado
-        setCanvasDerivedContent(result.updatedText);
-        setIsDynamicMode(true);
-        
-        // Atualizar editor se disponível
-        if (editorRef.current) {
-          try {
-            if (editorRef.current.replaceContent) {
-              editorRef.current.replaceContent(result.updatedText);
-            }
-          } catch (error) {
-            console.error('❌ Erro ao atualizar editor com mudanças seletivas:', error);
-          }
-        }
-      }
-    }
-  }, [nodes, edges, applyCanvasChangesToText, canvasDerivedContent, newsData?.final_text, textMapping]);
 
-  // FUNÇÃO HELPER PARA EXTRAIR TEXTO PLANO DE UM BLOCO - VERSÃO MELHORADA
+  // Função simplificada para extrair texto de blocos
   const extractBlockTextFlat = useCallback((block) => {
     try {
       if (!block || !block.content) return '';
       
       if (Array.isArray(block.content)) {
         let fullText = '';
-        
-        // Percorrer cada elemento inline e construir o texto completo
-        // PRESERVANDO a estrutura interna para mapeamento correto
         for (const item of block.content) {
           if (typeof item === 'string') {
             fullText += item;
@@ -702,12 +107,11 @@ const NotionLikePage = ({
             if (item.text) {
               fullText += item.text;
             } else if (item.content) {
-              // Se o item tem conteúdo aninhado, extrair recursivamente
               if (Array.isArray(item.content)) {
                 const nestedText = item.content
                   .map(nestedItem => {
                     if (typeof nestedItem === 'string') return nestedItem;
-                    if (nestedItem && nestedItem.text) return nestedItem.text;
+                    if (nestedItem && typeof nestedItem === 'object' && nestedItem.text) return nestedItem.text;
                     return '';
                   })
                   .join('');
@@ -718,7 +122,6 @@ const NotionLikePage = ({
             }
           }
         }
-        
         return fullText;
       }
       
@@ -1094,110 +497,32 @@ const NotionLikePage = ({
     return { processedText, mapping };
   }, []);
   
-  // Handler para atualizações de sequência de texto
-  const handleTextSequenceUpdate = useCallback((newText) => {
-    console.log('🔄 Atualização de sequência de texto recebida:', newText ? newText.length : 0, 'caracteres');
-    setDynamicText(newText);
-    
-    // Obter texto atual para comparação
-    let currentText = '';
-    
-          try {
-        // Tentar obter do editor primeiro
-        if (editorRef.current?.getMarkdown) {
-          // Como getMarkdown é async, vamos usar o fallback direto por enquanto
-          currentText = canvasDerivedContent || newsData?.final_text || '';
-        } else {
-          currentText = canvasDerivedContent || newsData?.final_text || '';
-        }
-        
-        // Fallback para estados se o editor não retornar nada
-        if (!currentText) {
-          currentText = canvasDerivedContent || newsData?.final_text || '';
-        }
-      } catch (error) {
-        console.warn('⚠️ Erro ao obter texto do editor para comparação, usando fallback:', error);
-        currentText = canvasDerivedContent || newsData?.final_text || '';
-      }
-    
-    // Detectar mudanças específicas
-    const changes = detectTextChanges(currentText, newText, []);
-    
-    if (changes.hasChanges) {
-      console.log('🔄 Mudanças detectadas na sequência:', changes.summary);
-      
-      // Aplicar mudanças seletivas
-      const updatedText = applySelectiveChanges(currentText, changes);
-      setCanvasDerivedContent(updatedText);
-      
-      // Atualizar editor se disponível
-      if (editorRef.current) {
-        try {
-          if (editorRef.current.replaceContent) {
-            editorRef.current.replaceContent(updatedText);
-            console.log('✅ Editor atualizado com mudanças seletivas da sequência');
-          } else if (editorRef.current.updateContentFromSequence) {
-            editorRef.current.updateContentFromSequence(updatedText, textMapping);
-            console.log('✅ Editor atualizado via sequência com mudanças seletivas');
-          } else {
-            console.log('ℹ️ Editor atualizado via estado (canvasDerivedContent)');
-          }
-        } catch (error) {
-          console.error('❌ Erro ao atualizar editor:', error);
-        }
-      }
-    } else {
-      console.log('ℹ️ Nenhuma mudança detectada na sequência');
-      setCanvasDerivedContent(newText);
-    }
-    
-    setIsDynamicMode(true);
-  }, [textMapping, detectTextChanges, applySelectiveChanges, canvasDerivedContent, newsData?.final_text]);
 
-  // Monta conteúdo do editor - priorizar conteúdo do canvas se disponível
+
+  // Simplificar editorContent - sempre usar final_text como base
   const editorContent = useMemo(() => {
-    // Debug: verificar fontes de conteúdo
     console.log('🔍 NotionLikePage - newsData:', newsData);
     console.log('🔍 NotionLikePage - final_text:', newsData?.final_text);
-    console.log('🔍 NotionLikePage - canvasDerivedContent:', canvasDerivedContent ? 'disponível' : 'não disponível');
     
-    // 1. PRIORIDADE: Conteúdo derivado do canvas (estado atual das conexões)
-    if (canvasDerivedContent) {
-      console.log('✅ Usando conteúdo derivado do canvas (estado atual das conexões)');
-      return canvasDerivedContent;
-    }
-    
-    // 2. FALLBACK: final_text do banco de dados (estado inicial)
+    // Usar sempre o final_text como base, sem complexidades
     if (newsData?.final_text && typeof newsData.final_text === 'string' && newsData.final_text.trim()) {
-      console.log('✅ Usando final_text do banco de dados como estado inicial');
+      console.log('✅ Usando final_text do banco de dados');
       const { processedText, mapping } = processFinalText(newsData.final_text.trim());
-      
-      // Armazenar o mapeamento no estado
       setReferenceMapping(mapping);
-      setTextMapping(mapping);
-      
-      console.log('🔍 NotionLikePage - texto processado:', processedText);
-      console.log('🔍 NotionLikePage - mapeamento criado:', mapping);
-      
       return processedText;
     }
     
-    // 3. FALLBACK: Mensagem informativa se nada estiver disponível
+    // Fallback simples
     console.log('⚠️ Nenhum conteúdo disponível - mostrando mensagem informativa');
-    setReferenceMapping(new Map()); // Limpar mapeamento
-    setTextMapping(new Map());
+    setReferenceMapping(new Map());
     return `# Editor Estruturado
 
-Este editor está configurado para mostrar o conteúdo da coluna "final_text" do banco de dados.
+Este editor mostra o conteúdo da coluna "final_text" do banco de dados.
 
-Se você está vendo esta mensagem, significa que:
-- A coluna "final_text" não está preenchida para esta notícia, ou
-- Houve um problema ao carregar os dados do banco
-
-Verifique o console para mais detalhes sobre o carregamento dos dados.
+Se você está vendo esta mensagem, verifique se a coluna "final_text" está preenchida.
 
 Para testar o highlighting por marcadores, clique no botão "Teste Marcador".`;
-  }, [canvasDerivedContent, newsData?.final_text, processFinalText]);
+  }, [newsData?.final_text, processFinalText]);
 
   const sectionMarkdownMap = useMemo(() => {
     // SEMPRE usar final_text se disponível
@@ -1736,30 +1061,7 @@ Para testar o highlighting por marcadores, clique no botão "Teste Marcador".`;
                 </div>
               </div>
               <div className="flex items-center gap-2">
-                {/* Indicador de modo dinâmico */}
-                {isDynamicMode && (
-                  <div className="px-3 py-1.5 rounded border flex items-center gap-2" style={{ backgroundColor: 'var(--primary-green-transparent)', borderColor: 'var(--primary-green)', color: 'var(--primary-green)' }}>
-                    <div className="w-2 h-2 rounded-full animate-pulse" style={{ backgroundColor: 'var(--primary-green)' }} />
-                    <span className="text-sm font-medium">
-                      {canvasDerivedContent ? 'Mudanças Seletivas' : 'Modo Dinâmico'}
-                    </span>
-                  </div>
-                )}
-                
-                {/* Botão para visualizar sequência */}
-                <button 
-                  onClick={() => setShowSequenceVisualizer(v => !v)} 
-                  className="px-3 py-1.5 rounded border flex items-center gap-2" 
-                  title={showSequenceVisualizer ? 'Ocultar sequência' : 'Mostrar sequência'}
-                  style={{ 
-                    backgroundColor: showSequenceVisualizer ? 'var(--primary-green)' : 'var(--bg-tertiary)', 
-                    borderColor: showSequenceVisualizer ? 'var(--primary-green)' : 'var(--border-primary)', 
-                    color: showSequenceVisualizer ? 'white' : 'var(--text-secondary)' 
-                  }}
-                >
-                  {showSequenceVisualizer ? <EyeOff size={16} /> : <Eye size={16} />}
-                  <span className="text-sm">Sequência</span>
-                </button>
+
                 
                 <button 
                   onClick={testMarkerHighlight} 
@@ -1827,8 +1129,7 @@ Para testar o highlighting por marcadores, clique no botão "Teste Marcador".`;
                     onDragStart={(payload) => { try { onCanvasItemDragStart?.(payload); } catch {} }}
                     onCanvasItemDragStart={() => {}}
                     onAddToNotionSection={(sectionId, payload) => handleContentAdd(payload, sectionId)}
-                    onTextSequenceUpdate={handleTextSequenceUpdate}
-                    onSequencesUpdate={handleSequencesUpdate}
+
                     editorRef={editorRef}
                   />
                 </div>
@@ -1836,14 +1137,7 @@ Para testar o highlighting por marcadores, clique no botão "Teste Marcador".`;
             </div>
           </div>
           
-          {/* Visualizador de Sequência */}
-          <SequenceVisualizer
-            sequences={currentSequences}
-            textMapping={textMapping}
-            isVisible={showSequenceVisualizer}
-            onToggleVisibility={() => setShowSequenceVisualizer(v => !v)}
-            className="z-50"
-          />
+
         </motion.div>
       </motion.div>
     </AnimatePresence>

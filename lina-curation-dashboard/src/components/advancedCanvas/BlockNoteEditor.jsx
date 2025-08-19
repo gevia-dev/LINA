@@ -520,6 +520,183 @@ const BlockNoteEditor = forwardRef(({ initialContent = '', onChange, onScroll, o
     findTextInBlocks: findTextInBlocks,
     testTextSelection: testTextSelection,
     
+    /**
+     * Método seguro para inserir texto em posição específica
+     * Preserva o estado do TipTap e não quebra o editor
+     */
+    insertTextAtPosition: async (searchText, newText, position = 'after') => {
+      try {
+        if (!editor || !editor._tiptapEditor) {
+          console.error('❌ Editor TipTap não disponível para inserção');
+          return false;
+        }
+        
+        const tiptap = editor._tiptapEditor;
+        
+        console.log(`🔍 Buscando posição para inserir "${newText}" ${position} "${searchText}"`);
+        
+        // Salvar estado atual da seleção
+        const currentSelection = tiptap.state.selection;
+        
+        // Focar no editor (importante para operações do TipTap)
+        tiptap.commands.focus();
+        
+        // Se não há texto de busca, inserir no final
+        if (!searchText || searchText.trim() === '') {
+          console.log('📍 Inserindo no final do documento');
+          tiptap.commands.setTextSelection(tiptap.state.doc.content.size);
+          tiptap.commands.insertContent(`\n\n${newText}`);
+          return true;
+        }
+        
+        // Buscar a posição do texto de referência no documento
+        const doc = tiptap.state.doc;
+        let targetPosition = null;
+        let found = false;
+        
+        // Percorrer o documento procurando o texto
+        doc.descendants((node, pos) => {
+          if (found) return false; // Parar se já encontrou
+          
+          if (node.isText && node.text) {
+            const nodeText = node.text.toLowerCase();
+            const searchLower = searchText.toLowerCase();
+            
+            // Busca flexível: pode ser parte do texto
+            if (nodeText.includes(searchLower)) {
+              console.log(`📍 Texto encontrado no node: "${node.text}"`);
+              
+              if (position === 'after') {
+                // Inserir após este node (final do node + quebra de linha)
+                targetPosition = pos + node.nodeSize;
+              } else if (position === 'before') {
+                // Inserir antes deste node
+                targetPosition = pos;
+              }
+              
+              found = true;
+              return false; // Parar a busca
+            }
+          }
+          
+          return true; // Continuar buscando
+        });
+        
+        if (targetPosition !== null) {
+          console.log(`📍 Posição encontrada: ${targetPosition}`);
+          
+          // Posicionar cursor na posição encontrada
+          tiptap.commands.setTextSelection(targetPosition);
+          
+          // Inserir o texto com formatação adequada
+          if (position === 'after') {
+            // Inserir após: quebra de linha + texto + quebra de linha
+            tiptap.commands.insertContent(`\n\n${newText}`);
+          } else {
+            // Inserir antes: texto + quebra de linha
+            tiptap.commands.insertContent(`${newText}\n\n`);
+          }
+          
+          console.log(`✅ Texto "${newText}" inserido ${position} "${searchText}"`);
+          return true;
+          
+        } else {
+          console.warn(`⚠️ Texto "${searchText}" não encontrado, inserindo no final`);
+          
+          // Fallback: inserir no final do documento
+          tiptap.commands.setTextSelection(tiptap.state.doc.content.size);
+          tiptap.commands.insertContent(`\n\n${newText}`);
+          return true;
+        }
+        
+      } catch (error) {
+        console.error('❌ Erro durante inserção de texto:', error);
+        
+        // Fallback de segurança: tentar inserir no final
+        try {
+          if (editor._tiptapEditor) {
+            editor._tiptapEditor.commands.setTextSelection(editor._tiptapEditor.state.doc.content.size);
+            editor._tiptapEditor.commands.insertContent(`\n\n${newText}`);
+            console.log('✅ Texto inserido no final (fallback)');
+            return true;
+          }
+        } catch (fallbackError) {
+          console.error('❌ Falha no fallback:', fallbackError);
+        }
+        
+        return false;
+      }
+    },
+
+    /**
+     * Método para buscar texto no documento (para debug)
+     */
+    findTextInDocument: (searchText) => {
+      try {
+        if (!editor || !editor._tiptapEditor) {
+          return null;
+        }
+        
+        const doc = editor._tiptapEditor.state.doc;
+        const results = [];
+        
+        doc.descendants((node, pos) => {
+          if (node.isText && node.text) {
+            const nodeText = node.text.toLowerCase();
+            const searchLower = searchText.toLowerCase();
+            
+            if (nodeText.includes(searchLower)) {
+              results.push({
+                text: node.text,
+                position: pos,
+                nodeSize: node.nodeSize
+              });
+            }
+          }
+          
+          return true;
+        });
+        
+        console.log(`🔍 Busca por "${searchText}":`, results);
+        return results;
+        
+      } catch (error) {
+        console.error('❌ Erro na busca:', error);
+        return null;
+      }
+    },
+
+    /**
+     * Método para obter informações do documento (debug)
+     */
+    getDocumentInfo: () => {
+      try {
+        if (!editor || !editor._tiptapEditor) {
+          return null;
+        }
+        
+        const doc = editor._tiptapEditor.state.doc;
+        const info = {
+          size: doc.content.size,
+          childCount: doc.childCount,
+          textContent: doc.textContent.substring(0, 200) + '...', // Primeiros 200 chars
+          nodeCount: 0
+        };
+        
+        doc.descendants(() => {
+          info.nodeCount++;
+          return true;
+        });
+        
+        console.log('📄 Informações do documento:', info);
+        return info;
+        
+      } catch (error) {
+        console.error('❌ Erro ao obter info do documento:', error);
+        return null;
+      }
+    },
+    
     // Método de debug
     debugEditor: () => {
 

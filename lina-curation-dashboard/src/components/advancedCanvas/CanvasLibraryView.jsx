@@ -4,7 +4,7 @@ import { motion } from 'framer-motion';
 import { FolderTree, Tags, Quote, ArrowRight, ChevronLeft, ChevronRight, CheckSquare, Square, Edit3, Save, Trash2 } from 'lucide-react';
 import dagre from 'dagre';
 import VantaBackground from './VantaBackground';
-import { useTextSequenceSync } from '../../utils/useTextSequenceSync';
+import { useSimplifiedTextSync } from '../../utils/useSimplifiedTextSync';
 
 // Componente de edge customizado com botão de lixeira
 const CustomEdge = ({
@@ -680,8 +680,7 @@ const CanvasLibraryView = ({
   enableSidebarToggle = false, 
   initialSidebarCollapsed = false, 
   transparentSidebar = false,
-  onTextSequenceUpdate = () => {},
-  onSequencesUpdate = () => {},
+
   editorRef = null
 }) => {
   const [nodes, setNodes] = useState([]);
@@ -702,24 +701,12 @@ const CanvasLibraryView = ({
   const skipAutoCenterRef = useRef(false);
   const skipTimerRef = useRef(null);
   
-  // Hook de sincronização de texto com conexões
-  const textSync = useTextSequenceSync({
+  // Hook de sincronização simplificado
+  const textSync = useSimplifiedTextSync({
     nodes,
     edges,
-    onTextUpdate: onTextSequenceUpdate,
-    onMappingUpdate: (mapping) => {
-      console.log('🔄 Mapeamento de referências atualizado:', mapping);
-    },
     editorRef
   });
-  
-  // Expor sequências atuais para componentes pai
-  useEffect(() => {
-    if (textSync.currentSequences.length > 0) {
-      console.log('🔄 Sequências atualizadas:', textSync.currentSequences.length, 'seções');
-      onSequencesUpdate(textSync.currentSequences);
-    }
-  }, [textSync.currentSequences, onSequencesUpdate]);
   
   useEffect(() => { onAddToNotionSectionRef.current = onAddToNotionSection; }, [onAddToNotionSection]);
 
@@ -1180,17 +1167,9 @@ const CanvasLibraryView = ({
     
     setEdges(newEdge);
     
-    // Sincronizar texto após nova conexão
-    try {
-      const result = await textSync.handleNewConnection(params);
-      if (result.success) {
-      } else {
-        console.warn('⚠️ Falha na sincronização:', result.error);
-      }
-    } catch (error) {
-      console.error('❌ Erro na sincronização:', error);
-    }
-  }, [edges, textSync]);
+    // SIMPLIFICADO: O hook já detecta e processa automaticamente
+    console.log('✅ Conexão adicionada, processamento automático via hook');
+  }, [edges]);
 
   // Handler para remover edges
   const onEdgeDelete = useCallback(async (edgeId) => {
@@ -1201,18 +1180,9 @@ const CanvasLibraryView = ({
       return filtered;
     });
     
-    // Sincronizar texto após remoção de conexão
-    try {
-      const result = await textSync.handleConnectionRemoval(edgeId);
-      if (result.success) {
-        console.log('✅ Texto sincronizado após remoção de conexão');
-      } else {
-        console.warn('⚠️ Falha na sincronização após remoção:', result.error);
-      }
-    } catch (error) {
-      console.error('❌ Erro na sincronização após remoção:', error);
-    }
-  }, [edges, textSync]);
+    // SIMPLIFICADO: O hook já processa automaticamente
+    console.log('✅ Edge removida, processamento automático via hook');
+  }, [edges]);
 
 
 
@@ -1750,7 +1720,7 @@ const CanvasLibraryView = ({
               {isEditMode ? <Save size={16} /> : <Edit3 size={16} />}
             </motion.button>
             
-            {/* Indicador de sincronização de texto */}
+            {/* Indicador de sincronização simplificado */}
             <motion.div
               className="p-2 rounded-lg border flex items-center gap-2"
               style={{
@@ -1758,7 +1728,7 @@ const CanvasLibraryView = ({
                 borderColor: textSync.isProcessing ? 'var(--primary-green)' : 'var(--border-primary)',
                 color: textSync.isProcessing ? 'var(--primary-green)' : 'var(--text-secondary)'
               }}
-              title={textSync.isProcessing ? 'Sincronizando texto...' : 'Texto sincronizado'}
+              title={textSync.isProcessing ? 'Inserindo texto...' : 'Pronto'}
             >
               <div 
                 className={`w-2 h-2 rounded-full ${textSync.isProcessing ? 'animate-pulse' : ''}`}
@@ -1767,7 +1737,7 @@ const CanvasLibraryView = ({
                 }}
               />
               <span className="text-xs font-medium">
-                {textSync.isProcessing ? 'Sinc' : 'Sync'}
+                {textSync.isProcessing ? 'Inserindo' : 'Pronto'}
               </span>
             </motion.div>
             
