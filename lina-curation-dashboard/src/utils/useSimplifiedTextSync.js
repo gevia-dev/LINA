@@ -13,7 +13,8 @@ export const useSimplifiedTextSync = ({
   edges = [], 
   editorRef = null,
   referenceMapping = null,
-  onReferenceUpdate = null
+  onReferenceUpdate = null,
+  onReindexing = null
 }) => {
   // Estado da sincronização
   const [isActive, setIsActive] = useState(true);
@@ -111,7 +112,7 @@ export const useSimplifiedTextSync = ({
       setLastProcessedEdges(prev => new Set([...prev, hash]));
       
       // Processar via helper principal
-      const result = await handleCanvasConnection(edge, nodes, edges, editorRef, referenceMapping, onReferenceUpdate);
+      const result = await handleCanvasConnection(edge, nodes, edges, editorRef, referenceMapping, onReferenceUpdate, onReindexing);
       
       if (result.success) {
         console.log('✅ Conexão processada com sucesso:', result.message);

@@ -3,16 +3,30 @@ import { useCreateBlockNote } from '@blocknote/react';
 import { BlockNoteView } from '@blocknote/mantine';
 import '@blocknote/core/fonts/inter.css';
 import '@blocknote/mantine/style.css';
+import { MarkerReindexingService } from '../../utils/markerReindexingService.js';
 
-const BlockNoteEditor = forwardRef(({ initialContent = '', onChange, onScroll, onCanvasItemDragStart, onReferenceUpdate }, ref) => {
+const BlockNoteEditor = forwardRef(({ initialContent = '', onChange, onScroll, onCanvasItemDragStart, onReferenceUpdate, onReindexing }, ref) => {
+  
+  // Estado para controlar se o conteúdo inicial foi carregado
+  const [isInitialContentLoaded, setIsInitialContentLoaded] = useState(false);
   
   // Converter texto markdown simples para blocos BlockNote
   const convertMarkdownToBlocks = (markdown) => {
-    if (!markdown || typeof markdown !== 'string') return [];
+    console.log('🔍 BlockNoteEditor - convertMarkdownToBlocks chamado:', {
+      hasMarkdown: !!markdown,
+      markdownType: typeof markdown,
+      markdownLength: markdown?.length || 0,
+      markdownPreview: markdown?.substring(0, 200) || 'N/A'
+    });
     
+    if (!markdown || typeof markdown !== 'string') {
+      console.log('❌ Markdown inválido, retornando array vazio');
+      return [];
+    }
     
     const lines = markdown.split('\n');
     const blocks = [];
+    console.log('📄 Processando', lines.length, 'linhas de markdown');
     
     lines.forEach((line) => {
       if (!line.trim()) {
@@ -60,12 +74,32 @@ const BlockNoteEditor = forwardRef(({ initialContent = '', onChange, onScroll, o
       }
     );
     
+    console.log('✅ Blocos criados:', blocks.length, 'blocos');
+    console.log('📄 Primeiro bloco:', blocks[0]);
+    
     return blocks;
   };
 
   // Criar editor com configuração para highlighting de seleção
   const editor = useCreateBlockNote({ 
-    initialContent: initialContent ? convertMarkdownToBlocks(initialContent) : undefined,
+    initialContent: (() => {
+      console.log('🔍 useCreateBlockNote - initialContent:', {
+        hasInitialContent: !!initialContent,
+        initialContentLength: initialContent?.length || 0,
+        initialContentPreview: initialContent?.substring(0, 100) || 'N/A',
+        isDefaultMessage: initialContent?.includes('Se você está vendo esta mensagem') || false
+      });
+      
+      if (initialContent && initialContent.trim()) {
+        const blocks = convertMarkdownToBlocks(initialContent);
+        console.log('✅ Blocos convertidos para editor:', blocks.length);
+        console.log('📄 Primeiro bloco:', blocks[0]);
+        return blocks;
+      } else {
+        console.log('⚠️ Nenhum conteúdo inicial fornecido ou conteúdo vazio');
+        return undefined;
+      }
+    })(),
     
     // Configuração de tema otimizada para highlighting
     theme: {
@@ -118,6 +152,25 @@ const BlockNoteEditor = forwardRef(({ initialContent = '', onChange, onScroll, o
 
     }
   }, [editor]);
+
+  // DESABILITADO: Não atualizar editor automaticamente quando initialContent mudar
+  // Isso evita re-renderizações que sobrescrevem mudanças do usuário
+  // O sistema de sessão no NotionLikePage agora gerencia isso
+  useEffect(() => {
+    console.log('🔄 BlockNoteEditor - initialContent mudou (sistema de sessão):', {
+      hasInitialContent: !!initialContent,
+      initialContentLength: initialContent?.length || 0,
+      hasEditor: !!editor,
+      isInitialContentLoaded,
+      note: 'Atualizações automáticas desabilitadas - usando sistema de sessão'
+    });
+    
+    // Apenas marcar como carregado na primeira vez
+    if (editor && initialContent && !isInitialContentLoaded) {
+      console.log('✅ Marcando conteúdo inicial como carregado (sem forçar atualização)');
+      setIsInitialContentLoaded(true);
+    }
+  }, [editor, initialContent, isInitialContentLoaded]);
 
   // Diagnóstico do schema TipTap para identificar problemas
   useEffect(() => {
@@ -521,26 +574,31 @@ const BlockNoteEditor = forwardRef(({ initialContent = '', onChange, onScroll, o
     testTextSelection: testTextSelection,
     
     /**
-     * Método seguro para inserir texto em posição específica
-     * Preserva o estado do TipTap e não quebra o editor
-     * Agora usa API BlockNote nativa para evitar problemas de sincronização
+     * Método seguro para inserir texto em posição específica com reindexação automática
+     * Integrado com MarkerReindexingService para manter integridade dos marcadores
      */
-    insertTextAtPosition: async (searchText, newText, position = 'after', onReferenceUpdate = null) => {
+    insertTextAtPosition: async (searchText, newText, position = 'after', onReferenceUpdate = null, onReindexing = null) => {
       try {
+        console.log(`🚀 [${new Date().toLocaleTimeString()}] === NOVA INSERÇÃO INICIADA ===`);
+        console.log(`📝 Parâmetros:`, { searchText, newText: newText?.substring(0, 50) + '...', position });
+        
         if (!editor || !editor._tiptapEditor) {
           console.error('❌ Editor TipTap não disponível para inserção');
           return false;
         }
 
         const tiptap = editor._tiptapEditor;
-        console.log(`🔍 Buscando posição para inserir "${newText}" ${position} "${searchText}"`);
+        console.log(`🔍 Inserindo "${newText}" ${position} "${searchText}" com reindexação automática`);
         
-        // NOVO: Gerar próximo número de marcador
+        // 1. Obter conteúdo atual do editor para análise
+        const currentContent = tiptap.state.doc.textContent;
+        console.log(`📄 Conteúdo atual: ${currentContent.length} caracteres`);
+        
+        // 2. Gerar próximo número de marcador
         const generateNextMarkerNumber = () => {
           const doc = tiptap.state.doc;
           const existingMarkers = new Set();
           
-          // Buscar todos os marcadores [n] existentes
           doc.descendants((node) => {
             if (node.isText && node.text) {
               const markers = node.text.match(/\[\d+\]/g);
@@ -554,7 +612,6 @@ const BlockNoteEditor = forwardRef(({ initialContent = '', onChange, onScroll, o
             return true;
           });
           
-          // Encontrar o próximo número disponível
           let nextNumber = 1;
           while (existingMarkers.has(nextNumber)) {
             nextNumber++;
@@ -564,16 +621,11 @@ const BlockNoteEditor = forwardRef(({ initialContent = '', onChange, onScroll, o
           return nextNumber;
         };
         
-        // Gerar marcador para o novo texto
         const markerNumber = generateNextMarkerNumber();
         const marker = `[${markerNumber}]`;
-        
-        // Preparar texto com marcador
         const textWithMarker = `${newText} ${marker}`;
         
-        console.log(`📝 Texto preparado: "${textWithMarker}"`);
-        
-        // NOVO: Função para verificar se inserção foi bem-sucedida
+        // 3. Função para verificar inserção
         const verifyInsertion = (expectedText, timeoutMs = 1000) => {
           return new Promise((resolve) => {
             const startTime = Date.now();
@@ -586,290 +638,179 @@ const BlockNoteEditor = forwardRef(({ initialContent = '', onChange, onScroll, o
             }, 100);
           });
         };
-        
-        // Notificar sobre novo marcador para atualizar referenceMapping
-        const shouldUpdateMapping = typeof onReferenceUpdate === 'function';
 
-        // Focar no editor (importante para operações do TipTap)
+        // 4. Focar no editor
         tiptap.commands.focus();
 
-        // Se não há texto de busca, inserir no final
+        // 5. Determinar posição de inserção
+        let targetPosition = null;
+        let insertionPosition = null;
+
         if (!searchText || searchText.trim() === '') {
+          // Inserir no final
           console.log('📍 Inserindo no final do documento');
+          targetPosition = tiptap.state.doc.content.size;
+          insertionPosition = targetPosition;
           
-          // Forçar foco antes da inserção
-          tiptap.commands.focus();
           await new Promise(resolve => setTimeout(resolve, 50));
-          
-          const finalPos = tiptap.state.doc.content.size;
-          tiptap.commands.setTextSelection(finalPos);
+          tiptap.commands.setTextSelection(targetPosition);
           
           const contentToInsert = `\n\n${textWithMarker}`;
           const success = tiptap.commands.insertContent(contentToInsert);
           
-          console.log(`📝 Inserção no final: ${success ? 'sucesso' : 'falha'}`);
-          
-          // Verificar se inserção foi bem-sucedida
           const verified = await verifyInsertion(marker, 2000);
-          console.log(`✅ Verificação de inserção: ${verified ? 'texto encontrado' : 'texto NÃO encontrado'}`);
           
-          if (verified && shouldUpdateMapping) {
-            const titleFromText = newText.substring(0, 50).trim(); // Usar início do texto como título
+          if (verified && typeof onReferenceUpdate === 'function') {
+            const titleFromText = newText.substring(0, 50).trim();
             onReferenceUpdate(marker, titleFromText);
           }
           
           return verified;
-        }
-
-        // Usar a mesma lógica do sistema de highlighting: título -> marcador [n] -> bloco
-        console.log('🔍 Procurando usando lógica de highlighting (título -> marcador [n] -> bloco)...');
-        
-        // Função para extrair texto de um bloco (similar ao extractBlockTextFlat)
-        const extractBlockText = (node) => {
-          if (!node || !node.content) return '';
+        } else {
+          // Procurar pelo marcador específico
+          console.log(`🔍 Procurando pelo marcador: "${searchText}"`);
           
-          let text = '';
-          node.descendants((textNode) => {
-            if (textNode.isText) {
-              text += textNode.text;
+          const doc = tiptap.state.doc;
+          let found = false;
+
+          doc.descendants((node, pos) => {
+            if (found) return false;
+
+            if (node.isText && node.text) {
+              const markerIndex = node.text.indexOf(searchText);
+              if (markerIndex !== -1) {
+                console.log(`📍 Marcador ${searchText} encontrado na posição ${pos + markerIndex}`);
+                
+                if (position === 'after') {
+                  targetPosition = pos + markerIndex + searchText.length;
+                  insertionPosition = targetPosition;
+                } else if (position === 'before') {
+                  targetPosition = pos + markerIndex;
+                  insertionPosition = targetPosition;
+                }
+                found = true;
+                return false;
+              }
             }
             return true;
           });
-          
-          return text;
-        };
 
-        const doc = tiptap.state.doc;
-        let targetPosition = null;
-        let found = false;
-
-        // Procurar diretamente pelo marcador [n] no documento
-        console.log(`🔍 Procurando pelo marcador: "${searchText}"`);
-        
-        doc.descendants((node, pos) => {
-          if (found) return false; // Parar se já encontrou
-
-          if (node.isText && node.text) {
-            const markerIndex = node.text.indexOf(searchText);
-            if (markerIndex !== -1) {
-              console.log(`📍 Marcador ${searchText} encontrado no bloco na posição ${pos + markerIndex}`);
-              
-              if (position === 'after') {
-                // Inserir após o marcador
-                targetPosition = pos + markerIndex + searchText.length;
-                console.log(`📍 Inserindo APÓS marcador na posição: ${targetPosition}`);
-              } else if (position === 'before') {
-                // Inserir antes do marcador
-                targetPosition = pos + markerIndex;
-                console.log(`📍 Inserindo ANTES do marcador na posição: ${targetPosition}`);
-              }
-              found = true;
-              return false; // Parar a busca
-            }
+          if (targetPosition === null) {
+            console.warn(`⚠️ Marcador "${searchText}" não encontrado, inserindo no final`);
+            targetPosition = tiptap.state.doc.content.size;
+            insertionPosition = targetPosition;
           }
-
-          return true; // Continuar buscando
-        });
-
-        if (targetPosition !== null) {
-          console.log(`📍 Posição encontrada: ${targetPosition}`);
-          console.log(`📝 Tentando inserir texto: "${newText}"`);
-          
-          try {
-            // CORREÇÃO: Forçar foco e aguardar estabilização
-            tiptap.commands.focus();
-            await new Promise(resolve => setTimeout(resolve, 100));
-            
-            // Verificar se a posição ainda é válida após o foco
-            const docSize = tiptap.state.doc.content.size;
-            if (targetPosition > docSize) {
-              console.log(`⚠️ Posição ${targetPosition} inválida (doc size: ${docSize}), ajustando para o final`);
-              targetPosition = docSize;
-            }
-            
-            // Posicionar cursor na posição encontrada
-            console.log(`🎯 Posicionando cursor na posição: ${targetPosition}`);
-            tiptap.commands.setTextSelection(targetPosition);
-            
-            // Aguardar um pouco para garantir que a seleção foi aplicada
-            await new Promise(resolve => setTimeout(resolve, 50));
-            
-            // Verificar se o cursor foi posicionado corretamente
-            const currentPos = tiptap.state.selection.from;
-            console.log(`📍 Cursor posicionado em: ${currentPos} (esperado: ${targetPosition})`);
-            
-            // NOVO: Usar transaction para inserção mais robusta
-            let insertResult = false;
-            
-            if (position === 'after') {
-              console.log(`📝 Inserindo APÓS com quebras de linha`);
-              const contentToInsert = `\n\n${textWithMarker}`;
-              console.log(`📝 Conteúdo a inserir: "${contentToInsert}"`);
-              
-              // Usar insertContentAt para maior precisão
-              insertResult = tiptap.commands.insertContentAt(targetPosition, contentToInsert);
-              
-              if (!insertResult) {
-                // Fallback: inserção simples
-                console.log(`🔄 Fallback: inserção simples após posicionamento`);
-                insertResult = tiptap.commands.insertContent(contentToInsert);
-              }
-              
-              console.log(`📝 Resultado da inserção:`, insertResult);
-              
-            } else {
-              console.log(`📝 Inserindo ANTES com quebras de linha`);
-              const contentToInsert = `${textWithMarker}\n\n`;
-              console.log(`📝 Conteúdo a inserir: "${contentToInsert}"`);
-              
-              insertResult = tiptap.commands.insertContentAt(targetPosition, contentToInsert);
-              
-              if (!insertResult) {
-                console.log(`🔄 Fallback: inserção simples antes do posicionamento`);
-                insertResult = tiptap.commands.insertContent(contentToInsert);
-              }
-              
-              console.log(`📝 Resultado da inserção:`, insertResult);
-            }
-            
-            // NOVO: Verificação robusta pós-inserção
-            console.log(`🔍 Verificando se inserção foi bem-sucedida...`);
-            const verified = await verifyInsertion(marker, 3000);
-            console.log(`✅ Verificação final: ${verified ? 'SUCESSO' : 'FALHA'}`);
-            
-            if (verified && shouldUpdateMapping) {
-              const titleFromText = newText.substring(0, 50).trim();
-              onReferenceUpdate(marker, titleFromText);
-            }
-            
-            // Verificar tamanho do documento
-            const newDocSize = tiptap.state.doc.content.size;
-            console.log(`📊 Tamanho do documento após inserção: ${newDocSize}`);
-            
-            // NOVO: Forçar re-render do editor
-            try {
-              // Força update do BlockNote
-              if (editor.forceUpdate && typeof editor.forceUpdate === 'function') {
-                editor.forceUpdate();
-              }
-              
-              // Trigger change event manually se necessário
-              if (onChange && typeof onChange === 'function') {
-                const currentMarkdown = await editor.getMarkdown?.() || '';
-                onChange(currentMarkdown);
-              }
-            } catch (renderError) {
-              console.warn('⚠️ Erro ao forçar re-render:', renderError);
-            }
-            
-            // Focar no editor após inserção
-            tiptap.commands.focus();
-            
-            // Rolar o editor até a posição onde o texto foi inserido
-            try {
-              console.log('🔄 Rolando editor para posição do texto inserido...');
-              
-              // Calcular posição final mais conservadoramente
-              const textLength = textWithMarker.length;
-              let finalPosition = targetPosition + textLength + 4; // +4 para quebras de linha
-              
-              console.log(`📍 Rolando para posição final: ${finalPosition}`);
-              
-              // Scroll mais simples e confiável
-              const finalDocSize = tiptap.state.doc.content.size;
-              const scrollPosition = Math.min(finalPosition, finalDocSize);
-              
-              tiptap.commands.setTextSelection(scrollPosition);
-              
-              // Scroll do container do editor
-              const editorContainer = tiptap.view.dom.closest('.bn-editor');
-              if (editorContainer) {
-                editorContainer.scrollTop = editorContainer.scrollHeight * 0.8; // 80% do scroll
-                console.log('✅ Editor rolado para posição do texto inserido');
-              }
-            } catch (scrollError) {
-              console.warn('⚠️ Erro ao rolar editor:', scrollError);
-            }
-            
-            console.log(`✅ Texto "${newText}" inserido ${position} "${searchText}"`);
-            
-            // IMPORTANTE: Forçar atualização do onChange para sincronizar estado
-            setTimeout(() => {
-              if (onChange && typeof onChange === 'function') {
-                const currentMarkdown = editor.topLevelBlocks.map(block => {
-                  if (block.type === 'heading') {
-                    return `${'#'.repeat(block.props.level)} ${block.content?.[0]?.text || ''}`;
-                  } else if (block.type === 'paragraph') {
-                    return block.content?.[0]?.text || '';
-                  }
-                  return '';
-                }).filter(text => text.trim()).join('\n\n');
-                
-                console.log('🔄 Forçando atualização do estado após inserção');
-                onChange(currentMarkdown);
-              }
-            }, 100);
-            
-            return verified;
-            
-          } catch (insertError) {
-            console.error('❌ Erro durante inserção específica:', insertError);
-            
-            // Fallback: tentar inserir no final
-            try {
-              console.log('🔄 Tentando fallback: inserir no final');
-              tiptap.commands.focus();
-              await new Promise(resolve => setTimeout(resolve, 50));
-              
-              tiptap.commands.setTextSelection(tiptap.state.doc.content.size);
-              const success = tiptap.commands.insertContent(`\n\n${textWithMarker}`);
-              
-              const verified = await verifyInsertion(marker, 2000);
-              
-              if (verified && shouldUpdateMapping) {
-                const titleFromText = newText.substring(0, 50).trim();
-                onReferenceUpdate(marker, titleFromText);
-              }
-              console.log('✅ Texto inserido no final (fallback)');
-              return verified;
-            } catch (fallbackError) {
-              console.error('❌ Falha no fallback:', fallbackError);
-              return false;
-            }
-          }
-        } else {
-          console.warn(`⚠️ Marcador para "${searchText}" não encontrado, inserindo no final`);
-          
-          // Fallback: inserir no final do documento
-          tiptap.commands.setTextSelection(tiptap.state.doc.content.size);
-          tiptap.commands.insertContent(`\n\n${newText}`);
-          return true;
         }
 
-      } catch (error) {
-        console.error('❌ Erro durante inserção de texto:', error);
+        // 6. Executar inserção
+        console.log(`📝 Inserindo na posição: ${targetPosition}`);
         
-        // Fallback de segurança: tentar inserir no final
+        await new Promise(resolve => setTimeout(resolve, 100));
+        
+        const docSize = tiptap.state.doc.content.size;
+        if (targetPosition > docSize) {
+          console.log(`⚠️ Ajustando posição de ${targetPosition} para ${docSize}`);
+          targetPosition = docSize;
+          insertionPosition = targetPosition;
+        }
+        
+        tiptap.commands.setTextSelection(targetPosition);
+        await new Promise(resolve => setTimeout(resolve, 50));
+        
+        const contentToInsert = position === 'after' ? `\n\n${textWithMarker}` : `${textWithMarker}\n\n`;
+        const insertResult = tiptap.commands.insertContentAt(targetPosition, contentToInsert) || 
+                            tiptap.commands.insertContent(contentToInsert);
+        
+        console.log(`📝 Resultado da inserção: ${insertResult}`);
+        
+        // 7. Verificar se inserção foi bem-sucedida
+        const verified = await verifyInsertion(marker, 3000);
+        console.log(`✅ Verificação de inserção: ${verified ? 'SUCESSO' : 'FALHA'}`);
+        
+        if (!verified) {
+          console.error('❌ Inserção falhou, abortando reindexação');
+          return false;
+        }
+
+        // KISS: Reindexação simples sem complexidade
+        console.log('✅ Inserção concluída - usando abordagem simples');
+        
+        // Apenas atualizar referenceMapping (título já é passado pelo callback)
+        if (typeof onReferenceUpdate === 'function') {
+          onReferenceUpdate(marker, ''); // Título será passado pelo textInsertionHelpers
+        }
+        
+        // Forçar atualização do onChange
+        if (onChange && typeof onChange === 'function') {
+          setTimeout(() => {
+            const currentMarkdown = editor.topLevelBlocks.map(block => {
+              if (block.type === 'heading') {
+                return `${'#'.repeat(block.props.level)} ${block.content?.[0]?.text || ''}`;
+              } else if (block.type === 'paragraph') {
+                return block.content?.[0]?.text || '';
+              }
+              return '';
+            }).filter(text => text.trim()).join('\n\n');
+            
+            console.log('🔄 Atualizando estado após inserção');
+            onChange(currentMarkdown);
+          }, 100);
+        }
+
+        // 14. Focar no editor e rolar para posição
+        tiptap.commands.focus();
+        
+        try {
+          const editorContainer = tiptap.view.dom.closest('.bn-editor');
+          if (editorContainer) {
+            editorContainer.scrollTop = editorContainer.scrollHeight * 0.8;
+            console.log('✅ Editor rolado para posição do texto inserido');
+          }
+        } catch (scrollError) {
+          console.warn('⚠️ Erro ao rolar editor:', scrollError);
+        }
+        
+        console.log(`✅ [${new Date().toLocaleTimeString()}] Inserção concluída: "${newText}" ${position} "${searchText}"`);
+        
+        // Debug: Verificar estado do editor após inserção
+        setTimeout(() => {
+          const finalContent = tiptap.state.doc.textContent;
+          console.log(`📊 [${new Date().toLocaleTimeString()}] Estado final do editor:`, {
+            contentLength: finalContent.length,
+            blockCount: editor.topLevelBlocks?.length || 0,
+            hasNewMarker: finalContent.includes(marker)
+          });
+        }, 200);
+        
+        return true;
+
+      } catch (error) {
+        console.error('❌ Erro durante inserção com reindexação:', error);
+        
+        // Fallback: inserção simples no final
         try {
           if (editor._tiptapEditor) {
-            editor._tiptapEditor.commands.focus();
+            const tiptap = editor._tiptapEditor;
+            const markerNumber = 1; // Fallback simples
+            const marker = `[${markerNumber}]`;
+            const textWithMarker = `${newText} ${marker}`;
+            
+            tiptap.commands.focus();
             await new Promise(resolve => setTimeout(resolve, 50));
             
-            editor._tiptapEditor.commands.setTextSelection(editor._tiptapEditor.state.doc.content.size);
-            const success = editor._tiptapEditor.commands.insertContent(`\n\n${textWithMarker}`);
+            tiptap.commands.setTextSelection(tiptap.state.doc.content.size);
+            const success = tiptap.commands.insertContent(`\n\n${textWithMarker}`);
             
-            const verified = await verifyInsertion(marker, 2000);
-            
-            if (verified && shouldUpdateMapping) {
+            if (success && typeof onReferenceUpdate === 'function') {
               const titleFromText = newText.substring(0, 50).trim();
               onReferenceUpdate(marker, titleFromText);
             }
+            
             console.log('✅ Texto inserido no final (fallback)');
-            return verified;
+            return success;
           }
         } catch (fallbackError) {
           console.error('❌ Falha no fallback:', fallbackError);
-          return false;
         }
         
         return false;
@@ -973,8 +914,10 @@ const BlockNoteEditor = forwardRef(({ initialContent = '', onChange, onScroll, o
       }
       
       console.log('🔍 === FIM DEBUG ===');
-    }
-  }), [editor, findTextInBlocks, testTextSelection, extractTextFromBlock]);
+    },
+
+    // insertTextAtPosition method is already defined above in the object
+  }), [editor, findTextInBlocks, testTextSelection, extractTextFromBlock, onReindexing]);
 
   useEffect(() => {
     if (onChange && editor.topLevelBlocks) {

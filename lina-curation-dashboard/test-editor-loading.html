@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Teste de Carregamento do Editor</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #1a1a1a;
+            color: #ffffff;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        .section {
+            margin: 20px 0;
+            padding: 15px;
+            border: 1px solid #333;
+            border-radius: 8px;
+            background-color: #2a2a2a;
+        }
+        .log {
+            background-color: #000;
+            color: #00ff00;
+            padding: 10px;
+            border-radius: 4px;
+            font-family: monospace;
+            white-space: pre-wrap;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        .content {
+            background-color: #333;
+            padding: 10px;
+            border-radius: 4px;
+            white-space: pre-wrap;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+        button {
+            background-color: #4CAF50;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔍 Teste de Carregamento do Editor</h1>
+        
+        <div class="section">
+            <h2>📊 Dados Simulados</h2>
+            <button onclick="loadMockData()">Carregar Dados Mock</button>
+            <button onclick="clearData()">Limpar Dados</button>
+            <div id="mockData" class="content"></div>
+        </div>
+        
+        <div class="section">
+            <h2>🔄 Processamento</h2>
+            <button onclick="processContent()">Processar Conteúdo</button>
+            <div id="processedContent" class="content"></div>
+        </div>
+        
+        <div class="section">
+            <h2>📝 Simulação do Editor</h2>
+            <button onclick="simulateEditor()">Simular Inicialização do Editor</button>
+            <div id="editorSimulation" class="content"></div>
+        </div>
+        
+        <div class="section">
+            <h2>📋 Logs</h2>
+            <button onclick="clearLogs()">Limpar Logs</button>
+            <div id="logs" class="log"></div>
+        </div>
+    </div>
+
+    <script>
+        let mockNewsData = null;
+        let processedData = null;
+        let lastMarkdown = null;
+
+        function log(message) {
+            const logsDiv = document.getElementById('logs');
+            const timestamp = new Date().toLocaleTimeString();
+            logsDiv.textContent += `[${timestamp}] ${message}\n`;
+            logsDiv.scrollTop = logsDiv.scrollHeight;
+            console.log(message);
+        }
+
+        function clearLogs() {
+            document.getElementById('logs').textContent = '';
+        }
+
+        function loadMockData() {
+            mockNewsData = {
+                final_text: `# Introdução
+
+Este é um texto de exemplo com marcadores de referência.
+
+///<Lançamento do Tênis Cloudzone Moon>///
+
+O novo tênis da On apresenta tecnologia inovadora.
+
+# Corpo
+
+///<Sistema CloudTec® para Amortecimento Adaptável>///
+
+A tecnologia CloudTec® oferece amortecimento superior.
+
+///<Parceria com Zendaya e Law Roach>///
+
+A colaboração com celebridades impulsiona as vendas.
+
+# Conclusão
+
+Este lançamento representa um marco importante para a marca.`
+            };
+
+            document.getElementById('mockData').textContent = JSON.stringify(mockNewsData, null, 2);
+            log('✅ Dados mock carregados');
+            log(`📊 final_text length: ${mockNewsData.final_text.length}`);
+            log(`📄 final_text preview: ${mockNewsData.final_text.substring(0, 100)}...`);
+        }
+
+        function clearData() {
+            mockNewsData = null;
+            processedData = null;
+            lastMarkdown = null;
+            document.getElementById('mockData').textContent = '';
+            document.getElementById('processedContent').textContent = '';
+            document.getElementById('editorSimulation').textContent = '';
+            log('🗑️ Dados limpos');
+        }
+
+        function processFinalText(text) {
+            if (!text || typeof text !== 'string') return { processedText: text, mapping: new Map() };
+            
+            const regex = /\/\/\/<([^>]+)>\/\/\//g;
+            let processedText = text;
+            let referenceNumber = 1;
+            const mapping = new Map();
+            
+            processedText = processedText.replace(regex, (fullMatch, content) => {
+                const marker = `[${referenceNumber}]`;
+                
+                mapping.set(marker, content.trim());
+                mapping.set(content.trim(), marker);
+                
+                log(`📍 Mapeamento criado: ${marker} <-> "${content.trim()}"`);
+                
+                referenceNumber++;
+                return marker;
+            });
+            
+            log(`🗺️ Mapeamento total criado com ${mapping.size / 2} referências`);
+            
+            return { processedText, mapping };
+        }
+
+        function processContent() {
+            if (!mockNewsData || !mockNewsData.final_text) {
+                log('❌ Nenhum dado disponível para processar');
+                return;
+            }
+
+            log('🔄 Iniciando processamento...');
+            log(`📊 Input: hasNewsData=${!!mockNewsData}, hasFinalText=${!!(mockNewsData?.final_text)}`);
+            log(`📊 finalTextType=${typeof mockNewsData?.final_text}, length=${mockNewsData?.final_text?.length || 0}`);
+
+            // Simular lógica do editorContent
+            if (lastMarkdown && lastMarkdown.trim()) {
+                log('✅ Preservando conteúdo existente do editor');
+                processedData = { content: lastMarkdown, source: 'preserved' };
+            } else if (mockNewsData?.final_text && typeof mockNewsData.final_text === 'string' && mockNewsData.final_text.trim()) {
+                log('✅ Usando final_text do banco de dados (primeira vez)');
+                const { processedText, mapping } = processFinalText(mockNewsData.final_text.trim());
+                processedData = { content: processedText, mapping, source: 'final_text' };
+                log(`📄 processedText length: ${processedText.length}`);
+            } else {
+                log('⚠️ Nenhum conteúdo disponível - mostrando mensagem informativa');
+                processedData = { 
+                    content: `# Editor Estruturado
+
+Este editor mostra o conteúdo da coluna "final_text" do banco de dados.
+
+Se você está vendo esta mensagem, verifique se a coluna "final_text" está preenchida.
+
+Para testar o highlighting por marcadores, clique no botão "Teste Marcador".`,
+                    source: 'fallback'
+                };
+            }
+
+            document.getElementById('processedContent').textContent = JSON.stringify(processedData, null, 2);
+            log(`✅ Processamento concluído. Fonte: ${processedData.source}`);
+        }
+
+        function simulateEditor() {
+            if (!processedData) {
+                log('❌ Nenhum conteúdo processado disponível');
+                return;
+            }
+
+            log('🔍 Simulando inicialização do BlockNoteEditor...');
+            log(`📊 initialContent: hasContent=${!!processedData.content}, length=${processedData.content?.length || 0}`);
+            log(`📄 preview: ${processedData.content?.substring(0, 100) || 'N/A'}...`);
+
+            // Simular convertMarkdownToBlocks
+            const lines = processedData.content.split('\n');
+            const blocks = [];
+            
+            lines.forEach((line) => {
+                if (!line.trim()) {
+                    blocks.push({ type: 'paragraph', content: [] });
+                    return;
+                }
+                
+                const headingMatch = line.match(/^(#{1,6})\s+(.*)$/);
+                if (headingMatch) {
+                    const level = Math.min(6, headingMatch[1].length);
+                    const headingText = headingMatch[2].trim();
+                    blocks.push({
+                        type: 'heading',
+                        props: { level },
+                        content: [{ type: 'text', text: headingText }]
+                    });
+                    return;
+                }
+                
+                blocks.push({
+                    type: 'paragraph',
+                    content: [{ type: 'text', text: line }]
+                });
+            });
+
+            log(`✅ Blocos criados: ${blocks.length} blocos`);
+            log(`📄 Primeiro bloco: ${JSON.stringify(blocks[0])}`);
+
+            // Simular inicialização do lastMarkdown
+            if (!lastMarkdown && processedData.content && !processedData.content.includes('Se você está vendo esta mensagem')) {
+                log('🔄 Inicializando lastMarkdown com conteúdo do editor');
+                lastMarkdown = processedData.content;
+                log(`📄 lastMarkdown definido: ${lastMarkdown.length} caracteres`);
+            }
+
+            const simulation = {
+                blocksCount: blocks.length,
+                firstBlock: blocks[0],
+                lastMarkdownSet: !!lastMarkdown,
+                lastMarkdownLength: lastMarkdown?.length || 0
+            };
+
+            document.getElementById('editorSimulation').textContent = JSON.stringify(simulation, null, 2);
+            log('✅ Simulação do editor concluída');
+        }
+
+        // Inicializar logs
+        log('🚀 Sistema de teste inicializado');
+        log('📋 Instruções:');
+        log('1. Clique em "Carregar Dados Mock" para simular dados do banco');
+        log('2. Clique em "Processar Conteúdo" para simular a lógica do React');
+        log('3. Clique em "Simular Inicialização do Editor" para testar o BlockNote');
+    </script>
+</body>
+</html>

@@ -166,7 +166,7 @@ export const insertTextAtPosition = (editor, insertionInfo, newText) => {
  * @param {Function} onReferenceUpdate - Callback para atualizar referenceMapping
  * @returns {Object} Resultado da operação
  */
-export const handleCanvasConnection = async (connectionParams, nodes, edges, editorRef, referenceMapping = null, onReferenceUpdate = null) => {
+export const handleCanvasConnection = async (connectionParams, nodes, edges, editorRef, referenceMapping = null, onReferenceUpdate = null, onReindexing = null) => {
   const { source, target } = connectionParams;
   
   console.log('🔗 Processando nova conexão do canvas:', connectionParams);
@@ -218,6 +218,29 @@ export const handleCanvasConnection = async (connectionParams, nodes, edges, edi
   console.log('📝 Node para inserir:', nodeToInsert.data.title);
   console.log('📍 Posição de inserção:', insertionInfo);
   
+  // NOVA: Detecção de inserção problemática entre marcadores
+  if (insertionInfo.searchText && referenceMapping) {
+    const searchMarker = referenceMapping.get(insertionInfo.searchText.trim());
+    if (searchMarker) {
+      console.log('🔍 Detectando possível inserção entre marcadores...');
+      
+      // Verificar se já existe um marcador para o título que queremos inserir
+      const existingMarker = referenceMapping.get(nodeToInsert.data.title.trim());
+      if (existingMarker) {
+        console.log('⚠️ INSERÇÃO BLOQUEADA: Título já existe no texto');
+        console.log(`📍 Título "${nodeToInsert.data.title}" já mapeado para ${existingMarker}`);
+        return { 
+          success: false, 
+          message: `Texto "${nodeToInsert.data.title}" já existe no editor`,
+          reason: 'duplicate_title'
+        };
+      }
+      
+      // Verificar se estamos tentando inserir entre dois marcadores consecutivos
+      console.log('🔍 Verificando se inserção é segura...');
+    }
+  }
+  
   // Preparar o texto a ser inserido
   const textToInsert = nodeToInsert.data.phrase;
   
@@ -225,11 +248,20 @@ export const handleCanvasConnection = async (connectionParams, nodes, edges, edi
   
   // Converter título para marcador usando referenceMapping
   let searchText = insertionInfo.searchText;
+  let insertionStrategy = 'normal';
+  
   if (referenceMapping && searchText) {
     const marker = referenceMapping.get(searchText.trim());
     if (marker) {
       console.log(`🔍 Convertendo título "${searchText}" para marcador "${marker}"`);
       searchText = marker;
+      
+      // NOVA: Estratégia segura para inserções entre marcadores
+      if (insertionInfo.position === 'after') {
+        console.log('🛡️ Usando estratégia segura: inserir no final em vez de entre marcadores');
+        insertionStrategy = 'safe_append';
+        searchText = null; // Inserir no final
+      }
     } else {
       console.log(`⚠️ Marcador não encontrado para título "${searchText}"`);
     }
@@ -238,16 +270,25 @@ export const handleCanvasConnection = async (connectionParams, nodes, edges, edi
   // Inserir no editor usando o método do BlockNoteEditor
   if (editorRef.current && editorRef.current.insertTextAtPosition) {
     try {
+      console.log(`🚀 Executando inserção com estratégia: ${insertionStrategy}`);
+      
+      const finalPosition = insertionStrategy === 'safe_append' ? 'after' : insertionInfo.position;
+      const finalSearchText = insertionStrategy === 'safe_append' ? '' : searchText;
+      
       const success = await editorRef.current.insertTextAtPosition(
-        searchText,
+        finalSearchText,
         textToInsert,
-        insertionInfo.position,
-        onReferenceUpdate  // Passar callback para atualizar referenceMapping
+        finalPosition,
+        (marker, _) => onReferenceUpdate?.(marker, nodeToInsert.data.title), // Passar título correto
+        onReindexing        // Passar callback para processar reindexação
       );
       
       if (success) {
-        console.log('✅ Texto inserido com sucesso no editor');
-        return { success: true, message: 'Texto inserido com sucesso' };
+        const message = insertionStrategy === 'safe_append' 
+          ? 'Texto inserido com segurança no final (evitou conflito entre marcadores)'
+          : 'Texto inserido com sucesso';
+        console.log(`✅ ${message}`);
+        return { success: true, message };
       } else {
         console.error('❌ Falha ao inserir texto no editor');
         return { success: false, error: 'Falha na inserção' };

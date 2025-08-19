@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useRef, useCallback, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { FileText, Save, X, Layers as LayersIcon, Quote as QuoteIcon, Braces as BracesIcon, ChevronLeft, ChevronRight, Library as LibraryIcon, Bug, TestTube, Target, Eye, EyeOff } from 'lucide-react';
+import { FileText, Save, X, Layers as LayersIcon, Quote as QuoteIcon, Braces as BracesIcon, ChevronLeft, ChevronRight, Library as LibraryIcon, Bug, TestTube, Target, Eye, EyeOff, RotateCcw } from 'lucide-react';
 import CanvasLibraryView from './CanvasLibraryView';
 import BlockNoteEditor from './BlockNoteEditor';
 import MainSidebar from '../MainSidebar';
@@ -55,12 +55,12 @@ const SECTION_TITLES = {
   conclusion: 'Conclusão'
 };
 
-const NotionLikePage = ({ 
-  isOpen = true, 
-  onClose, 
-  newsData, 
-  newsTitle, 
-  onCanvasItemDragStart, 
+const NotionLikePage = ({
+  isOpen = true,
+  onClose,
+  newsData,
+  newsTitle,
+  onCanvasItemDragStart,
   onLinkDataToSection,
 
 }) => {
@@ -76,52 +76,206 @@ const NotionLikePage = ({
   const [isLeftCollapsed, setIsLeftCollapsed] = useState(false);
   const [dragState, setDragState] = useState({ active: false });
   const [recentlyAdded, setRecentlyAdded] = useState(null);
-  
+
   // CORREÇÃO: Estado para controlar quando o editor deve ser atualizado
   const [shouldUpdateEditor, setShouldUpdateEditor] = useState(false);
-  
+
+  // KISS: Estados simples para sessão
+  const [sessionContent, setSessionContent] = useState(null);
+  const [isSessionInitialized, setIsSessionInitialized] = useState(false);
+  const [editorFrozen, setEditorFrozen] = useState(false);
+
   // Estado para armazenar o mapeamento entre marcadores e títulos
   const [referenceMapping, setReferenceMapping] = useState(new Map());
-  
-  // Função para atualizar o referenceMapping quando novo texto é inserido
+
+  // NOVO: Função para atualizar o referenceMapping (sistema de sessão)
   const updateReferenceMapping = useCallback((marker, title) => {
     try {
-      console.log(`🗺️ Atualizando referenceMapping: ${marker} <-> "${title}"`);
-      
+      console.log(`🗺️ [${new Date().toLocaleTimeString()}] Atualizando referenceMapping: ${marker} <-> "${title}"`);
+
       setReferenceMapping(prevMapping => {
         const newMapping = new Map(prevMapping);
-        
+
+        // Verificar se já existe
+        if (newMapping.has(marker)) {
+          console.log(`⚠️ Marcador ${marker} já existe, sobrescrevendo`);
+        }
+        if (newMapping.has(title.trim())) {
+          console.log(`⚠️ Título "${title}" já existe, sobrescrevendo`);
+        }
+
         // Adicionar mapeamento bidirecional
         newMapping.set(marker, title.trim());
         newMapping.set(title.trim(), marker);
-        
+
         console.log(`✅ ReferenceMapping atualizado. Total: ${newMapping.size / 2} referências`);
+        console.log(`📋 Marcadores atuais:`, Array.from(newMapping.keys()).filter(k => k.startsWith('[')));
+
         return newMapping;
       });
-      
+
       console.log(`🔗 Novo mapeamento criado: ${marker} ↔ "${title}"`);
-      
+
     } catch (error) {
       console.error('❌ Erro ao atualizar referenceMapping:', error);
     }
   }, []);
-  
+
+  // Função aprimorada para atualizar referenceMapping com ReindexingMap
+  const updateReferenceMappingWithReindexing = useCallback((reindexingMap) => {
+    try {
+      console.log('🔄 Atualizando referenceMapping com ReindexingMap');
+      console.log(`📊 Processando ${reindexingMap.length} mudanças de marcadores`);
+
+      setReferenceMapping(prevMapping => {
+        const newMapping = new Map(prevMapping);
+        const changes = [];
+        const errors = [];
+
+        // Processar cada mudança no reindexingMap
+        reindexingMap.forEach((mapping, index) => {
+          const { oldMarker, newMarker, oldNumber, newNumber } = mapping;
+
+          console.log(`🔄 [${index + 1}/${reindexingMap.length}] Processando: ${oldMarker} -> ${newMarker}`);
+
+          try {
+            // Encontrar título associado ao marcador antigo
+            const associatedTitle = newMapping.get(oldMarker);
+
+            if (associatedTitle) {
+              // Remover mapeamentos antigos
+              newMapping.delete(oldMarker);
+              newMapping.delete(associatedTitle);
+
+              // Adicionar novos mapeamentos bidirecionais
+              newMapping.set(newMarker, associatedTitle);
+              newMapping.set(associatedTitle, newMarker);
+
+              changes.push({
+                title: associatedTitle,
+                oldMarker,
+                newMarker,
+                oldNumber,
+                newNumber,
+                action: 'updated'
+              });
+
+              console.log(`✅ Mapeamento atualizado: "${associatedTitle}" ${oldMarker} -> ${newMarker}`);
+
+            } else {
+              // Marcador não tem título associado - pode ser um novo marcador
+              console.log(`ℹ️ Marcador ${oldMarker} não tem título associado (pode ser novo marcador)`);
+
+              changes.push({
+                title: null,
+                oldMarker,
+                newMarker,
+                oldNumber,
+                newNumber,
+                action: 'no_title'
+              });
+            }
+
+          } catch (mappingError) {
+            console.error(`❌ Erro ao processar mapeamento ${oldMarker} -> ${newMarker}:`, mappingError);
+            errors.push({
+              oldMarker,
+              newMarker,
+              error: mappingError.message
+            });
+          }
+        });
+
+        // Log detalhado das mudanças
+        console.log(`📊 Resumo das mudanças no referenceMapping:`);
+        console.log(`  - Total processado: ${reindexingMap.length}`);
+        console.log(`  - Atualizações bem-sucedidas: ${changes.filter(c => c.action === 'updated').length}`);
+        console.log(`  - Marcadores sem título: ${changes.filter(c => c.action === 'no_title').length}`);
+        console.log(`  - Erros: ${errors.length}`);
+        console.log(`  - Tamanho final do mapping: ${newMapping.size / 2} referências`);
+
+        // Log detalhado de cada mudança
+        changes.forEach((change, index) => {
+          if (change.action === 'updated') {
+            console.log(`  ${index + 1}. "${change.title}" [${change.oldNumber}] -> [${change.newNumber}]`);
+          } else if (change.action === 'no_title') {
+            console.log(`  ${index + 1}. Marcador órfão [${change.oldNumber}] -> [${change.newNumber}]`);
+          }
+        });
+
+        // Log de erros se houver
+        if (errors.length > 0) {
+          console.error('❌ Erros durante atualização do referenceMapping:');
+          errors.forEach((error, index) => {
+            console.error(`  ${index + 1}. ${error.oldMarker} -> ${error.newMarker}: ${error.error}`);
+          });
+        }
+
+        return newMapping;
+      });
+
+      console.log('✅ ReferenceMapping atualizado com sucesso após reindexação');
+
+    } catch (error) {
+      console.error('❌ Erro crítico ao atualizar referenceMapping com reindexação:', error);
+    }
+  }, []);
+
+  // Callback para processar notificações de reindexação
+  const handleMarkerReindexing = useCallback((reindexingMap) => {
+    try {
+      console.log('📢 Recebida notificação de reindexação de marcadores');
+      console.log(`📊 ReindexingMap recebido:`, reindexingMap);
+
+      if (!reindexingMap || !Array.isArray(reindexingMap)) {
+        console.error('❌ ReindexingMap inválido recebido:', reindexingMap);
+        return;
+      }
+
+      if (reindexingMap.length === 0) {
+        console.log('ℹ️ ReindexingMap vazio - nenhuma ação necessária');
+        return;
+      }
+
+      console.log(`🔄 Processando reindexação de ${reindexingMap.length} marcadores`);
+
+      // Log detalhado do que será processado
+      console.log('📋 Detalhes da reindexação:');
+      reindexingMap.forEach((mapping, index) => {
+        const { oldMarker, newMarker, oldNumber, newNumber, isNewMarker, isExistingMarker } = mapping;
+        const type = isNewMarker ? 'NOVO' : isExistingMarker ? 'EXISTENTE' : 'DESCONHECIDO';
+        console.log(`  ${index + 1}. [${type}] ${oldMarker} -> ${newMarker} (${oldNumber} -> ${newNumber})`);
+      });
+
+      // Atualizar referenceMapping usando a função especializada
+      updateReferenceMappingWithReindexing(reindexingMap);
+
+      // Log de conclusão
+      console.log('✅ Processamento de reindexação concluído');
+      console.log('🔗 ReferenceMapping sincronizado com novos marcadores');
+
+    } catch (error) {
+      console.error('❌ Erro ao processar notificação de reindexação:', error);
+      console.error('📊 ReindexingMap que causou erro:', reindexingMap);
+    }
+  }, [updateReferenceMappingWithReindexing]);
+
   const EDITOR_MIN_PX = 480;
   const LIB_MIN_PX = 360;
-  
 
-  
 
-  
 
-  
+
+
+
+
 
 
   // Função simplificada para extrair texto de blocos
   const extractBlockTextFlat = useCallback((block) => {
     try {
       if (!block || !block.content) return '';
-      
+
       if (Array.isArray(block.content)) {
         let fullText = '';
         for (const item of block.content) {
@@ -148,15 +302,15 @@ const NotionLikePage = ({
         }
         return fullText;
       }
-      
+
       if (typeof block.content === 'string') {
         return block.content;
       }
-      
+
       if (block.content && block.content.text) {
         return block.content.text;
       }
-      
+
       return '';
     } catch (error) {
       console.error('❌ Erro ao extrair texto do bloco:', error);
@@ -265,9 +419,60 @@ const NotionLikePage = ({
 
   // Retorna { block, start, end } para o título -> [n], destacando somente a sentença antes do [n]
   const getMarkerSentenceRange = useCallback((editor, title) => {
-    if (!title || !referenceMapping?.size) return null;
-    const marker = referenceMapping.get(String(title).trim()); // ex.: "[1]"
-    if (!marker) return null;
+    console.log(`🔍 getMarkerSentenceRange para: "${title}"`);
+    console.log(`📊 ReferenceMapping size: ${referenceMapping?.size || 0}`);
+
+    if (!title || !referenceMapping?.size) {
+      console.log('❌ Título vazio ou referenceMapping vazio');
+      return null;
+    }
+
+    // Normalizar título para busca
+    const normalizedTitle = String(title).trim();
+    let marker = referenceMapping.get(normalizedTitle);
+
+    // Se não encontrou, tentar busca flexível
+    if (!marker) {
+      console.log(`🔍 Busca exata falhou, tentando busca flexível...`);
+
+      // Normalizar para busca (lowercase, sem acentos, etc)
+      const searchTitle = normalizedTitle.toLowerCase().trim();
+
+      for (const [key, value] of referenceMapping.entries()) {
+        if (key.startsWith('[')) continue; // Pular marcadores
+
+        const keyLower = key.toLowerCase().trim();
+
+        // Busca bidirecional mais flexível
+        if (keyLower.includes(searchTitle) || searchTitle.includes(keyLower)) {
+          marker = value;
+          console.log(`✅ Encontrado por busca flexível: "${key}" -> ${marker}`);
+          break;
+        }
+
+        // Busca por palavras-chave principais
+        const searchWords = searchTitle.split(' ').filter(w => w.length > 3);
+        const keyWords = keyLower.split(' ').filter(w => w.length > 3);
+
+        const matchingWords = searchWords.filter(sw =>
+          keyWords.some(kw => kw.includes(sw) || sw.includes(kw))
+        );
+
+        if (matchingWords.length >= Math.min(2, searchWords.length)) {
+          marker = value;
+          console.log(`✅ Encontrado por palavras-chave: "${key}" -> ${marker} (palavras: ${matchingWords.join(', ')})`);
+          break;
+        }
+      }
+    }
+
+    console.log(`🔍 Marcador encontrado: ${marker}`);
+
+    if (!marker) {
+      console.log(`❌ Nenhum marcador encontrado para "${title}"`);
+      console.log(`📋 Títulos disponíveis:`, Array.from(referenceMapping.keys()).filter(k => !k.startsWith('[')));
+      return null;
+    }
 
     const blocks = editor.topLevelBlocks || [];
     for (const block of blocks) {
@@ -312,7 +517,7 @@ const NotionLikePage = ({
         try {
           console.log(`✅ Texto encontrado no bloco ${block.id} na posição ${matchIndex} (versão limpa)`);
           const startOffset = mapCleanToOriginalIndex(blockText, matchIndex);
-          const endOffset   = mapCleanToOriginalIndex(blockText, matchIndex + cleanNeedle.length);
+          const endOffset = mapCleanToOriginalIndex(blockText, matchIndex + cleanNeedle.length);
           console.log(`🔍 Posições mapeadas: start=${startOffset}, end=${endOffset}`);
           const success = editorRef.current.highlightText(block.id, startOffset, endOffset, shouldHighlight);
           if (success) return true;
@@ -328,15 +533,22 @@ const NotionLikePage = ({
 
   // FUNÇÃO PRINCIPAL CORRIGIDA - Grifo por marcadores
   const handleHighlightText = useCallback(async (title, phrase, action) => {
+
     const editor = editorRef.current?.editor;
-    if (!editor || !editorRef.current?.highlightText) return;
+    if (!editor || !editorRef.current?.highlightText) {
+      console.log('❌ Editor ou highlightText não disponível');
+      return;
+    }
 
     // 1) Caminho novo: título -> [n] -> bloco -> sentença anterior
     const target = getMarkerSentenceRange(editor, title);
     if (target) {
+      console.log(`✅ Target encontrado para "${title}":`, target);
       const { block, start, end } = target;
       editorRef.current.highlightText(block.id, start, end, action === 'enter');
       return;
+    } else {
+      console.log(`❌ Target não encontrado para "${title}"`);
     }
 
     // 2) Fallback antigo (mantém se quiser cobrir casos sem marcador)
@@ -358,22 +570,28 @@ const NotionLikePage = ({
   // FUNÇÃO DE TESTE específica para marcadores
   const testMarkerHighlight = useCallback(() => {
     console.log('🧪 === TESTE DE GRIFO POR MARCADORES ===');
-    
-    // Simular hover com um título real do exemplo
-    const testTitle = "Lançamento do Tênis Cloudzone Moon";
-    
-    console.log(`🧪 Testando grifo para título: "${testTitle}"`);
-    
-    handleHighlightText(testTitle, "", "enter");
-    
-    // Remover após 3 segundos
-    setTimeout(() => {
-      console.log(`🧪 Removendo grifo de teste...`);
-      handleHighlightText(testTitle, "", "leave");
-    }, 3000);
-    
+
+    // Testar com títulos do referenceMapping
+    const availableTitles = Array.from(referenceMapping.keys()).filter(k => !k.startsWith('['));
+    console.log('📋 Títulos disponíveis para teste:', availableTitles);
+
+    if (availableTitles.length > 0) {
+      const testTitle = availableTitles[0];
+      console.log(`🧪 Testando grifo para título: "${testTitle}"`);
+
+      handleHighlightText(testTitle, "", "enter");
+
+      // Remover após 3 segundos
+      setTimeout(() => {
+        console.log(`🧪 Removendo grifo de teste...`);
+        handleHighlightText(testTitle, "", "leave");
+      }, 3000);
+    } else {
+      console.log('❌ Nenhum título disponível para teste');
+    }
+
     console.log('🧪 === FIM TESTE MARCADORES ===');
-  }, [handleHighlightText]);
+  }, [handleHighlightText, referenceMapping]);
 
   // FUNÇÃO DE DEBUG PARA SELEÇÃO
   const debugTextSelection = useCallback(() => {
@@ -381,28 +599,28 @@ const NotionLikePage = ({
       console.log('❌ Editor não disponível para debug');
       return;
     }
-    
+
     const editor = editorRef.current.editor;
-    
+
     console.log('🔍 === DEBUG TEXT SELECTION ===');
-    
+
     // Verificar métodos de seleção
     console.log('🎯 Métodos de seleção disponíveis:');
     console.log('- setTextCursor:', typeof editorRef.current.setTextCursor, editorRef.current.setTextCursor ? '✅' : '❌');
     console.log('- setSelection:', typeof editorRef.current.setSelection, editorRef.current.setSelection ? '✅' : '❌');
     console.log('- getSelection:', typeof editor.getSelection, editor.getSelection ? '✅' : '❌');
-    
+
     // Verificar métodos de estilo
     console.log('🎨 Métodos de estilo disponíveis:');
     console.log('- addStyles:', typeof editorRef.current.addStyles, editorRef.current.addStyles ? '✅' : '❌');
     console.log('- removeStyles:', typeof editorRef.current.removeStyles, editorRef.current.removeStyles ? '✅' : '❌');
     console.log('- toggleStyles:', typeof editorRef.current.toggleStyles, editorRef.current.toggleStyles ? '✅' : '❌');
-    
+
     // Verificar blocos
     console.log('📄 Blocos disponíveis:');
     const blocks = editor.topLevelBlocks || [];
     console.log(`- Total de blocos: ${blocks.length}`);
-    
+
     if (blocks.length > 0) {
       const firstBlock = blocks[0];
       const blockText = extractBlockTextFlat(firstBlock);
@@ -410,7 +628,7 @@ const NotionLikePage = ({
       console.log(`- Primeiro bloco texto: "${blockText.substring(0, 100)}..."`);
       console.log(`- Primeiro bloco length: ${blockText.length}`);
     }
-    
+
     // Verificar final_text e marcadores
     console.log('🗺️ Verificação de marcadores:');
     const finalText = newsData?.final_text;
@@ -422,27 +640,38 @@ const NotionLikePage = ({
         console.log(`- Primeiro marcador: ${markers[0]}`);
       }
     }
-    
+
     console.log('🔍 === FIM DEBUG ===');
   }, [newsData, extractBlockTextFlat]);
 
   // FUNÇÃO DE TESTE SIMPLES
   const testSimpleHighlight = useCallback(async () => {
     console.log('🧪 === TESTE SIMPLES DE HIGHLIGHT ===');
-    
+
     if (!editorRef.current || !editorRef.current.editor) {
       console.log('❌ Editor não disponível');
       return;
     }
-    
+
     // Usar método de teste do editor
     if (editorRef.current.testTextSelection) {
       await editorRef.current.testTextSelection("texto");
     } else {
       console.log('❌ testTextSelection não disponível');
     }
-    
+
     console.log('🧪 === FIM TESTE ===');
+  }, []);
+
+  // NOVA: Função para resetar sessão (debug)
+  const resetSession = useCallback(() => {
+    console.log('🔄 === RESETANDO SESSÃO ===');
+    setSessionContent(null);
+    setIsSessionInitialized(false);
+    setEditorFrozen(false);
+    setLastMarkdown('');
+    setReferenceMapping(new Map());
+    console.log('✅ Sessão resetada e descongelada');
   }, []);
 
   // Chips com o mesmo visual do MonitorNode (azul para dados, laranja para estrutura)
@@ -495,72 +724,65 @@ const NotionLikePage = ({
   // Função CORRIGIDA para processar o texto mantendo mapeamento das referências
   const processFinalText = useCallback((text) => {
     if (!text || typeof text !== 'string') return { processedText: text, mapping: new Map() };
-    
+
     // Regex para encontrar trechos ///<texto>///
     const regex = /\/\/\/<([^>]+)>\/\/\//g;
     let processedText = text;
     let referenceNumber = 1;
     const mapping = new Map();
-    
+
     // Substituir cada trecho marcado por um marcador visual simples E guardar o mapeamento
     processedText = processedText.replace(regex, (fullMatch, content) => {
       const marker = `[${referenceNumber}]`;
-      
+
       // IMPORTANTE: Guardar o mapeamento entre o marcador e o conteúdo original
       mapping.set(marker, content.trim());
       mapping.set(content.trim(), marker); // Mapeamento bidirecional
-      
+
       console.log(`📍 Mapeamento criado: ${marker} <-> "${content.trim()}"`);
-      
+
       referenceNumber++;
       return marker;
     });
-    
+
     console.log(`🗺️ Mapeamento total criado com ${mapping.size / 2} referências`);
-    
+
     return { processedText, mapping };
   }, []);
-  
 
 
-  // CORREÇÃO: Preservar conteúdo do editor e evitar reset desnecessário
+
+  // ULTRA-KISS: Editor congelado após primeira inicialização
   const editorContent = useMemo(() => {
-    console.log('🔍 NotionLikePage - editorContent recalculado');
-    
-    // Se já temos conteúdo no editor (lastMarkdown), preservar
-    if (lastMarkdown && lastMarkdown.trim()) {
-      console.log('✅ Preservando conteúdo existente do editor:', lastMarkdown.length, 'caracteres');
-      return lastMarkdown;
+    // Se editor está congelado, não mudar mais nada
+    if (editorFrozen && sessionContent) {
+      return sessionContent;
     }
-    
-    // Se não temos conteúdo salvo, usar final_text como base
-    if (newsData?.final_text && typeof newsData.final_text === 'string' && newsData.final_text.trim()) {
-      console.log('✅ Usando final_text do banco de dados (primeira vez)');
+
+    // Primeira inicialização
+    if (!isSessionInitialized && newsData?.final_text) {
       const { processedText, mapping } = processFinalText(newsData.final_text.trim());
+
+      // Congelar imediatamente
+      setSessionContent(processedText);
+      setIsSessionInitialized(true);
+      setEditorFrozen(true);
       setReferenceMapping(mapping);
+
+      console.log('🔒 Editor inicializado e congelado');
       return processedText;
     }
-    
-    // Fallback simples
-    console.log('⚠️ Nenhum conteúdo disponível - mostrando mensagem informativa');
-    setReferenceMapping(new Map());
-    return `# Editor Estruturado
 
-Este editor mostra o conteúdo da coluna "final_text" do banco de dados.
-
-Se você está vendo esta mensagem, verifique se a coluna "final_text" está preenchida.
-
-Para testar o highlighting por marcadores, clique no botão "Teste Marcador".`;
-  }, [newsData?.final_text, processFinalText, lastMarkdown]);
+    return sessionContent || `# Editor carregando...`;
+  }, [editorFrozen, sessionContent, isSessionInitialized, newsData?.final_text, processFinalText]);
 
   const sectionMarkdownMap = useMemo(() => {
-    // SEMPRE usar final_text se disponível
-    if (newsData?.final_text && typeof newsData.final_text === 'string' && newsData.final_text.trim()) {
-      const { processedText } = processFinalText(newsData.final_text.trim());
-      const lines = processedText.split('\n');
+    // Usar editorContent para processar seções (mas apenas se não for a mensagem de fallback)
+    if (editorContent && editorContent.trim() && !editorContent.includes('Se você está vendo esta mensagem')) {
+      const lines = editorContent.split('\n');
       const sections = { summary: '', body: '', conclusion: '' };
       let currentSection = null;
-      
+
       for (const line of lines) {
         const trimmedLine = line.trim();
         // Detectar seções por diferentes formatos de heading
@@ -575,7 +797,7 @@ Para testar o highlighting por marcadores, clique no botão "Teste Marcador".`;
           sections[currentSection] += (sections[currentSection] ? '\n' : '') + line;
         }
       }
-      
+
       // Processar cada seção
       const processedSections = {};
       Object.keys(sections).forEach(sectionKey => {
@@ -585,54 +807,73 @@ Para testar o highlighting por marcadores, clique no botão "Teste Marcador".`;
           processedSections[sectionKey] = `# ${SECTION_TITLES[sectionKey]}`;
         }
       });
-      
+
       return processedSections;
     }
-    
-    // Se não tiver final_text, retornar seções vazias
+
+    // Se não tiver conteúdo válido, retornar seções vazias
     return {
       summary: `# ${SECTION_TITLES.summary}`,
       body: `# ${SECTION_TITLES.body}`,
       conclusion: `# ${SECTION_TITLES.conclusion}`
     };
-  }, [newsData?.final_text, processFinalText]);
+  }, [editorContent]);
 
   // CORREÇÃO: Preservar conteúdo do editor ao filtrar seções
   const displayContent = useMemo(() => {
+    console.log('🔍 NotionLikePage - displayContent recalculado');
+    console.log('📊 Debug displayContent inputs:', {
+      shouldUpdateEditor,
+      hasLastMarkdown: !!lastMarkdown,
+      filteredSection,
+      hasEditorContent: !!editorContent,
+      editorContentPreview: editorContent?.substring(0, 100) || 'N/A'
+    });
+
     // CORREÇÃO: Se o editor deve ser atualizado, usar lastMarkdown
     if (shouldUpdateEditor && lastMarkdown && lastMarkdown.trim()) {
       console.log('✅ Editor marcado para atualização, usando lastMarkdown');
       return lastMarkdown;
     }
-    
+
     // Se temos conteúdo no editor, sempre priorizar
     if (lastMarkdown && lastMarkdown.trim()) {
-      if (!filteredSection) return lastMarkdown;
-      
+      if (!filteredSection) {
+        console.log('✅ Usando lastMarkdown (sem filtro de seção)');
+        return lastMarkdown;
+      }
+
       // Para seções filtradas, tentar extrair da seção mas preservar o resto
       const sectionContent = sectionMarkdownMap[filteredSection];
       if (sectionContent) {
         console.log('✅ Mostrando seção filtrada:', filteredSection);
         return sectionContent;
       }
-      
+
       // Se não encontrou a seção, manter conteúdo atual
       console.log('⚠️ Seção não encontrada, mantendo conteúdo atual');
       return lastMarkdown;
     }
-    
+
     // Fallback para primeira renderização
+    console.log('🔄 Primeira renderização - usando editorContent');
+    console.log('📄 editorContent sendo usado:', editorContent?.substring(0, 200) + '...');
     if (!filteredSection) return editorContent;
     return sectionMarkdownMap[filteredSection] || editorContent;
   }, [filteredSection, sectionMarkdownMap, editorContent, lastMarkdown, shouldUpdateEditor]);
 
-  // CORREÇÃO: Só atualizar lastMarkdown na primeira renderização
+  // KISS: Sincronizar mudanças para highlight funcionar
   useEffect(() => {
-    if (!lastMarkdown && editorContent) {
-      console.log('🔄 Inicializando lastMarkdown com conteúdo inicial');
-      setLastMarkdown(editorContent);
+    if (lastMarkdown && lastMarkdown !== sessionContent) {
+      console.log(`🔄 [${new Date().toLocaleTimeString()}] Sync para highlight funcionar`);
+      console.log('📊 Diferenças:', {
+        lastMarkdownLength: lastMarkdown?.length || 0,
+        sessionContentLength: sessionContent?.length || 0,
+        areEqual: lastMarkdown === sessionContent
+      });
+      setSessionContent(lastMarkdown);
     }
-  }, [editorContent, lastMarkdown]);
+  }, [lastMarkdown]);
 
   // CORREÇÃO: Resetar shouldUpdateEditor quando o editor for atualizado
   useEffect(() => {
@@ -646,15 +887,15 @@ Para testar o highlighting por marcadores, clique no botão "Teste Marcador".`;
   useEffect(() => {
     const handleCanvasItemHover = (event) => {
       const { action, title, phrase } = event.detail;
-      
-      
+
+
       if (title) {
         handleHighlightText(title, phrase, action);
       }
     };
 
     window.addEventListener('canvas-item-hover', handleCanvasItemHover);
-    
+
     return () => {
       window.removeEventListener('canvas-item-hover', handleCanvasItemHover);
     };
@@ -663,21 +904,21 @@ Para testar o highlighting por marcadores, clique no botão "Teste Marcador".`;
   const handleContentAdd = useCallback((dragData, sectionId) => {
     try {
       if (!dragData || !sectionId) return;
-      
+
       console.log('📝 Conteúdo adicionado via drag & drop:', { sectionId, dragData });
-      
+
       // CORREÇÃO: Marcar que o editor deve ser atualizado
       setShouldUpdateEditor(true);
-      
+
       // Mostrar feedback visual
       setRecentlyAdded({ sectionId, at: Date.now() });
       setTimeout(() => setRecentlyAdded(null), 1200);
-      
+
       // Chamar callback de link se disponível
       if (typeof onLinkDataToSection === 'function') {
         onLinkDataToSection(sectionId, dragData);
       }
-    } catch {}
+    } catch { }
   }, [onLinkDataToSection]);
 
   const useDragAndDrop = (onAdd) => {
@@ -688,7 +929,7 @@ Para testar o highlighting por marcadores, clique no botão "Teste Marcador".`;
         if (types.includes('application/json') || types.includes('text/plain') || types.includes('application/x-lina-item')) {
           setIsActive(true);
         }
-      } catch {}
+      } catch { }
     }, []);
     const onDragOver = useCallback((e) => {
       try {
@@ -698,12 +939,12 @@ Para testar o highlighting por marcadores, clique no botão "Teste Marcador".`;
           e.dataTransfer.dropEffect = 'copy';
           setIsActive(true);
         }
-      } catch {}
+      } catch { }
     }, []);
     const onDragLeave = useCallback((e) => {
       try {
         setIsActive(false);
-      } catch {}
+      } catch { }
     }, []);
     const onDrop = useCallback((e, sectionId) => {
       try {
@@ -717,13 +958,13 @@ Para testar o highlighting por marcadores, clique no botão "Teste Marcador".`;
             if (!json) json = e.dataTransfer.getData('application/x-lina-item');
             if (!json) json = e.dataTransfer.getData('text/plain');
             if (json) data = JSON.parse(json);
-          } catch {}
+          } catch { }
           if (data && data.type === 'canvas-library-item') {
             onAdd?.(data, sectionId);
             console.debug('🧰 Drop (fallback) aplicado na DropZone:', { section: sectionId, data });
           }
         }
-      } catch {}
+      } catch { }
     }, [onAdd]);
     return { isActive, onDragEnter, onDragOver, onDragLeave, onDrop };
   };
@@ -765,7 +1006,7 @@ Para testar o highlighting por marcadores, clique no botão "Teste Marcador".`;
 
     // Como agora sempre priorizamos final_text, não salvamos mais nos nodes
     console.log('💾 Conteúdo do editor salvo (apenas em memória):', markdown);
-    
+
     // Mostrar feedback visual
     alert('Conteúdo salvo em memória. Para persistir no banco, use a coluna "final_text" da tabela "Controle Geral".');
   }, []);
@@ -784,7 +1025,7 @@ Para testar o highlighting por marcadores, clique no botão "Teste Marcador".`;
         }
       }
     }, 100);
-    
+
     return () => clearTimeout(timer);
   }, [splitRatio]);
 
@@ -797,22 +1038,22 @@ Para testar o highlighting por marcadores, clique no botão "Teste Marcador".`;
         if (types.includes('application/json')) {
           const json = dt.getData('application/json');
           if (json) {
-            try { const data = JSON.parse(json); if (data && data.type === 'canvas-library-item') return data; } catch {}
+            try { const data = JSON.parse(json); if (data && data.type === 'canvas-library-item') return data; } catch { }
           }
         }
         if (types.includes('application/x-lina-item')) {
           const raw = dt.getData('application/x-lina-item');
           if (raw) {
-            try { const data = JSON.parse(raw); if (data && data.type === 'canvas-library-item') return data; } catch {}
+            try { const data = JSON.parse(raw); if (data && data.type === 'canvas-library-item') return data; } catch { }
           }
         }
         if (types.includes('text/plain')) {
           const txt = dt.getData('text/plain');
           if (txt) {
-            try { const data = JSON.parse(txt); if (data && data.type === 'canvas-library-item') return data; } catch {}
+            try { const data = JSON.parse(txt); if (data && data.type === 'canvas-library-item') return data; } catch { }
           }
         }
-      } catch {}
+      } catch { }
       return null;
     };
 
@@ -823,7 +1064,7 @@ Para testar o highlighting por marcadores, clique no botão "Teste Marcador".`;
           e.preventDefault();
           e.dataTransfer.dropEffect = 'copy';
         }
-      } catch {}
+      } catch { }
     };
 
     const onDropCapture = (e) => {
@@ -852,7 +1093,7 @@ Para testar o highlighting por marcadores, clique no botão "Teste Marcador".`;
           const types = Array.from(e.dataTransfer?.types || []);
           console.debug('⚠️ Drop ignorado (tipos não suportados ou payload inválido):', types);
         }
-      } catch {}
+      } catch { }
     };
 
     document.addEventListener('dragover', onDragOverCapture, true);
@@ -905,7 +1146,7 @@ Para testar o highlighting por marcadores, clique no botão "Teste Marcador".`;
         >
           {/* MainSidebar na esquerda */}
           <MainSidebar />
-          
+
           {/* Container principal do editor */}
           <div className="flex-1 flex flex-col">
             <style>{`
@@ -1116,7 +1357,7 @@ Para testar o highlighting por marcadores, clique no botão "Teste Marcador".`;
               }
 
             `}</style>
-            
+
             {/* Header */}
             <div className="flex items-center justify-between p-4 border-b" style={{ backgroundColor: 'var(--bg-secondary)', borderColor: 'var(--border-primary)' }}>
               <div className="flex items-center gap-3">
@@ -1128,30 +1369,38 @@ Para testar o highlighting por marcadores, clique no botão "Teste Marcador".`;
               </div>
               <div className="flex items-center gap-2">
 
-                
-                <button 
-                  onClick={testMarkerHighlight} 
-                  className="px-3 py-1.5 rounded border" 
+
+                <button
+                  onClick={testMarkerHighlight}
+                  className="px-3 py-1.5 rounded border"
                   title="Teste Grifo por Marcadores"
                   style={{ backgroundColor: 'purple', borderColor: 'purple', color: 'white' }}
                 >
                   <div className="flex items-center gap-2"><Target size={16} /><span className="text-sm">Teste Marcador</span></div>
                 </button>
-                <button 
-                  onClick={testSimpleHighlight} 
-                  className="px-3 py-1.5 rounded border" 
+                <button
+                  onClick={testSimpleHighlight}
+                  className="px-3 py-1.5 rounded border"
                   title="Teste Simples de Seleção"
                   style={{ backgroundColor: 'green', borderColor: 'green', color: 'white' }}
                 >
                   <div className="flex items-center gap-2"><TestTube size={16} /><span className="text-sm">Teste</span></div>
                 </button>
-                <button 
-                  onClick={debugTextSelection} 
-                  className="px-3 py-1.5 rounded border" 
+                <button
+                  onClick={debugTextSelection}
+                  className="px-3 py-1.5 rounded border"
                   title="Debug Métodos de Seleção"
                   style={{ backgroundColor: 'blue', borderColor: 'blue', color: 'white' }}
                 >
                   <div className="flex items-center gap-2"><Bug size={16} /><span className="text-sm">Debug</span></div>
+                </button>
+                <button
+                  onClick={resetSession}
+                  className="px-3 py-1.5 rounded border"
+                  title="Resetar Sessão (volta ao final_text original)"
+                  style={{ backgroundColor: 'red', borderColor: 'red', color: 'white' }}
+                >
+                  <div className="flex items-center gap-2"><RotateCcw size={16} /><span className="text-sm">Reset</span></div>
                 </button>
                 <button onClick={handleSave} className="px-3 py-1.5 rounded border" title="Salvar" style={{ backgroundColor: 'var(--bg-tertiary)', borderColor: 'var(--border-primary)', color: 'var(--text-secondary)' }}>
                   <div className="flex items-center gap-2"><Save size={16} /><span className="text-sm">Salvar</span></div>
@@ -1170,30 +1419,18 @@ Para testar o highlighting por marcadores, clique no botão "Teste Marcador".`;
                   <div className="flex-1 min-h-0 flex flex-col" style={{ height: '100%' }}>
                     <DropZone sectionId={filteredSection || activeSection} className="flex-1 min-h-0">
                       <BlockNoteEditor
-                        key="blocknote-editor-fixed" // KEY FIXO - não muda nunca
+                        key="editor-frozen" // KEY fixo - nunca muda
                         ref={editorRef}
                         initialContent={displayContent}
                         onChange={(newMarkdown) => {
-                          try {
-                            setLastMarkdown(newMarkdown);
-                            console.log('📝 Editor content changed, size:', newMarkdown?.length || 0);
-                            
-                            // CORREÇÃO: Marcar que o editor foi atualizado pelo usuário
-                            setShouldUpdateEditor(false);
-                            
-                            // Force re-render if needed
-                            if (editorRef.current && editorRef.current.editor) {
-                              const blocks = editorRef.current.editor.topLevelBlocks || [];
-                              console.log('📄 Current blocks count:', blocks.length);
-                            }
-                          } catch (error) {
-                            console.error('❌ Error in onChange:', error);
-                            setLastMarkdown(newMarkdown);
-                          }
+                          console.log(`📝 [${new Date().toLocaleTimeString()}] Editor changed:`, newMarkdown?.length || 0, 'chars');
+                          console.log('📄 Novo conteúdo (preview):', newMarkdown?.substring(0, 200) + '...');
+                          setLastMarkdown(newMarkdown);
                         }}
                         onScroll={filteredSection ? undefined : handleScrollSync}
-                        onCanvasItemDragStart={(payload) => { try { onCanvasItemDragStart?.(payload); } catch {} }}
+                        onCanvasItemDragStart={(payload) => { try { onCanvasItemDragStart?.(payload); } catch { } }}
                         onReferenceUpdate={updateReferenceMapping}
+                        onReindexing={handleMarkerReindexing}
                       />
                     </DropZone>
                   </div>
@@ -1208,20 +1445,21 @@ Para testar o highlighting por marcadores, clique no botão "Teste Marcador".`;
                     enableSidebarToggle
                     transparentSidebar
                     newsData={newsData}
-                    onTransferItem={() => {}}
-                    onOpenCardModal={() => {}}
-                    onDragStart={(payload) => { try { onCanvasItemDragStart?.(payload); } catch {} }}
-                    onCanvasItemDragStart={() => {}}
+                    onTransferItem={() => { }}
+                    onOpenCardModal={() => { }}
+                    onDragStart={(payload) => { try { onCanvasItemDragStart?.(payload); } catch { } }}
+                    onCanvasItemDragStart={() => { }}
                     onAddToNotionSection={(sectionId, payload) => handleContentAdd(payload, sectionId)}
                     editorRef={editorRef}
                     referenceMapping={referenceMapping}
                     onReferenceUpdate={updateReferenceMapping}
+                    onReindexing={handleMarkerReindexing}
                   />
                 </div>
               </div>
             </div>
           </div>
-          
+
 
         </motion.div>
       </motion.div>
