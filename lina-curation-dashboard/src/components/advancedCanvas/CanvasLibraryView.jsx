@@ -680,8 +680,8 @@ const CanvasLibraryView = ({
   enableSidebarToggle = false, 
   initialSidebarCollapsed = false, 
   transparentSidebar = false,
-
-  editorRef = null
+  editorRef = null,
+  referenceMapping = null
 }) => {
   const [nodes, setNodes] = useState([]);
   const [edges, setEdges] = useState([]);
@@ -705,7 +705,8 @@ const CanvasLibraryView = ({
   const textSync = useSimplifiedTextSync({
     nodes,
     edges,
-    editorRef
+    editorRef,
+    referenceMapping
   });
   
   useEffect(() => { onAddToNotionSectionRef.current = onAddToNotionSection; }, [onAddToNotionSection]);

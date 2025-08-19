@@ -80,7 +80,7 @@ const NotionLikePage = ({
   // Estado para armazenar o mapeamento entre marcadores e títulos
   const [referenceMapping, setReferenceMapping] = useState(new Map());
   
-
+  
 
   const EDITOR_MIN_PX = 480;
   const LIB_MIN_PX = 360;
@@ -1129,8 +1129,8 @@ Para testar o highlighting por marcadores, clique no botão "Teste Marcador".`;
                     onDragStart={(payload) => { try { onCanvasItemDragStart?.(payload); } catch {} }}
                     onCanvasItemDragStart={() => {}}
                     onAddToNotionSection={(sectionId, payload) => handleContentAdd(payload, sectionId)}
-
                     editorRef={editorRef}
+                    referenceMapping={referenceMapping}
                   />
                 </div>
               </div>

@@ -530,17 +530,13 @@ const BlockNoteEditor = forwardRef(({ initialContent = '', onChange, onScroll, o
           console.error('❌ Editor TipTap não disponível para inserção');
           return false;
         }
-        
+
         const tiptap = editor._tiptapEditor;
-        
         console.log(`🔍 Buscando posição para inserir "${newText}" ${position} "${searchText}"`);
-        
-        // Salvar estado atual da seleção
-        const currentSelection = tiptap.state.selection;
-        
+
         // Focar no editor (importante para operações do TipTap)
         tiptap.commands.focus();
-        
+
         // Se não há texto de busca, inserir no final
         if (!searchText || searchText.trim() === '') {
           console.log('📍 Inserindo no final do documento');
@@ -548,67 +544,173 @@ const BlockNoteEditor = forwardRef(({ initialContent = '', onChange, onScroll, o
           tiptap.commands.insertContent(`\n\n${newText}`);
           return true;
         }
+
+        // Usar a mesma lógica do sistema de highlighting: título -> marcador [n] -> bloco
+        console.log('🔍 Procurando usando lógica de highlighting (título -> marcador [n] -> bloco)...');
         
-        // Buscar a posição do texto de referência no documento
+        // Função para extrair texto de um bloco (similar ao extractBlockTextFlat)
+        const extractBlockText = (node) => {
+          if (!node || !node.content) return '';
+          
+          let text = '';
+          node.descendants((textNode) => {
+            if (textNode.isText) {
+              text += textNode.text;
+            }
+            return true;
+          });
+          
+          return text;
+        };
+
         const doc = tiptap.state.doc;
         let targetPosition = null;
         let found = false;
+
+        // Procurar diretamente pelo marcador [n] no documento
+        console.log(`🔍 Procurando pelo marcador: "${searchText}"`);
         
-        // Percorrer o documento procurando o texto
         doc.descendants((node, pos) => {
           if (found) return false; // Parar se já encontrou
-          
+
           if (node.isText && node.text) {
-            const nodeText = node.text.toLowerCase();
-            const searchLower = searchText.toLowerCase();
-            
-            // Busca flexível: pode ser parte do texto
-            if (nodeText.includes(searchLower)) {
-              console.log(`📍 Texto encontrado no node: "${node.text}"`);
+            const markerIndex = node.text.indexOf(searchText);
+            if (markerIndex !== -1) {
+              console.log(`📍 Marcador ${searchText} encontrado no bloco na posição ${pos + markerIndex}`);
               
               if (position === 'after') {
-                // Inserir após este node (final do node + quebra de linha)
-                targetPosition = pos + node.nodeSize;
+                // Inserir após o marcador
+                targetPosition = pos + markerIndex + searchText.length;
+                console.log(`📍 Inserindo APÓS marcador na posição: ${targetPosition}`);
               } else if (position === 'before') {
-                // Inserir antes deste node
-                targetPosition = pos;
+                // Inserir antes do marcador
+                targetPosition = pos + markerIndex;
+                console.log(`📍 Inserindo ANTES do marcador na posição: ${targetPosition}`);
               }
-              
               found = true;
               return false; // Parar a busca
             }
           }
-          
+
           return true; // Continuar buscando
         });
-        
+
         if (targetPosition !== null) {
           console.log(`📍 Posição encontrada: ${targetPosition}`);
+          console.log(`📝 Tentando inserir texto: "${newText}"`);
           
-          // Posicionar cursor na posição encontrada
-          tiptap.commands.setTextSelection(targetPosition);
-          
-          // Inserir o texto com formatação adequada
-          if (position === 'after') {
-            // Inserir após: quebra de linha + texto + quebra de linha
-            tiptap.commands.insertContent(`\n\n${newText}`);
-          } else {
-            // Inserir antes: texto + quebra de linha
-            tiptap.commands.insertContent(`${newText}\n\n`);
+          try {
+            // Posicionar cursor na posição encontrada
+            console.log(`🎯 Posicionando cursor na posição: ${targetPosition}`);
+            tiptap.commands.setTextSelection(targetPosition);
+            
+            // Verificar se o cursor foi posicionado corretamente
+            const currentPos = tiptap.state.selection.from;
+            console.log(`📍 Cursor posicionado em: ${currentPos} (esperado: ${targetPosition})`);
+            
+            // Inserir o texto com formatação adequada
+            if (position === 'after') {
+              // Inserir após: quebra de linha + texto + quebra de linha
+              console.log(`📝 Inserindo APÓS com quebras de linha`);
+              const contentToInsert = `\n\n${newText}`;
+              console.log(`📝 Conteúdo a inserir: "${contentToInsert}"`);
+              
+              const insertResult = tiptap.commands.insertContent(contentToInsert);
+              console.log(`📝 Resultado da inserção:`, insertResult);
+              
+              // Verificar se o texto foi realmente inserido
+              const newDocSize = tiptap.state.doc.content.size;
+              console.log(`📊 Tamanho do documento após inserção: ${newDocSize}`);
+              
+            } else {
+              // Inserir antes: texto + quebra de linha
+              console.log(`📝 Inserindo ANTES com quebras de linha`);
+              const contentToInsert = `${newText}\n\n`;
+              console.log(`📝 Conteúdo a inserir: "${contentToInsert}"`);
+              
+              const insertResult = tiptap.commands.insertContent(contentToInsert);
+              console.log(`📝 Resultado da inserção:`, insertResult);
+              
+              // Verificar se o texto foi realmente inserido
+              const newDocSize = tiptap.state.doc.content.size;
+              console.log(`📊 Tamanho do documento após inserção: ${newDocSize}`);
+            }
+            
+            // Focar no editor após inserção
+            tiptap.commands.focus();
+            
+            // Rolar o editor até a posição onde o texto foi inserido
+            try {
+              console.log('🔄 Rolando editor para posição do texto inserido...');
+              
+              // Calcular a posição final do texto inserido
+              let finalPosition = targetPosition;
+              if (position === 'after') {
+                finalPosition = targetPosition + newText.length + 2; // +2 para as quebras de linha
+              }
+              
+              console.log(`📍 Rolando para posição final: ${finalPosition}`);
+              
+              // Posicionar cursor no final do texto inserido
+              tiptap.commands.setTextSelection(finalPosition);
+              
+              // Forçar o editor a rolar para essa posição
+              const editorElement = tiptap.view.dom;
+              if (editorElement) {
+                const range = document.createRange();
+                const selection = window.getSelection();
+                
+                // Encontrar o node de texto na posição
+                const pos = tiptap.state.doc.resolve(finalPosition);
+                const domNode = tiptap.view.nodeDOM(pos.before());
+                
+                if (domNode) {
+                  range.setStart(domNode, 0);
+                  range.setEnd(domNode, 0);
+                  selection.removeAllRanges();
+                  selection.addRange(range);
+                  
+                  // Rolar para o elemento
+                  domNode.scrollIntoView({ 
+                    behavior: 'smooth', 
+                    block: 'center',
+                    inline: 'nearest'
+                  });
+                  
+                  console.log('✅ Editor rolado para posição do texto inserido');
+                }
+              }
+            } catch (scrollError) {
+              console.warn('⚠️ Erro ao rolar editor:', scrollError);
+            }
+            
+            console.log(`✅ Texto "${newText}" inserido ${position} "${searchText}"`);
+            return true;
+            
+          } catch (insertError) {
+            console.error('❌ Erro durante inserção específica:', insertError);
+            
+            // Fallback: tentar inserir no final
+            try {
+              console.log('🔄 Tentando fallback: inserir no final');
+              tiptap.commands.setTextSelection(tiptap.state.doc.content.size);
+              tiptap.commands.insertContent(`\n\n${newText}`);
+              console.log('✅ Texto inserido no final (fallback)');
+              return true;
+            } catch (fallbackError) {
+              console.error('❌ Falha no fallback:', fallbackError);
+              return false;
+            }
           }
-          
-          console.log(`✅ Texto "${newText}" inserido ${position} "${searchText}"`);
-          return true;
-          
         } else {
-          console.warn(`⚠️ Texto "${searchText}" não encontrado, inserindo no final`);
+          console.warn(`⚠️ Marcador para "${searchText}" não encontrado, inserindo no final`);
           
           // Fallback: inserir no final do documento
           tiptap.commands.setTextSelection(tiptap.state.doc.content.size);
           tiptap.commands.insertContent(`\n\n${newText}`);
           return true;
         }
-        
+
       } catch (error) {
         console.error('❌ Erro durante inserção de texto:', error);
         

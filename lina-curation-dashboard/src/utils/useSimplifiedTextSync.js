@@ -11,13 +11,15 @@ import { handleCanvasConnection } from './textInsertionHelpers';
 export const useSimplifiedTextSync = ({ 
   nodes = [], 
   edges = [], 
-  editorRef = null 
+  editorRef = null,
+  referenceMapping = null
 }) => {
   // Estado da sincronização
   const [isActive, setIsActive] = useState(true);
   const [lastProcessedEdges, setLastProcessedEdges] = useState(new Set());
   const [processingQueue, setProcessingQueue] = useState([]);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [isInitialized, setIsInitialized] = useState(false); // Novo estado para controle de inicialização
 
   // Refs para controle de estado
   const previousEdgesRef = useRef([]);
@@ -39,6 +41,12 @@ export const useSimplifiedTextSync = ({
    */
   const detectNewConnections = useCallback((currentEdges, previousEdges) => {
     try {
+      // Se ainda não foi inicializado, não processar conexões existentes
+      if (!isInitialized) {
+        console.log('⏳ Hook ainda não inicializado, ignorando conexões existentes');
+        return [];
+      }
+
       console.log('🔍 Detectando novas conexões...');
       console.log('📊 Edges atuais:', currentEdges.length, 'Edges anteriores:', previousEdges.length);
 
@@ -87,7 +95,7 @@ export const useSimplifiedTextSync = ({
       console.error('❌ Erro ao detectar novas conexões:', error);
       return [];
     }
-  }, [generateEdgeHash, lastProcessedEdges]);
+  }, [generateEdgeHash, lastProcessedEdges, isInitialized]);
 
   /**
    * Processa uma conexão individual
@@ -102,7 +110,7 @@ export const useSimplifiedTextSync = ({
       setLastProcessedEdges(prev => new Set([...prev, hash]));
       
       // Processar via helper principal
-      const result = await handleCanvasConnection(edge, nodes, edges, editorRef);
+      const result = await handleCanvasConnection(edge, nodes, edges, editorRef, referenceMapping);
       
       if (result.success) {
         console.log('✅ Conexão processada com sucesso:', result.message);
@@ -130,7 +138,7 @@ export const useSimplifiedTextSync = ({
       console.error('❌ Erro interno ao processar conexão:', error);
       return { success: false, error: error.message };
     }
-  }, [nodes, edges, editorRef]);
+  }, [nodes, edges, editorRef, referenceMapping]);
 
   /**
    * Processa fila de conexões pendentes
@@ -195,6 +203,29 @@ export const useSimplifiedTextSync = ({
   useEffect(() => {
     if (!isActive) return;
 
+    // Na primeira execução, apenas marcar como inicializado sem processar
+    if (!isInitialized) {
+      console.log('🚀 Hook inicializado, armazenando estado inicial das conexões');
+      setIsInitialized(true);
+      previousEdgesRef.current = [...edges];
+      previousNodesRef.current = [...nodes];
+      return;
+    }
+
+    // Se ainda não há edges, aguardar a inicialização do canvas
+    if (edges.length === 0) {
+      console.log('⏳ Canvas ainda não inicializado, aguardando...');
+      return;
+    }
+
+    // Se é a primeira vez que temos edges após inicialização, apenas armazenar sem processar
+    if (previousEdgesRef.current.length === 0 && edges.length > 0) {
+      console.log('📊 Primeira carga de conexões do canvas, armazenando estado inicial');
+      previousEdgesRef.current = [...edges];
+      previousNodesRef.current = [...nodes];
+      return;
+    }
+
     console.log('👀 Monitorando mudanças nas conexões...');
 
     // Detectar novas conexões
@@ -208,7 +239,7 @@ export const useSimplifiedTextSync = ({
     previousEdgesRef.current = [...edges];
     previousNodesRef.current = [...nodes];
 
-  }, [edges, nodes, isActive, detectNewConnections, processNewConnections]);
+  }, [edges, nodes, isActive, detectNewConnections, processNewConnections, isInitialized]);
 
   /**
    * Efeito para processar fila quando disponível

@@ -162,9 +162,10 @@ export const insertTextAtPosition = (editor, insertionInfo, newText) => {
  * @param {Array} nodes - Array atual de nodes
  * @param {Array} edges - Array atual de edges
  * @param {Object} editorRef - Referência do editor
+ * @param {Map} referenceMapping - Mapeamento de títulos para marcadores [n]
  * @returns {Object} Resultado da operação
  */
-export const handleCanvasConnection = async (connectionParams, nodes, edges, editorRef) => {
+export const handleCanvasConnection = async (connectionParams, nodes, edges, editorRef, referenceMapping = null) => {
   const { source, target } = connectionParams;
   
   console.log('🔗 Processando nova conexão do canvas:', connectionParams);
@@ -221,11 +222,23 @@ export const handleCanvasConnection = async (connectionParams, nodes, edges, edi
   
   console.log('✍️ Texto a inserir:', textToInsert);
   
+  // Converter título para marcador usando referenceMapping
+  let searchText = insertionInfo.searchText;
+  if (referenceMapping && searchText) {
+    const marker = referenceMapping.get(searchText.trim());
+    if (marker) {
+      console.log(`🔍 Convertendo título "${searchText}" para marcador "${marker}"`);
+      searchText = marker;
+    } else {
+      console.log(`⚠️ Marcador não encontrado para título "${searchText}"`);
+    }
+  }
+  
   // Inserir no editor usando o método do BlockNoteEditor
   if (editorRef.current && editorRef.current.insertTextAtPosition) {
     try {
       const success = await editorRef.current.insertTextAtPosition(
-        insertionInfo.searchText,
+        searchText,
         textToInsert,
         insertionInfo.position
       );
