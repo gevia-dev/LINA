@@ -12,21 +12,12 @@ const BlockNoteEditor = forwardRef(({ initialContent = '', onChange, onScroll, o
   
   // Converter texto markdown simples para blocos BlockNote
   const convertMarkdownToBlocks = (markdown) => {
-    console.log('🔍 BlockNoteEditor - convertMarkdownToBlocks chamado:', {
-      hasMarkdown: !!markdown,
-      markdownType: typeof markdown,
-      markdownLength: markdown?.length || 0,
-      markdownPreview: markdown?.substring(0, 200) || 'N/A'
-    });
-    
     if (!markdown || typeof markdown !== 'string') {
-      console.log('❌ Markdown inválido, retornando array vazio');
       return [];
     }
     
     const lines = markdown.split('\n');
     const blocks = [];
-    console.log('📄 Processando', lines.length, 'linhas de markdown');
     
     lines.forEach((line) => {
       if (!line.trim()) {
@@ -74,29 +65,16 @@ const BlockNoteEditor = forwardRef(({ initialContent = '', onChange, onScroll, o
       }
     );
     
-    console.log('✅ Blocos criados:', blocks.length, 'blocos');
-    console.log('📄 Primeiro bloco:', blocks[0]);
-    
     return blocks;
   };
 
   // Criar editor com configuração para highlighting de seleção
   const editor = useCreateBlockNote({ 
     initialContent: (() => {
-      console.log('🔍 useCreateBlockNote - initialContent:', {
-        hasInitialContent: !!initialContent,
-        initialContentLength: initialContent?.length || 0,
-        initialContentPreview: initialContent?.substring(0, 100) || 'N/A',
-        isDefaultMessage: initialContent?.includes('Se você está vendo esta mensagem') || false
-      });
-      
       if (initialContent && initialContent.trim()) {
         const blocks = convertMarkdownToBlocks(initialContent);
-        console.log('✅ Blocos convertidos para editor:', blocks.length);
-        console.log('📄 Primeiro bloco:', blocks[0]);
         return blocks;
       } else {
-        console.log('⚠️ Nenhum conteúdo inicial fornecido ou conteúdo vazio');
         return undefined;
       }
     })(),
@@ -157,17 +135,8 @@ const BlockNoteEditor = forwardRef(({ initialContent = '', onChange, onScroll, o
   // Isso evita re-renderizações que sobrescrevem mudanças do usuário
   // O sistema de sessão no NotionLikePage agora gerencia isso
   useEffect(() => {
-    console.log('🔄 BlockNoteEditor - initialContent mudou (sistema de sessão):', {
-      hasInitialContent: !!initialContent,
-      initialContentLength: initialContent?.length || 0,
-      hasEditor: !!editor,
-      isInitialContentLoaded,
-      note: 'Atualizações automáticas desabilitadas - usando sistema de sessão'
-    });
-    
     // Apenas marcar como carregado na primeira vez
     if (editor && initialContent && !isInitialContentLoaded) {
-      console.log('✅ Marcando conteúdo inicial como carregado (sem forçar atualização)');
       setIsInitialContentLoaded(true);
     }
   }, [editor, initialContent, isInitialContentLoaded]);
@@ -579,20 +548,15 @@ const BlockNoteEditor = forwardRef(({ initialContent = '', onChange, onScroll, o
      */
     insertTextAtPosition: async (searchText, newText, position = 'after', onReferenceUpdate = null, onReindexing = null) => {
       try {
-        console.log(`🚀 [${new Date().toLocaleTimeString()}] === NOVA INSERÇÃO INICIADA ===`);
-        console.log(`📝 Parâmetros:`, { searchText, newText: newText?.substring(0, 50) + '...', position });
-        
         if (!editor || !editor._tiptapEditor) {
           console.error('❌ Editor TipTap não disponível para inserção');
           return false;
         }
 
         const tiptap = editor._tiptapEditor;
-        console.log(`🔍 Inserindo "${newText}" ${position} "${searchText}" com reindexação automática`);
         
         // 1. Obter conteúdo atual do editor para análise
         const currentContent = tiptap.state.doc.textContent;
-        console.log(`📄 Conteúdo atual: ${currentContent.length} caracteres`);
         
         // 2. Gerar próximo número de marcador
         const generateNextMarkerNumber = () => {
@@ -617,7 +581,6 @@ const BlockNoteEditor = forwardRef(({ initialContent = '', onChange, onScroll, o
             nextNumber++;
           }
           
-          console.log(`🔢 Próximo marcador: [${nextNumber}]`);
           return nextNumber;
         };
         
@@ -648,7 +611,6 @@ const BlockNoteEditor = forwardRef(({ initialContent = '', onChange, onScroll, o
 
         if (!searchText || searchText.trim() === '') {
           // Inserir no final
-          console.log('📍 Inserindo no final do documento');
           targetPosition = tiptap.state.doc.content.size;
           insertionPosition = targetPosition;
           
@@ -668,8 +630,6 @@ const BlockNoteEditor = forwardRef(({ initialContent = '', onChange, onScroll, o
           return verified;
         } else {
           // Procurar pelo marcador específico
-          console.log(`🔍 Procurando pelo marcador: "${searchText}"`);
-          
           const doc = tiptap.state.doc;
           let found = false;
 

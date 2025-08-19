@@ -43,14 +43,9 @@ export const useSimplifiedTextSync = ({
    */
   const detectNewConnections = useCallback((currentEdges, previousEdges) => {
     try {
-      // Se ainda não foi inicializado, não processar conexões existentes
-      if (!isInitialized) {
-        console.log('⏳ Hook ainda não inicializado, ignorando conexões existentes');
+      if (!currentEdges || !previousEdges || !Array.isArray(currentEdges) || !Array.isArray(previousEdges)) {
         return [];
       }
-
-      console.log('🔍 Detectando novas conexões...');
-      console.log('📊 Edges atuais:', currentEdges.length, 'Edges anteriores:', previousEdges.length);
 
       const newConnections = [];
       const currentEdgeHashes = new Set();
@@ -65,7 +60,6 @@ export const useSimplifiedTextSync = ({
         }
       });
       if (candidatesById.length > 0) {
-        console.log(`🆕 Novas conexões por id detectadas: ${candidatesById.length}`);
         return candidatesById;
       }
 
@@ -85,16 +79,13 @@ export const useSimplifiedTextSync = ({
       currentEdges.forEach(edge => {
         const hash = generateEdgeHash(edge);
         if (!previousEdgeHashes.has(hash) && !lastProcessedEdges.has(hash)) {
-          console.log('🆕 Nova conexão detectada (hash):', { id: edge.id, source: edge.source, target: edge.target, sourceHandle: edge.sourceHandle, targetHandle: edge.targetHandle });
           newConnections.push({ edge, hash, timestamp: Date.now() });
         }
       });
 
-      console.log(`✅ ${newConnections.length} novas conexões detectadas`);
       return newConnections;
 
     } catch (error) {
-      console.error('❌ Erro ao detectar novas conexões:', error);
       return [];
     }
   }, [generateEdgeHash, lastProcessedEdges, isInitialized]);
@@ -104,8 +95,6 @@ export const useSimplifiedTextSync = ({
    */
   const processConnection = useCallback(async (connectionData) => {
     try {
-      console.log('⚙️ Processando conexão:', connectionData.edge);
-      
       const { edge, hash } = connectionData;
       
       // Marcar como processada
@@ -115,8 +104,6 @@ export const useSimplifiedTextSync = ({
       const result = await handleCanvasConnection(edge, nodes, edges, editorRef, referenceMapping, onReferenceUpdate, onReindexing);
       
       if (result.success) {
-        console.log('✅ Conexão processada com sucesso:', result.message);
-        
         // Registrar no histórico
         connectionHistoryRef.current.set(hash, {
           ...connectionData,
@@ -126,8 +113,6 @@ export const useSimplifiedTextSync = ({
         
         return { success: true, hash, result };
       } else {
-        console.error('❌ Falha ao processar conexão:', result.error);
-        
         // Adicionar à fila de retry se necessário
         if (result.error !== 'Parâmetros inválidos' && result.error !== 'Nodes não encontrados') {
           setProcessingQueue(prev => [...prev, { ...connectionData, retryCount: 0 }]);
@@ -137,7 +122,6 @@ export const useSimplifiedTextSync = ({
       }
 
     } catch (error) {
-      console.error('❌ Erro interno ao processar conexão:', error);
       return { success: false, error: error.message };
     }
   }, [nodes, edges, editorRef, referenceMapping, onReferenceUpdate]);
@@ -150,7 +134,6 @@ export const useSimplifiedTextSync = ({
 
     try {
       setIsProcessing(true);
-      console.log(`🔄 Processando fila de ${processingQueue.length} conexões...`);
 
       const currentQueue = [...processingQueue];
       setProcessingQueue([]);
@@ -166,8 +149,6 @@ export const useSimplifiedTextSync = ({
         }
       }
 
-      console.log('✅ Fila de processamento concluída');
-
     } catch (error) {
       console.error('❌ Erro ao processar fila:', error);
     } finally {
@@ -180,8 +161,6 @@ export const useSimplifiedTextSync = ({
    */
   const processNewConnections = useCallback(async (newConnections) => {
     if (!isActive || newConnections.length === 0) return;
-
-    console.log(`🚀 Processando ${newConnections.length} novas conexões...`);
 
     // Adicionar à fila de processamento
     setProcessingQueue(prev => [...prev, ...newConnections]);
@@ -207,7 +186,6 @@ export const useSimplifiedTextSync = ({
 
     // Na primeira execução, apenas marcar como inicializado sem processar
     if (!isInitialized) {
-      console.log('🚀 Hook inicializado, armazenando estado inicial das conexões');
       setIsInitialized(true);
       previousEdgesRef.current = [...edges];
       previousNodesRef.current = [...nodes];
@@ -216,19 +194,15 @@ export const useSimplifiedTextSync = ({
 
     // Se ainda não há edges, aguardar a inicialização do canvas
     if (edges.length === 0) {
-      console.log('⏳ Canvas ainda não inicializado, aguardando...');
       return;
     }
 
     // Se é a primeira vez que temos edges após inicialização, apenas armazenar sem processar
     if (previousEdgesRef.current.length === 0 && edges.length > 0) {
-      console.log('📊 Primeira carga de conexões do canvas, armazenando estado inicial');
       previousEdgesRef.current = [...edges];
       previousNodesRef.current = [...nodes];
       return;
     }
-
-    console.log('👀 Monitorando mudanças nas conexões...');
 
     // Detectar novas conexões
     const newConnections = detectNewConnections(edges, previousEdgesRef.current);

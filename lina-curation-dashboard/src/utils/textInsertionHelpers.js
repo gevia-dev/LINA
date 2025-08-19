@@ -169,16 +169,16 @@ export const insertTextAtPosition = (editor, insertionInfo, newText) => {
 export const handleCanvasConnection = async (connectionParams, nodes, edges, editorRef, referenceMapping = null, onReferenceUpdate = null, onReindexing = null) => {
   const { source, target } = connectionParams;
   
-  console.log('🔗 Processando nova conexão do canvas:', connectionParams);
-  console.log('📊 Estado atual - Nodes:', nodes.length, 'Edges:', edges.length);
+  console.log('🔍 === DEBUG INSERÇÃO ===');
+  console.log('📊 Parâmetros:', { source, target });
+  console.log('📊 Nodes disponíveis:', nodes.map(n => ({ id: n.id, type: n.type, title: n.data?.title, hasPhrase: !!n.data?.phrase })));
   
   // Encontrar ambos os nodes da conexão
   const sourceNode = nodes.find(n => n.id === source);
   const targetNode = nodes.find(n => n.id === target);
   
-  console.log('🔗 Conexão:', source, '->', target);
-  console.log('📝 Source node:', sourceNode?.data?.title || 'não encontrado');
-  console.log('📝 Target node:', targetNode?.data?.title || 'não encontrado');
+  console.log('🔍 Source Node:', sourceNode ? { id: sourceNode.id, type: sourceNode.type, title: sourceNode.data?.title, hasPhrase: !!sourceNode.data?.phrase } : 'NÃO ENCONTRADO');
+  console.log('🔍 Target Node:', targetNode ? { id: targetNode.id, type: targetNode.type, title: targetNode.data?.title, hasPhrase: !!targetNode.data?.phrase } : 'NÃO ENCONTRADO');
   
   // Verificar qual node tem frase para inserir (priorizar target, depois source)
   let nodeToInsert = null;
@@ -186,6 +186,7 @@ export const handleCanvasConnection = async (connectionParams, nodes, edges, edi
   
   if (targetNode && targetNode.type === 'itemNode' && targetNode.data?.phrase) {
     nodeToInsert = targetNode;
+    console.log('✅ Target node selecionado para inserção');
     // Inserir após o source node
     if (sourceNode && sourceNode.data) {
       insertionInfo = {
@@ -193,11 +194,14 @@ export const handleCanvasConnection = async (connectionParams, nodes, edges, edi
         searchText: sourceNode.data.title || sourceNode.data.phrase,
         sourceNode: sourceNode
       };
+      console.log('📍 Inserir APÓS source:', insertionInfo.searchText);
     } else {
       insertionInfo = { position: 'end', searchText: null };
+      console.log('📍 Inserir no FINAL (source sem dados)');
     }
   } else if (sourceNode && sourceNode.type === 'itemNode' && sourceNode.data?.phrase) {
     nodeToInsert = sourceNode;
+    console.log('✅ Source node selecionado para inserção');
     // Inserir antes do target node
     if (targetNode && targetNode.data) {
       insertionInfo = {
@@ -205,45 +209,54 @@ export const handleCanvasConnection = async (connectionParams, nodes, edges, edi
         searchText: targetNode.data.title || targetNode.data.phrase,
         targetNode: targetNode
       };
+      console.log('📍 Inserir ANTES de target:', insertionInfo.searchText);
     } else {
       insertionInfo = { position: 'end', searchText: null };
+      console.log('📍 Inserir no FINAL (target sem dados)');
     }
+  } else {
+    console.log('❌ Nenhum node com frase encontrado para inserção');
   }
   
   if (!nodeToInsert) {
-    console.log('ℹ️ Nenhum itemNode com frase encontrado na conexão');
+    console.log('❌ Retornando: Conexão sem texto para inserir');
     return { success: true, message: 'Conexão sem texto para inserir' };
   }
   
-  console.log('📝 Node para inserir:', nodeToInsert.data.title);
-  console.log('📍 Posição de inserção:', insertionInfo);
+  console.log('📝 Node para inserir:', { title: nodeToInsert.data.title, phrase: nodeToInsert.data.phrase });
+  console.log('📝 Info de inserção:', insertionInfo);
   
-  // NOVA: Detecção de inserção problemática entre marcadores
+  // SOLUÇÃO KISS/DRY: Se ambos os nodes já estão mapeados, não fazer nada
   if (insertionInfo.searchText && referenceMapping) {
     const searchMarker = referenceMapping.get(insertionInfo.searchText.trim());
+    console.log('🔍 Verificando mapeamento para:', insertionInfo.searchText.trim());
+    console.log('🔍 Marcador encontrado:', searchMarker);
+    
     if (searchMarker) {
-      console.log('🔍 Detectando possível inserção entre marcadores...');
+      const sourceTitle = sourceNode?.data?.title?.trim();
+      const targetTitle = targetNode?.data?.title?.trim();
+      const sourceMapped = sourceTitle && referenceMapping.get(sourceTitle);
+      const targetMapped = targetTitle && referenceMapping.get(targetTitle);
       
-      // Verificar se já existe um marcador para o título que queremos inserir
-      const existingMarker = referenceMapping.get(nodeToInsert.data.title.trim());
-      if (existingMarker) {
-        console.log('⚠️ INSERÇÃO BLOQUEADA: Título já existe no texto');
-        console.log(`📍 Título "${nodeToInsert.data.title}" já mapeado para ${existingMarker}`);
+      console.log('🔍 Verificando se ambos estão mapeados:');
+      console.log('  - Source mapeado:', sourceMapped);
+      console.log('  - Target mapeado:', targetMapped);
+      
+      if (sourceMapped && targetMapped) {
+        console.log('🛑 AMBOS OS NODES JÁ MAPEADOS - Conexão ignorada');
         return { 
-          success: false, 
-          message: `Texto "${nodeToInsert.data.title}" já existe no editor`,
-          reason: 'duplicate_title'
+          success: true, 
+          message: 'Conexão entre nodes já mapeados ignorada (texto não alterado)',
+          reason: 'both_nodes_already_mapped'
         };
       }
       
-      // Verificar se estamos tentando inserir entre dois marcadores consecutivos
-      console.log('🔍 Verificando se inserção é segura...');
+      console.log('✅ Pelo menos um node não está mapeado - continuando inserção');
     }
   }
   
   // Preparar o texto a ser inserido
   const textToInsert = nodeToInsert.data.phrase;
-  
   console.log('✍️ Texto a inserir:', textToInsert);
   
   // Converter título para marcador usando referenceMapping
@@ -253,52 +266,58 @@ export const handleCanvasConnection = async (connectionParams, nodes, edges, edi
   if (referenceMapping && searchText) {
     const marker = referenceMapping.get(searchText.trim());
     if (marker) {
-      console.log(`🔍 Convertendo título "${searchText}" para marcador "${marker}"`);
       searchText = marker;
+      console.log('🔍 Convertendo título para marcador:', marker);
       
-      // NOVA: Estratégia segura para inserções entre marcadores
-      if (insertionInfo.position === 'after') {
-        console.log('🛡️ Usando estratégia segura: inserir no final em vez de entre marcadores');
-        insertionStrategy = 'safe_append';
-        searchText = null; // Inserir no final
-      }
-    } else {
-      console.log(`⚠️ Marcador não encontrado para título "${searchText}"`);
+      // CORREÇÃO: Usar estratégia normal para inserções entre marcadores
+      // A estratégia safe_append estava sempre inserindo no final
+      insertionStrategy = 'normal';
+      console.log('🔄 Usando estratégia normal (inserir entre marcadores)');
     }
   }
   
+  console.log('🎯 Estratégia final:', insertionStrategy);
+  console.log('🎯 SearchText final:', searchText);
+  console.log('🎯 Posição final:', insertionInfo.position);
+  
   // Inserir no editor usando o método do BlockNoteEditor
   if (editorRef.current && editorRef.current.insertTextAtPosition) {
+    console.log('✅ Editor disponível, chamando insertTextAtPosition');
     try {
-      console.log(`🚀 Executando inserção com estratégia: ${insertionStrategy}`);
+      // CORREÇÃO: Usar parâmetros originais para inserção entre marcadores
+      const finalPosition = insertionInfo.position;
+      const finalSearchText = searchText;
       
-      const finalPosition = insertionStrategy === 'safe_append' ? 'after' : insertionInfo.position;
-      const finalSearchText = insertionStrategy === 'safe_append' ? '' : searchText;
+      console.log('🚀 Chamando insertTextAtPosition com:', {
+        searchText: finalSearchText,
+        textToInsert,
+        position: finalPosition
+      });
       
       const success = await editorRef.current.insertTextAtPosition(
         finalSearchText,
         textToInsert,
         finalPosition,
-        (marker, _) => onReferenceUpdate?.(marker, nodeToInsert.data.title), // Passar título correto
-        onReindexing        // Passar callback para processar reindexação
+        (marker, _) => onReferenceUpdate?.(marker, nodeToInsert.data.title),
+        onReindexing
       );
       
+      console.log('📊 Resultado da inserção:', success);
+      
       if (success) {
-        const message = insertionStrategy === 'safe_append' 
-          ? 'Texto inserido com segurança no final (evitou conflito entre marcadores)'
-          : 'Texto inserido com sucesso';
-        console.log(`✅ ${message}`);
+        const message = 'Texto inserido com sucesso entre marcadores';
+        console.log('✅ Inserção bem-sucedida:', message);
         return { success: true, message };
       } else {
-        console.error('❌ Falha ao inserir texto no editor');
+        console.log('❌ Falha na inserção');
         return { success: false, error: 'Falha na inserção' };
       }
     } catch (error) {
-      console.error('❌ Erro durante inserção:', error);
+      console.log('❌ Erro na inserção:', error.message);
       return { success: false, error: error.message };
     }
   } else {
-    console.error('❌ Método insertTextAtPosition não disponível no editor');
+    console.log('❌ Editor não disponível');
     return { success: false, error: 'Editor não disponível' };
   }
 };

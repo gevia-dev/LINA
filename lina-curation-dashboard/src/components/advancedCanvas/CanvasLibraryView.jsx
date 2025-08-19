@@ -1173,7 +1173,6 @@ const CanvasLibraryView = ({
     setEdges(newEdge);
     
     // SIMPLIFICADO: O hook já detecta e processa automaticamente
-    console.log('✅ Conexão adicionada, processamento automático via hook');
   }, [edges]);
 
   // Handler para remover edges
@@ -1181,12 +1180,10 @@ const CanvasLibraryView = ({
     
     setEdges((currentEdges) => {
       const filtered = currentEdges.filter(edge => edge.id !== edgeId);
-      console.log('[DEBUG] Edges após remoção:', filtered.length);
       return filtered;
     });
     
     // SIMPLIFICADO: O hook já processa automaticamente
-    console.log('✅ Edge removida, processamento automático via hook');
   }, [edges]);
 
 
@@ -1255,8 +1252,6 @@ const CanvasLibraryView = ({
     
     try {
       // Verificar se já existem nodes desta categoria no canvas
-      console.log(`[DEBUG] Verificando categoria "${categoryTag}" - Total de nodes no canvas: ${nodes.length}`);
-      
       const existingCategoryNodes = nodes.filter(node => 
         node.type === 'itemNode' && 
         node.data.categoryKey && 
@@ -1264,14 +1259,10 @@ const CanvasLibraryView = ({
         node.data.isFromLibrary // Só considerar os que vieram da biblioteca
       );
       
-      console.log(`[DEBUG] Nodes encontrados para categoria "${categoryTag}":`, existingCategoryNodes.map(n => ({ id: n.id, categoryKey: n.data.categoryKey, isFromLibrary: n.data.isFromLibrary })));
-      
       const hasNodesInCanvas = existingCategoryNodes.length > 0;
       
       if (hasNodesInCanvas) {
         // REMOVER: Se já tem nodes da categoria no canvas, remove todos
-        console.log(`[DEBUG] Removendo ${existingCategoryNodes.length} nodes da categoria "${categoryTag}"`);
-        
         setNodes(prevNodes => {
           const filtered = prevNodes.filter(node => 
             !(node.type === 'itemNode' && 
@@ -1279,7 +1270,6 @@ const CanvasLibraryView = ({
               (node.data.categoryKey.includes(categoryTag) || node.data.categoryTag === categoryTag) &&
               node.data.isFromLibrary)
           );
-          console.log(`[DEBUG] Nodes após remoção: ${filtered.length} (removidos: ${prevNodes.length - filtered.length})`);
           return filtered;
         });
         
@@ -1287,11 +1277,9 @@ const CanvasLibraryView = ({
         setUsedItemIds(prev => {
           const newSet = new Set(prev);
           existingCategoryNodes.forEach(node => newSet.delete(node.data.itemId));
-          console.log(`[DEBUG] IDs usados após remoção: ${newSet.size}`);
           return newSet;
         });
         
-        console.log(`[DEBUG] Categoria "${categoryTag}" removida do canvas`);
         return;
       }
       
@@ -1302,8 +1290,6 @@ const CanvasLibraryView = ({
       // Calcular posição central do viewport visível
       const centerX = (-viewport.x + (window.innerWidth * 0.6) / 2) / zoom;
       const centerY = (-viewport.y + window.innerHeight / 2) / zoom;
-      
-      console.log(`[DEBUG] Camera position - Center: (${centerX}, ${centerY}), Zoom: ${zoom}`);
       
       // Obter nodes disponíveis desta categoria
       const categoryData = hierarchy.categories[categoryTag];
@@ -1333,10 +1319,7 @@ const CanvasLibraryView = ({
         });
       });
       
-      console.log(`[DEBUG] Categoria "${categoryTag}" - ${availableNodes.length} nodes disponíveis para adicionar`);
-      
       if (availableNodes.length === 0) {
-        console.log(`[DEBUG] Nenhum node disponível para a categoria "${categoryTag}"`);
         return;
       }
       
@@ -1378,7 +1361,6 @@ const CanvasLibraryView = ({
         };
         
         newNodes.push(newNode);
-        console.log(`[DEBUG] Node criado: ${item.itemId} em (${x}, ${y})`);
       });
       
       // Adicionar novos nodes ao canvas
@@ -1397,9 +1379,6 @@ const CanvasLibraryView = ({
       // Mostrar notificação temporária
       setShowEditModeNotification(true);
       setTimeout(() => setShowEditModeNotification(false), 3000); // Esconder após 3 segundos
-      
-      console.log(`[DEBUG] ${newNodes.length} nodes adicionados ao canvas da categoria "${categoryTag}"`);
-      console.log(`[DEBUG] Modo de edição ativado automaticamente`);
       
     } catch (error) {
       console.error('[DEBUG] Erro ao processar categoria:', error);

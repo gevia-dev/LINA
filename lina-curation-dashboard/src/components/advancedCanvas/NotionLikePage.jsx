@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useRef, useCallback, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { FileText, Save, X, Layers as LayersIcon, Quote as QuoteIcon, Braces as BracesIcon, ChevronLeft, ChevronRight, Library as LibraryIcon, Bug, TestTube, Target, Eye, EyeOff, RotateCcw } from 'lucide-react';
+import { FileText, Save, X, Layers as LayersIcon, Quote as QuoteIcon, Braces as BracesIcon, RotateCcw } from 'lucide-react';
 import CanvasLibraryView from './CanvasLibraryView';
 import BlockNoteEditor from './BlockNoteEditor';
 import MainSidebar from '../MainSidebar';
@@ -91,30 +91,15 @@ const NotionLikePage = ({
   // NOVO: Função para atualizar o referenceMapping (sistema de sessão)
   const updateReferenceMapping = useCallback((marker, title) => {
     try {
-      console.log(`🗺️ [${new Date().toLocaleTimeString()}] Atualizando referenceMapping: ${marker} <-> "${title}"`);
-
       setReferenceMapping(prevMapping => {
         const newMapping = new Map(prevMapping);
-
-        // Verificar se já existe
-        if (newMapping.has(marker)) {
-          console.log(`⚠️ Marcador ${marker} já existe, sobrescrevendo`);
-        }
-        if (newMapping.has(title.trim())) {
-          console.log(`⚠️ Título "${title}" já existe, sobrescrevendo`);
-        }
 
         // Adicionar mapeamento bidirecional
         newMapping.set(marker, title.trim());
         newMapping.set(title.trim(), marker);
 
-        console.log(`✅ ReferenceMapping atualizado. Total: ${newMapping.size / 2} referências`);
-        console.log(`📋 Marcadores atuais:`, Array.from(newMapping.keys()).filter(k => k.startsWith('[')));
-
         return newMapping;
       });
-
-      console.log(`🔗 Novo mapeamento criado: ${marker} ↔ "${title}"`);
 
     } catch (error) {
       console.error('❌ Erro ao atualizar referenceMapping:', error);
@@ -419,11 +404,7 @@ const NotionLikePage = ({
 
   // Retorna { block, start, end } para o título -> [n], destacando somente a sentença antes do [n]
   const getMarkerSentenceRange = useCallback((editor, title) => {
-    console.log(`🔍 getMarkerSentenceRange para: "${title}"`);
-    console.log(`📊 ReferenceMapping size: ${referenceMapping?.size || 0}`);
-
     if (!title || !referenceMapping?.size) {
-      console.log('❌ Título vazio ou referenceMapping vazio');
       return null;
     }
 
@@ -433,8 +414,6 @@ const NotionLikePage = ({
 
     // Se não encontrou, tentar busca flexível
     if (!marker) {
-      console.log(`🔍 Busca exata falhou, tentando busca flexível...`);
-
       // Normalizar para busca (lowercase, sem acentos, etc)
       const searchTitle = normalizedTitle.toLowerCase().trim();
 
@@ -446,7 +425,6 @@ const NotionLikePage = ({
         // Busca bidirecional mais flexível
         if (keyLower.includes(searchTitle) || searchTitle.includes(keyLower)) {
           marker = value;
-          console.log(`✅ Encontrado por busca flexível: "${key}" -> ${marker}`);
           break;
         }
 
@@ -460,17 +438,12 @@ const NotionLikePage = ({
 
         if (matchingWords.length >= Math.min(2, searchWords.length)) {
           marker = value;
-          console.log(`✅ Encontrado por palavras-chave: "${key}" -> ${marker} (palavras: ${matchingWords.join(', ')})`);
           break;
         }
       }
     }
 
-    console.log(`🔍 Marcador encontrado: ${marker}`);
-
     if (!marker) {
-      console.log(`❌ Nenhum marcador encontrado para "${title}"`);
-      console.log(`📋 Títulos disponíveis:`, Array.from(referenceMapping.keys()).filter(k => !k.startsWith('[')));
       return null;
     }
 
@@ -543,12 +516,9 @@ const NotionLikePage = ({
     // 1) Caminho novo: título -> [n] -> bloco -> sentença anterior
     const target = getMarkerSentenceRange(editor, title);
     if (target) {
-      console.log(`✅ Target encontrado para "${title}":`, target);
       const { block, start, end } = target;
       editorRef.current.highlightText(block.id, start, end, action === 'enter');
       return;
-    } else {
-      console.log(`❌ Target não encontrado para "${title}"`);
     }
 
     // 2) Fallback antigo (mantém se quiser cobrir casos sem marcador)
@@ -567,82 +537,11 @@ const NotionLikePage = ({
     }
   }, [newsData, getMarkerSentenceRange]);
 
-  // FUNÇÃO DE TESTE específica para marcadores
-  const testMarkerHighlight = useCallback(() => {
-    console.log('🧪 === TESTE DE GRIFO POR MARCADORES ===');
+  // FUNÇÃO DE TESTE específica para marcadores - REMOVIDA (não essencial)
+  // const testMarkerHighlight = useCallback(() => { ... }, [handleHighlightText, referenceMapping]);
 
-    // Testar com títulos do referenceMapping
-    const availableTitles = Array.from(referenceMapping.keys()).filter(k => !k.startsWith('['));
-    console.log('📋 Títulos disponíveis para teste:', availableTitles);
-
-    if (availableTitles.length > 0) {
-      const testTitle = availableTitles[0];
-      console.log(`🧪 Testando grifo para título: "${testTitle}"`);
-
-      handleHighlightText(testTitle, "", "enter");
-
-      // Remover após 3 segundos
-      setTimeout(() => {
-        console.log(`🧪 Removendo grifo de teste...`);
-        handleHighlightText(testTitle, "", "leave");
-      }, 3000);
-    } else {
-      console.log('❌ Nenhum título disponível para teste');
-    }
-
-    console.log('🧪 === FIM TESTE MARCADORES ===');
-  }, [handleHighlightText, referenceMapping]);
-
-  // FUNÇÃO DE DEBUG PARA SELEÇÃO
-  const debugTextSelection = useCallback(() => {
-    if (!editorRef.current || !editorRef.current.editor) {
-      console.log('❌ Editor não disponível para debug');
-      return;
-    }
-
-    const editor = editorRef.current.editor;
-
-    console.log('🔍 === DEBUG TEXT SELECTION ===');
-
-    // Verificar métodos de seleção
-    console.log('🎯 Métodos de seleção disponíveis:');
-    console.log('- setTextCursor:', typeof editorRef.current.setTextCursor, editorRef.current.setTextCursor ? '✅' : '❌');
-    console.log('- setSelection:', typeof editorRef.current.setSelection, editorRef.current.setSelection ? '✅' : '❌');
-    console.log('- getSelection:', typeof editor.getSelection, editor.getSelection ? '✅' : '❌');
-
-    // Verificar métodos de estilo
-    console.log('🎨 Métodos de estilo disponíveis:');
-    console.log('- addStyles:', typeof editorRef.current.addStyles, editorRef.current.addStyles ? '✅' : '❌');
-    console.log('- removeStyles:', typeof editorRef.current.removeStyles, editorRef.current.removeStyles ? '✅' : '❌');
-    console.log('- toggleStyles:', typeof editorRef.current.toggleStyles, editorRef.current.toggleStyles ? '✅' : '❌');
-
-    // Verificar blocos
-    console.log('📄 Blocos disponíveis:');
-    const blocks = editor.topLevelBlocks || [];
-    console.log(`- Total de blocos: ${blocks.length}`);
-
-    if (blocks.length > 0) {
-      const firstBlock = blocks[0];
-      const blockText = extractBlockTextFlat(firstBlock);
-      console.log(`- Primeiro bloco ID: ${firstBlock.id}`);
-      console.log(`- Primeiro bloco texto: "${blockText.substring(0, 100)}..."`);
-      console.log(`- Primeiro bloco length: ${blockText.length}`);
-    }
-
-    // Verificar final_text e marcadores
-    console.log('🗺️ Verificação de marcadores:');
-    const finalText = newsData?.final_text;
-    if (finalText) {
-      console.log(`- final_text length: ${finalText.length}`);
-      const markers = finalText.match(/\/\/\/<[^>]+>\/\/\//g);
-      console.log(`- Marcadores encontrados: ${markers ? markers.length : 0}`);
-      if (markers && markers.length > 0) {
-        console.log(`- Primeiro marcador: ${markers[0]}`);
-      }
-    }
-
-    console.log('🔍 === FIM DEBUG ===');
-  }, [newsData, extractBlockTextFlat]);
+  // FUNÇÃO DE DEBUG PARA SELEÇÃO - REMOVIDA (não essencial)
+  // const debugTextSelection = useCallback(() => { ... }, [newsData, extractBlockTextFlat]);
 
   // FUNÇÃO DE TESTE SIMPLES
   const testSimpleHighlight = useCallback(async () => {
@@ -1011,6 +910,11 @@ const NotionLikePage = ({
     alert('Conteúdo salvo em memória. Para persistir no banco, use a coluna "final_text" da tabela "Controle Geral".');
   }, []);
 
+  // onChange do editor - SIMPLIFICADO
+  const handleEditorChange = useCallback((newMarkdown) => {
+    setLastMarkdown(newMarkdown);
+  }, []);
+
   // Forçar atualização do layout quando o splitter mudar
   useEffect(() => {
     // Pequeno delay para garantir que o DOM foi atualizado
@@ -1368,47 +1272,21 @@ const NotionLikePage = ({
                 </div>
               </div>
               <div className="flex items-center gap-2">
-
-
-                <button
-                  onClick={testMarkerHighlight}
-                  className="px-3 py-1.5 rounded border"
-                  title="Teste Grifo por Marcadores"
-                  style={{ backgroundColor: 'purple', borderColor: 'purple', color: 'white' }}
-                >
-                  <div className="flex items-center gap-2"><Target size={16} /><span className="text-sm">Teste Marcador</span></div>
-                </button>
-                <button
-                  onClick={testSimpleHighlight}
-                  className="px-3 py-1.5 rounded border"
-                  title="Teste Simples de Seleção"
-                  style={{ backgroundColor: 'green', borderColor: 'green', color: 'white' }}
-                >
-                  <div className="flex items-center gap-2"><TestTube size={16} /><span className="text-sm">Teste</span></div>
-                </button>
-                <button
-                  onClick={debugTextSelection}
-                  className="px-3 py-1.5 rounded border"
-                  title="Debug Métodos de Seleção"
-                  style={{ backgroundColor: 'blue', borderColor: 'blue', color: 'white' }}
-                >
-                  <div className="flex items-center gap-2"><Bug size={16} /><span className="text-sm">Debug</span></div>
-                </button>
-                <button
-                  onClick={resetSession}
-                  className="px-3 py-1.5 rounded border"
-                  title="Resetar Sessão (volta ao final_text original)"
-                  style={{ backgroundColor: 'red', borderColor: 'red', color: 'white' }}
-                >
-                  <div className="flex items-center gap-2"><RotateCcw size={16} /><span className="text-sm">Reset</span></div>
-                </button>
-                <button onClick={handleSave} className="px-3 py-1.5 rounded border" title="Salvar" style={{ backgroundColor: 'var(--bg-tertiary)', borderColor: 'var(--border-primary)', color: 'var(--text-secondary)' }}>
-                  <div className="flex items-center gap-2"><Save size={16} /><span className="text-sm">Salvar</span></div>
-                </button>
-                <button onClick={onClose} className="p-2 rounded border" title="Fechar" style={{ backgroundColor: 'var(--bg-tertiary)', borderColor: 'var(--border-primary)', color: 'var(--text-secondary)' }}>
-                  <X size={16} />
-                </button>
-              </div>
+                 <button
+                   onClick={resetSession}
+                   className="px-3 py-1.5 rounded border"
+                   title="Resetar Sessão (volta ao final_text original)"
+                   style={{ backgroundColor: 'red', borderColor: 'red', color: 'white' }}
+                 >
+                   <div className="flex items-center gap-2"><RotateCcw size={16} /><span className="text-sm">Reset</span></div>
+                 </button>
+                 <button onClick={handleSave} className="px-3 py-1.5 rounded border" title="Salvar" style={{ backgroundColor: 'var(--bg-tertiary)', borderColor: 'var(--border-primary)', color: 'var(--text-secondary)' }}>
+                   <div className="flex items-center gap-2"><Save size={16} /><span className="text-sm">Salvar</span></div>
+                 </button>
+                 <button onClick={onClose} className="p-2 rounded border" title="Fechar" style={{ backgroundColor: 'var(--bg-tertiary)', borderColor: 'var(--border-primary)', color: 'var(--text-secondary)' }}>
+                   <X size={16} />
+                 </button>
+               </div>
             </div>
 
             {/* Corpo: dois painéis com splitter central */}
@@ -1422,11 +1300,7 @@ const NotionLikePage = ({
                         key="editor-frozen" // KEY fixo - nunca muda
                         ref={editorRef}
                         initialContent={displayContent}
-                        onChange={(newMarkdown) => {
-                          console.log(`📝 [${new Date().toLocaleTimeString()}] Editor changed:`, newMarkdown?.length || 0, 'chars');
-                          console.log('📄 Novo conteúdo (preview):', newMarkdown?.substring(0, 200) + '...');
-                          setLastMarkdown(newMarkdown);
-                        }}
+                        onChange={handleEditorChange}
                         onScroll={filteredSection ? undefined : handleScrollSync}
                         onCanvasItemDragStart={(payload) => { try { onCanvasItemDragStart?.(payload); } catch { } }}
                         onReferenceUpdate={updateReferenceMapping}
