@@ -126,11 +126,20 @@ const CurationFeed = () => {
   useEffect(() => {
     const openReader = (e) => {
       const item = e.detail?.item;
-      if (item) setReaderItem(item);
+      if (item) {
+        setReaderItem(item);
+      }
     };
     window.addEventListener('open-news-reader', openReader);
-    return () => window.removeEventListener('open-news-reader', openReader);
+    return () => {
+      window.removeEventListener('open-news-reader', openReader);
+    };
   }, []);
+
+  // Monitorar mudanças no readerItem
+  useEffect(() => {
+    console.log('🔄 readerItem mudou:', readerItem);
+  }, [readerItem]);
 
   // Listener para toggle de publicado
   useEffect(() => {

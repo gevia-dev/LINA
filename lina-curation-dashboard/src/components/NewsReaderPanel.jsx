@@ -29,7 +29,7 @@ const NewsReaderPanel = ({ item, onClose }) => {
     <div
       className="fixed inset-0 z-[1002]"
       style={{
-        backgroundColor: 'rgba(0, 0, 0, 0.5)',
+        backgroundColor: 'rgba(0, 0, 0, 0.3)',
         backdropFilter: 'blur(2px)'
       }}
       role="dialog"
@@ -38,65 +38,80 @@ const NewsReaderPanel = ({ item, onClose }) => {
       {/* Container */}
       <div
         className="absolute inset-0"
-        style={{ display: 'flex', flexDirection: 'column' }}
+        style={{ display: 'flex', justifyContent: 'flex-end' }}
         onClick={(e) => {
           // Evitar fechar ao clicar dentro do conteúdo
           if (e.target === e.currentTarget) onClose?.();
         }}
       >
-        {/* Header */}
+        {/* Sidebar de Leitura */}
         <div
-          className="flex items-center justify-between"
           style={{
-            padding: '12px 16px',
-            backgroundColor: 'var(--bg-secondary)',
-            borderBottom: '1px solid var(--border-primary)'
+            width: 'min(1600px, 80vw)',
+            height: '100vh',
+            backgroundColor: 'var(--bg-primary)',
+            borderLeft: '1px solid var(--border-primary)',
+            display: 'flex',
+            flexDirection: 'column',
+            boxShadow: '-4px 0 20px rgba(0, 0, 0, 0.3)',
+            animation: 'slideInRight 0.3s ease-out'
           }}
+          onClick={(e) => e.stopPropagation()}
         >
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', minWidth: 0 }}>
-            <div
-              className="truncate"
-              style={{
-                color: 'var(--text-primary)',
-                fontFamily: 'Inter',
-                fontWeight: 600,
-                fontSize: '14px'
-              }}
-              title={title}
-            >
-              {title}
-            </div>
-            {item?.created_at && (
-              <div style={{ color: 'var(--text-secondary)', fontSize: '11px', fontFamily: 'Inter' }}>
-                {new Date(item.created_at).toLocaleString('pt-BR')}
+          {/* Header */}
+          <div
+            className="flex items-center justify-between"
+            style={{
+              padding: '16px 20px',
+              backgroundColor: 'var(--bg-secondary)',
+              borderBottom: '1px solid var(--border-primary)',
+              flexShrink: 0
+            }}
+          >
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', minWidth: 0, flex: 1 }}>
+              <div
+                className="truncate"
+                style={{
+                  color: 'var(--text-primary)',
+                  fontFamily: 'Inter',
+                  fontWeight: 600,
+                  fontSize: '16px'
+                }}
+                title={title}
+              >
+                {title}
               </div>
-            )}
+              {item?.created_at && (
+                <div style={{ color: 'var(--text-secondary)', fontSize: '12px', fontFamily: 'Inter' }}>
+                  {new Date(item.created_at).toLocaleString('pt-BR')}
+                </div>
+              )}
+            </div>
+
+            <button
+              onClick={onClose}
+              aria-label="Fechar leitor"
+              style={{
+                background: 'none',
+                border: '1px solid var(--border-primary)',
+                color: 'var(--text-secondary)',
+                cursor: 'pointer',
+                padding: '8px',
+                borderRadius: '6px',
+                marginLeft: '12px'
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--text-primary)'; }}
+              onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--text-secondary)'; }}
+            >
+              <X size={16} />
+            </button>
           </div>
 
-          <button
-            onClick={onClose}
-            aria-label="Fechar leitor"
-            style={{
-              background: 'none',
-              border: '1px solid var(--border-primary)',
-              color: 'var(--text-secondary)',
-              cursor: 'pointer',
-              padding: '8px',
-              borderRadius: '6px'
-            }}
-            onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--text-primary)'; }}
-            onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--text-secondary)'; }}
+          {/* Content */}
+          <div
+            className="flex-1 overflow-auto"
+            style={{ padding: '20px' }}
           >
-            <X size={16} />
-          </button>
-        </div>
-
-        {/* Content */}
-        <div
-          className="flex-1 overflow-auto"
-          style={{ backgroundColor: 'var(--bg-primary)', padding: '16px' }}
-        >
-          <div style={{ maxWidth: 900, margin: '0 auto' }}>
             {/* Título editável */}
             <div
               contentEditable
@@ -107,8 +122,9 @@ const NewsReaderPanel = ({ item, onClose }) => {
                 color: 'var(--text-primary)',
                 fontFamily: 'Inter',
                 fontWeight: 700,
-                fontSize: '22px',
-                marginBottom: '12px'
+                fontSize: '24px',
+                marginBottom: '20px',
+                lineHeight: 1.3
               }}
             >
               {title}
@@ -122,7 +138,7 @@ const NewsReaderPanel = ({ item, onClose }) => {
                 color: 'var(--text-primary)',
                 border: '1px solid var(--border-primary)',
                 borderRadius: '8px',
-                padding: '16px',
+                padding: '20px',
                 minHeight: '60vh',
                 lineHeight: 1.7,
                 fontFamily: 'Inter',
@@ -143,6 +159,17 @@ const NewsReaderPanel = ({ item, onClose }) => {
               article a { color: var(--primary-green); text-decoration: none; }
               article a:hover { text-decoration: underline; }
               article hr { border: none; border-top: 1px solid var(--border-primary); margin: 12px 0; }
+              
+              @keyframes slideInRight {
+                from {
+                  transform: translateX(100%);
+                  opacity: 0;
+                }
+                to {
+                  transform: translateX(0);
+                  opacity: 1;
+                }
+              }
             `}</style>
           </div>
         </div>

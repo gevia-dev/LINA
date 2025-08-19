@@ -13,6 +13,7 @@ import LinaExplorerPage from './components/LinaExplorerPage';
 import LinaBubbleExplorerPage from './pages/LinaBubbleExplorerPage';
 import CurationPageWithCanvas from './components/CurationPageWithCanvas';
 import CurationPage from './components/CurationPage';
+import ContentTypeSelection from './components/ContentTypeSelection';
 
 // Layout com sidebar
 const LayoutWithSidebar = ({ children }) => (
@@ -39,16 +40,27 @@ function App() {
               </ProtectedRoute>
             } />
             <Route path="/explorer" element={
-              <LayoutWithSidebar>
-                <LinaExplorerPage />
-              </LayoutWithSidebar>
+              <ProtectedRoute>
+                <LayoutWithSidebar>
+                  <LinaExplorerPage />
+                </LayoutWithSidebar>
+              </ProtectedRoute>
             } />
             <Route path="/bubble-explorer" element={
-              <LayoutWithSidebar>
-                <LinaBubbleExplorerPage />
-              </LayoutWithSidebar>
+              <ProtectedRoute>
+                <LayoutWithSidebar>
+                  <LinaBubbleExplorerPage />
+                </LayoutWithSidebar>
+              </ProtectedRoute>
             } />
             <Route path="/news/:id" element={<CurationPage />} />
+            <Route path="/content-type/:id" element={
+              <ProtectedRoute>
+                <LayoutWithSidebar>
+                  <ContentTypeSelection />
+                </LayoutWithSidebar>
+              </ProtectedRoute>
+            } />
             <Route path="/curation/:id" element={<CurationPage />} />
             <Route path="/" element={<Navigate to="/feed" replace />} />
           </Routes>

@@ -29,12 +29,12 @@ const DetailsSidebar = ({ selectedItem }) => {
     try {
       // Se já temos o lina_news_id (quando vem do filtro), usar diretamente
       if (selectedItem.lina_news_id) {
-        navigate(`/news/${selectedItem.lina_news_id}`);
+        navigate(`/content-type/${selectedItem.lina_news_id}`);
         return;
       }
       // Quando o item já é da tabela lina_news, navegar usando o próprio id
       if (Object.prototype.hasOwnProperty.call(selectedItem, 'news_id')) {
-        navigate(`/news/${selectedItem.id}`);
+        navigate(`/content-type/${selectedItem.id}`);
         return;
       }
       
@@ -42,8 +42,8 @@ const DetailsSidebar = ({ selectedItem }) => {
       const linaNews = await fetchLinaNewsByNewsId(selectedItem.id);
       
       if (linaNews?.id) {
-        // Redirecionar usando o id da lina_news
-        navigate(`/news/${linaNews.id}`);
+        // Redirecionar para a página de seleção de tipo de conteúdo
+        navigate(`/content-type/${linaNews.id}`);
       } else {
         console.error('Notícia não encontrada na tabela lina_news');
         alert('Esta notícia ainda não foi processada para a lina_news. Tente novamente mais tarde.');
@@ -275,7 +275,7 @@ const DetailsSidebar = ({ selectedItem }) => {
                       try {
                         const bucket = coreQuotes?.search_quotes || {};
                         const allLists = Object.values(bucket).flat();
-                        const filtered = allLists.filter((item) => item?.categoria_funcional === 'Fato_Central');
+                        const filtered = allLists.filter((item) => item?. categoria_funcional === 'Fato_Central');
                         setQuotesForSection(filtered || []);
                         setQuotesModalTitle('O que aconteceu? • Fato Central');
                         setIsQuotesModalOpen(true);
