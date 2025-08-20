@@ -226,6 +226,109 @@ export const handleCanvasConnection = async (connectionParams, nodes, edges, edi
   console.log('📝 Node para inserir:', { title: nodeToInsert.data.title, phrase: nodeToInsert.data.phrase });
   console.log('📝 Info de inserção:', insertionInfo);
   
+  // NOVA LÓGICA: Verificar se AMBOS os handles do node estão conectados
+  const nodeToInsertId = nodeToInsert.id;
+  const nodeConnections = edges.filter(edge => 
+    edge.source === nodeToInsertId || edge.target === nodeToInsertId
+  );
+  
+  // Verificar se o node tem dois handles (input e output)
+  const hasInputHandle = nodeConnections.some(edge => edge.target === nodeToInsertId);
+  const hasOutputHandle = nodeConnections.some(edge => edge.source === nodeToInsertId);
+  
+  console.log('🔗 Status dos handles:', {
+    hasInputHandle,
+    hasOutputHandle,
+    totalConnections: nodeConnections.length
+  });
+  
+  // SOLUÇÃO INTELIGENTE: Verificar tipo de inserção baseado nas conexões
+  const isStartConnection = nodeConnections.some(edge => 
+    edge.source === 'segment-start' || edge.target === 'segment-start'
+  );
+  
+  const isEndConnection = nodeConnections.some(edge => 
+    edge.source === 'segment-end' || edge.target === 'segment-end'
+  );
+  
+  const isSystemConnection = isStartConnection || isEndConnection;
+  
+  console.log('🎯 Análise de inserção:', {
+    isStartConnection,
+    isEndConnection,
+    isSystemConnection,
+    totalConnections: nodeConnections.length
+  });
+  
+  // SOLUÇÃO INTELIGENTE: 
+  // - Se tem conexão com sistema (início/fim): precisa apenas 1 conexão
+  // - Se é inserção no meio: precisa de 2 conexões
+  if (isSystemConnection) {
+    // Inserção no início ou fim - precisa apenas de 1 conexão
+    if (nodeConnections.length < 1) {
+      console.log('⏳ Aguardando conexão para inserção no início/fim:', nodeToInsertId);
+      console.log('📊 Conexões atuais:', nodeConnections.length, '/ 1 necessária (sistema)');
+      return { 
+        success: true, 
+        message: 'Aguardando conexão para inserção no início/fim',
+        reason: 'waiting_for_system_connection',
+        nodeId: nodeToInsertId,
+        currentConnections: nodeConnections.length,
+        requiredConnections: 1,
+        isSystemInsertion: true
+      };
+    }
+    console.log('✅ Conexão com sistema estabelecida - prosseguindo com inserção');
+  } else {
+    // Inserção no meio - precisa de 2 conexões
+    if (nodeConnections.length < 2) {
+      console.log('⏳ Aguardando segunda conexão para inserção no meio:', nodeToInsertId);
+      console.log('📊 Conexões atuais:', nodeConnections.length, '/ 2 necessárias (meio)');
+      return { 
+        success: true, 
+        message: 'Aguardando segunda conexão para inserção no meio',
+        reason: 'waiting_for_second_connection',
+        nodeId: nodeToInsertId,
+        currentConnections: nodeConnections.length,
+        requiredConnections: 2,
+        isSystemInsertion: false
+      };
+    }
+    console.log('✅ AMBAS as conexões conectadas - prosseguindo com inserção no meio');
+  }
+  
+  // NOVA VERIFICAÇÃO: Evitar inserções duplicadas do mesmo texto
+  const textToInsert = nodeToInsert.data.phrase;
+  const textHash = `${nodeToInsertId}:${textToInsert.substring(0, 50)}`; // Hash único do texto
+  
+  // Verificar se este texto já foi inserido recentemente
+  if (!window.linaInsertedTexts) {
+    window.linaInsertedTexts = new Set();
+  }
+  
+  if (window.linaInsertedTexts.has(textHash)) {
+    console.log('🛑 TEXTO JÁ INSERIDO RECENTEMENTE - Evitando duplicação:', textToInsert.substring(0, 50));
+    return { 
+      success: true, 
+      message: 'Texto já inserido recentemente - evitando duplicação',
+      reason: 'text_already_inserted',
+      textHash
+    };
+  }
+  
+  // Marcar texto como inserido
+  window.linaInsertedTexts.add(textHash);
+  
+  // Limpar textos antigos após 5 segundos para evitar acúmulo
+  setTimeout(() => {
+    if (window.linaInsertedTexts.has(textHash)) {
+      window.linaInsertedTexts.delete(textHash);
+      console.log('🧹 Texto removido do cache de inserções:', textHash);
+    }
+  }, 5000);
+  
+  console.log('✅ Texto marcado para inserção (não duplicado):', textHash);
+  
   // SOLUÇÃO KISS/DRY: Se ambos os nodes já estão mapeados, não fazer nada
   if (insertionInfo.searchText && referenceMapping) {
     const searchMarker = referenceMapping.get(insertionInfo.searchText.trim());
@@ -255,8 +358,6 @@ export const handleCanvasConnection = async (connectionParams, nodes, edges, edi
     }
   }
   
-  // Preparar o texto a ser inserido
-  const textToInsert = nodeToInsert.data.phrase;
   console.log('✍️ Texto a inserir:', textToInsert);
   
   // Converter título para marcador usando referenceMapping

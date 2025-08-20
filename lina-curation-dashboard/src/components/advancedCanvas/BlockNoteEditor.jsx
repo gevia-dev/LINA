@@ -617,7 +617,7 @@ const BlockNoteEditor = forwardRef(({ initialContent = '', onChange, onScroll, o
           await new Promise(resolve => setTimeout(resolve, 50));
           tiptap.commands.setTextSelection(targetPosition);
           
-          const contentToInsert = `\n\n${textWithMarker}`;
+          const contentToInsert = textWithMarker;
           const success = tiptap.commands.insertContent(contentToInsert);
           
           const verified = await verifyInsertion(marker, 2000);
@@ -677,7 +677,7 @@ const BlockNoteEditor = forwardRef(({ initialContent = '', onChange, onScroll, o
         tiptap.commands.setTextSelection(targetPosition);
         await new Promise(resolve => setTimeout(resolve, 50));
         
-        const contentToInsert = position === 'after' ? `\n\n${textWithMarker}` : `${textWithMarker}\n\n`;
+        const contentToInsert = textWithMarker;
         const insertResult = tiptap.commands.insertContentAt(targetPosition, contentToInsert) || 
                             tiptap.commands.insertContent(contentToInsert);
         
@@ -759,7 +759,7 @@ const BlockNoteEditor = forwardRef(({ initialContent = '', onChange, onScroll, o
             await new Promise(resolve => setTimeout(resolve, 50));
             
             tiptap.commands.setTextSelection(tiptap.state.doc.content.size);
-            const success = tiptap.commands.insertContent(`\n\n${textWithMarker}`);
+            const success = tiptap.commands.insertContent(textWithMarker);
             
             if (success && typeof onReferenceUpdate === 'function') {
               const titleFromText = newText.substring(0, 50).trim();

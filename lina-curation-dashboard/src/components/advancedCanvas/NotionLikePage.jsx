@@ -651,8 +651,14 @@ const NotionLikePage = ({
 
 
 
-  // ULTRA-KISS: Editor congelado após primeira inicialização
+  // ULTRA-KISS: Editor congelado após primeira inicialização, MAS permite atualizações via conexões
   const editorContent = useMemo(() => {
+    // Se editor está congelado, mas temos lastMarkdown (inserção via conexões), usar lastMarkdown
+    if (editorFrozen && lastMarkdown && lastMarkdown.trim()) {
+      console.log('🔓 Editor descongelado temporariamente para conexões:', lastMarkdown.length, 'chars');
+      return lastMarkdown;
+    }
+    
     // Se editor está congelado, não mudar mais nada
     if (editorFrozen && sessionContent) {
       return sessionContent;
@@ -673,7 +679,7 @@ const NotionLikePage = ({
     }
 
     return sessionContent || `# Editor carregando...`;
-  }, [editorFrozen, sessionContent, isSessionInitialized, newsData?.final_text, processFinalText]);
+  }, [editorFrozen, sessionContent, isSessionInitialized, newsData?.final_text, processFinalText, lastMarkdown]);
 
   const sectionMarkdownMap = useMemo(() => {
     // Usar editorContent para processar seções (mas apenas se não for a mensagem de fallback)
@@ -729,16 +735,10 @@ const NotionLikePage = ({
       editorContentPreview: editorContent?.substring(0, 100) || 'N/A'
     });
 
-    // CORREÇÃO: Se o editor deve ser atualizado, usar lastMarkdown
-    if (shouldUpdateEditor && lastMarkdown && lastMarkdown.trim()) {
-      console.log('✅ Editor marcado para atualização, usando lastMarkdown');
-      return lastMarkdown;
-    }
-
-    // Se temos conteúdo no editor, sempre priorizar
+    // PRIORIDADE 1: Se temos lastMarkdown (conteúdo inserido via conexões), sempre usar
     if (lastMarkdown && lastMarkdown.trim()) {
       if (!filteredSection) {
-        console.log('✅ Usando lastMarkdown (sem filtro de seção)');
+        console.log('✅ Usando lastMarkdown (conteúdo via conexões)');
         return lastMarkdown;
       }
 
@@ -754,6 +754,12 @@ const NotionLikePage = ({
       return lastMarkdown;
     }
 
+    // PRIORIDADE 2: Se o editor deve ser atualizado, usar lastMarkdown
+    if (shouldUpdateEditor && lastMarkdown && lastMarkdown.trim()) {
+      console.log('✅ Editor marcado para atualização, usando lastMarkdown');
+      return lastMarkdown;
+    }
+
     // Fallback para primeira renderização
     console.log('🔄 Primeira renderização - usando editorContent');
     console.log('📄 editorContent sendo usado:', editorContent?.substring(0, 200) + '...');
@@ -761,7 +767,7 @@ const NotionLikePage = ({
     return sectionMarkdownMap[filteredSection] || editorContent;
   }, [filteredSection, sectionMarkdownMap, editorContent, lastMarkdown, shouldUpdateEditor]);
 
-  // KISS: Sincronizar mudanças para highlight funcionar
+  // KISS: Sincronizar mudanças para highlight funcionar, MAS preservar conteúdo inserido via conexões
   useEffect(() => {
     if (lastMarkdown && lastMarkdown !== sessionContent) {
       console.log(`🔄 [${new Date().toLocaleTimeString()}] Sync para highlight funcionar`);
@@ -770,9 +776,16 @@ const NotionLikePage = ({
         sessionContentLength: sessionContent?.length || 0,
         areEqual: lastMarkdown === sessionContent
       });
+      
+      // ATENÇÃO: Não sobrescrever sessionContent se lastMarkdown é maior (inserção via conexões)
+      if (lastMarkdown.length > (sessionContent?.length || 0)) {
+        console.log('🔒 Preservando sessionContent - lastMarkdown é maior (possível inserção via conexões)');
+        return;
+      }
+      
       setSessionContent(lastMarkdown);
     }
-  }, [lastMarkdown]);
+  }, [lastMarkdown, sessionContent]);
 
   // CORREÇÃO: Resetar shouldUpdateEditor quando o editor for atualizado
   useEffect(() => {

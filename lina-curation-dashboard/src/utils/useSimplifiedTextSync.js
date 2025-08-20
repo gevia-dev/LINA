@@ -56,7 +56,18 @@ export const useSimplifiedTextSync = ({
       const candidatesById = [];
       currentEdges.forEach(edge => {
         if (edge && edge.id && !prevIds.has(edge.id) && !lastProcessedEdges.has(edge.id)) {
-          candidatesById.push({ edge, hash: edge.id, timestamp: Date.now() });
+          // Verificar se não é uma conexão que já está aguardando
+          const isWaiting = Array.from(connectionHistoryRef.current.values()).some(
+            history => (history.result?.reason === 'waiting_for_second_connection' || 
+                       history.result?.reason === 'waiting_for_system_connection') && 
+                      (history.result?.nodeId === edge.source || history.result?.nodeId === edge.target)
+          );
+          
+          if (!isWaiting) {
+            candidatesById.push({ edge, hash: edge.id, timestamp: Date.now() });
+          } else {
+            console.log('⏳ Ignorando nova conexão - node já está aguardando:', edge.id);
+          }
         }
       });
       if (candidatesById.length > 0) {
@@ -79,7 +90,18 @@ export const useSimplifiedTextSync = ({
       currentEdges.forEach(edge => {
         const hash = generateEdgeHash(edge);
         if (!previousEdgeHashes.has(hash) && !lastProcessedEdges.has(hash)) {
-          newConnections.push({ edge, hash, timestamp: Date.now() });
+          // Verificar se não é uma conexão que já está aguardando
+          const isWaiting = Array.from(connectionHistoryRef.current.values()).some(
+            history => (history.result?.reason === 'waiting_for_second_connection' || 
+                       history.result?.reason === 'waiting_for_system_connection') && 
+                      (history.result?.nodeId === edge.source || history.result?.nodeId === edge.target)
+          );
+          
+          if (!isWaiting) {
+            newConnections.push({ edge, hash, timestamp: Date.now() });
+          } else {
+            console.log('⏳ Ignorando nova conexão - node já está aguardando:', hash);
+          }
         }
       });
 
@@ -91,19 +113,97 @@ export const useSimplifiedTextSync = ({
   }, [generateEdgeHash, lastProcessedEdges, isInitialized]);
 
   /**
+   * NOVA FUNÇÃO INTELIGENTE: Verifica se uma conexão aguardando agora tem conexões suficientes
+   */
+  const checkWaitingConnections = useCallback((currentEdges) => {
+    try {
+      const waitingConnections = Array.from(connectionHistoryRef.current.values()).filter(
+        history => history.result?.reason === 'waiting_for_second_connection' || 
+                   history.result?.reason === 'waiting_for_system_connection'
+      );
+      
+      if (waitingConnections.length === 0) {
+        return [];
+      }
+      
+      console.log('🔍 Verificando conexões aguardando:', waitingConnections.length);
+      
+      const readyConnections = [];
+      
+      waitingConnections.forEach(history => {
+        const { nodeId, reason, requiredConnections, isSystemInsertion } = history.result;
+        const nodeConnections = currentEdges.filter(edge => 
+          edge.source === nodeId || edge.target === nodeId
+        );
+        
+        console.log(`🔗 Node ${nodeId}: ${nodeConnections.length}/${requiredConnections || 2} conexões (${reason})`);
+        
+        // Verificar se tem conexões suficientes baseado no tipo de espera
+        const hasEnoughConnections = reason === 'waiting_for_system_connection' 
+          ? nodeConnections.length >= 1  // Inserção no início/fim precisa apenas de 1
+          : nodeConnections.length >= 2; // Inserção no meio precisa de 2
+        
+        if (hasEnoughConnections) {
+          console.log(`✅ Node ${nodeId} agora tem conexões suficientes!`);
+          readyConnections.push({
+            ...history,
+            hash: history.hash,
+            timestamp: Date.now(),
+            currentConnections: nodeConnections.length,
+            requiredConnections: requiredConnections || 2
+          });
+        }
+      });
+      
+      return readyConnections;
+    } catch (error) {
+      console.error('❌ Erro ao verificar conexões aguardando:', error);
+      return [];
+    }
+  }, []);
+
+  /**
    * Processa uma conexão individual
    */
   const processConnection = useCallback(async (connectionData) => {
     try {
       const { edge, hash } = connectionData;
       
-      // Marcar como processada
-      setLastProcessedEdges(prev => new Set([...prev, hash]));
+      // Verificar se esta conexão já foi processada
+      if (lastProcessedEdges.has(hash)) {
+        console.log('⏭️ Conexão já processada, ignorando:', hash);
+        return { success: true, hash, result: { reason: 'already_processed' } };
+      }
       
       // Processar via helper principal
       const result = await handleCanvasConnection(edge, nodes, edges, editorRef, referenceMapping, onReferenceUpdate, onReindexing);
       
       if (result.success) {
+        // Se está aguardando segunda conexão, registrar no histórico para monitoramento
+        if (result.reason === 'waiting_for_second_connection' || result.reason === 'waiting_for_system_connection') {
+          console.log('⏳ Conexão aguardando:', result.reason === 'waiting_for_system_connection' ? 'sistema' : 'segunda conexão');
+          console.log('📊 Status:', result.currentConnections, '/', result.requiredConnections);
+          
+          // Registrar no histórico para monitoramento inteligente
+          connectionHistoryRef.current.set(hash, {
+            ...connectionData,
+            result,
+            timestamp: Date.now()
+          });
+          
+          return { success: true, hash, result, waiting: true };
+        }
+        
+        // Se texto já foi inserido, marcar como processado
+        if (result.reason === 'text_already_inserted') {
+          console.log('🛑 Texto já inserido, marcando como processado:', result.textHash);
+          setLastProcessedEdges(prev => new Set([...prev, hash]));
+          return { success: true, hash, result, reason: 'text_already_inserted' };
+        }
+        
+        // Marcar como processada apenas se não estiver aguardando
+        setLastProcessedEdges(prev => new Set([...prev, hash]));
+        
         // Registrar no histórico
         connectionHistoryRef.current.set(hash, {
           ...connectionData,
@@ -115,7 +215,7 @@ export const useSimplifiedTextSync = ({
       } else {
         // Adicionar à fila de retry se necessário
         if (result.error !== 'Parâmetros inválidos' && result.error !== 'Nodes não encontrados') {
-          setProcessingQueue(prev => [...prev, { ...connectionData, retryCount: 0 }]);
+          setProcessingQueue(prev => [...prev, { ...connectionData, retryCount: (connectionData.retryCount || 0) + 1 }]);
         }
         
         return { success: false, hash, error: result.error };
@@ -124,7 +224,7 @@ export const useSimplifiedTextSync = ({
     } catch (error) {
       return { success: false, error: error.message };
     }
-  }, [nodes, edges, editorRef, referenceMapping, onReferenceUpdate]);
+  }, [nodes, edges, editorRef, referenceMapping, onReferenceUpdate, lastProcessedEdges]);
 
   /**
    * Processa fila de conexões pendentes
@@ -145,7 +245,7 @@ export const useSimplifiedTextSync = ({
         
         // Aguardar um pouco entre processamentos para não sobrecarregar
         if (currentQueue.length > 1) {
-          await new Promise(resolve => setTimeout(resolve, 100));
+          await new Promise(resolve => setTimeout(resolve, 50)); // Reduzido para 50ms
         }
       }
 
@@ -204,6 +304,23 @@ export const useSimplifiedTextSync = ({
       return;
     }
 
+    // NOVA LÓGICA INTELIGENTE: Primeiro verificar conexões aguardando
+    const readyConnections = checkWaitingConnections(edges);
+    if (readyConnections.length > 0) {
+      console.log('🚀 Processando conexões que agora estão prontas:', readyConnections.length);
+      
+      // Processar conexões prontas imediatamente
+      readyConnections.forEach(connection => {
+        const { hash } = connection;
+        // Remover do histórico de aguardando
+        connectionHistoryRef.current.delete(hash);
+        // Marcar como processada
+        setLastProcessedEdges(prev => new Set([...prev, hash]));
+        // Processar a conexão original
+        processConnection(connection);
+      });
+    }
+
     // Detectar novas conexões
     const newConnections = detectNewConnections(edges, previousEdgesRef.current);
     
@@ -215,7 +332,7 @@ export const useSimplifiedTextSync = ({
     previousEdgesRef.current = [...edges];
     previousNodesRef.current = [...nodes];
 
-  }, [edges, nodes, isActive, detectNewConnections, processNewConnections, isInitialized]);
+  }, [edges, nodes, isActive, detectNewConnections, processNewConnections, isInitialized, checkWaitingConnections, processConnection]);
 
   /**
    * Efeito para processar fila quando disponível
@@ -280,13 +397,20 @@ export const useSimplifiedTextSync = ({
    * Função para obter estatísticas da sincronização
    */
   const getSyncStats = useCallback(() => {
+    const waitingConnections = Array.from(connectionHistoryRef.current.values()).filter(
+      history => history.result?.reason === 'waiting_for_second_connection' || 
+                 history.result?.reason === 'waiting_for_system_connection'
+    );
+    
     return {
       isActive,
       isProcessing,
       queueLength: processingQueue.length,
       processedCount: lastProcessedEdges.size,
       historySize: connectionHistoryRef.current.size,
-      lastProcessed: Array.from(lastProcessedEdges).slice(-5) // últimas 5 conexões
+      waitingConnections: waitingConnections.length,
+      lastProcessed: Array.from(lastProcessedEdges).slice(-5), // últimas 5 conexões
+      waitingNodes: waitingConnections.map(w => w.result?.nodeId).filter(Boolean)
     };
   }, [isActive, isProcessing, processingQueue.length, lastProcessedEdges]);
 

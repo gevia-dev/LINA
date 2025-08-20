@@ -37,6 +37,14 @@ const CustomEdge = ({
       return '#4A90E2'; // Azul para Segment → Item
     } else if (data?.connectionType === 'item-to-item') {
       return '#16A085'; // Verde para Item → Item
+    } else if (data?.connectionType === 'start-to-segment') {
+      return '#059669'; // Verde escuro para Start → Segment
+    } else if (data?.connectionType === 'start-to-item') {
+      return '#059669'; // Verde escuro para Start → Item
+    } else if (data?.connectionType === 'segment-to-end') {
+      return '#7C3AED'; // Roxo para Segment → End
+    } else if (data?.connectionType === 'item-to-end') {
+      return '#7C3AED'; // Roxo para Item → End
     }
     return '#4A90E2'; // Azul padrão
   };
@@ -296,6 +304,120 @@ const SegmentNode = ({ data }) => {
   );
 };
 
+// Node de Início (sempre no topo)
+const StartNode = ({ data }) => {
+  return (
+    <div
+      className="rounded-lg border"
+      style={{
+        backgroundColor: '#0f5132b0', // Verde mais escuro para diferenciar
+        borderColor: 'var(--primary-green)',
+        color: 'var(--text-primary)',
+        width: 420,
+        padding: 16,
+        position: 'relative'
+      }}
+    >
+      <div className="flex items-center gap-3 mb-3">
+        <div 
+          className="w-8 h-8 rounded-full flex items-center justify-center text-lg"
+          style={{ backgroundColor: 'var(--primary-green)' }}
+        >
+          🚀
+        </div>
+        <div>
+          <div className="text-sm font-semibold" style={{ fontFamily: '"Nunito Sans", "Inter", sans-serif' }}>
+            Início do Texto
+          </div>
+          <div className="text-xs" style={{ color: 'var(--text-secondary)' }}>
+            Ponto de partida
+          </div>
+        </div>
+      </div>
+      
+      <div className="text-sm" style={{ color: 'var(--text-secondary)', lineHeight: 1.5 }}>
+        <div className="italic opacity-60">Conecte para começar a estrutura</div>
+      </div>
+
+      {/* Handle de saída na parte inferior (não tem entrada) */}
+      <Handle
+        type="source"
+        position={Position.Bottom}
+        id="start-output"
+        style={{
+          width: 12,
+          height: 12,
+          backgroundColor: 'var(--primary-green)',
+          border: '2px solid var(--bg-secondary)',
+          borderRadius: '50%'
+        }}
+        className="start-connection-handle"
+        isConnectable={true}
+        title="Conectar início do texto"
+        onConnect={(params) => {
+        }}
+      />
+    </div>
+  );
+};
+
+// Node de Fim (sempre na base)
+const EndNode = ({ data }) => {
+  return (
+    <div
+      className="rounded-lg border"
+      style={{
+        backgroundColor: '#581c87b0', // Roxo para diferenciar
+        borderColor: '#a855f7',
+        color: 'var(--text-primary)',
+        width: 420,
+        padding: 16,
+        position: 'relative'
+      }}
+    >
+      <div className="flex items-center gap-3 mb-3">
+        <div 
+          className="w-8 h-8 rounded-full flex items-center justify-center text-lg"
+          style={{ backgroundColor: '#a855f7' }}
+        >
+          🎯
+        </div>
+        <div>
+          <div className="text-sm font-semibold" style={{ fontFamily: '"Nunito Sans", "Inter", sans-serif' }}>
+            Fim do Texto
+          </div>
+          <div className="text-xs" style={{ color: 'var(--text-secondary)' }}>
+            Ponto de chegada
+          </div>
+        </div>
+      </div>
+      
+      <div className="text-sm" style={{ color: 'var(--text-secondary)', lineHeight: 1.5 }}>
+        <div className="italic opacity-60">Conecte para finalizar a estrutura</div>
+      </div>
+
+      {/* Handle de entrada na parte superior (não tem saída) */}
+      <Handle
+        type="target"
+        position={Position.Top}
+        id="end-input"
+        style={{
+          width: 12,
+          height: 12,
+          backgroundColor: '#a855f7',
+          border: '2px solid var(--bg-secondary)',
+          borderRadius: '50%'
+        }}
+        className="end-connection-handle"
+        isConnectable={true}
+        title="Receber conexão para finalizar"
+        onConnect={(params) => {
+        }}
+      />
+    </div>
+  );
+};
+
 const ItemNode = React.memo(({ data }) => {
   const [isHovered, setIsHovered] = useState(false);
   
@@ -425,7 +547,9 @@ const ItemNode = React.memo(({ data }) => {
 const nodeTypes = {
   keyNode: KeyNode,
   itemNode: ItemNode,
-  segmentNode: SegmentNode
+  segmentNode: SegmentNode,
+  startNode: StartNode,
+  endNode: EndNode
 };
 
 // Parsing util (alinhado com ContextSidebar)
@@ -588,6 +712,26 @@ const buildHierarchy = (normalized) => {
     itemId: 'segment-conclusion'
   };
   }
+  
+  // ADICIONAR: Nodes de início e fim sempre presentes
+  segments.start = {
+    type: 'start',
+    title: 'Início do Texto',
+    content: '',
+    itemId: 'segment-start',
+    headerIndex: -1, // Antes de todos os outros
+    isSystemNode: true
+  };
+  
+  segments.end = {
+    type: 'end',
+    title: 'Fim do Texto',
+    content: '',
+    itemId: 'segment-end',
+    headerIndex: 999, // Depois de todos os outros
+    isSystemNode: true
+  };
+
   
   Object.entries(normalized).forEach(([parentKey, childObj]) => {
     // Pula quotes_map pois já foi processado acima
@@ -865,7 +1009,7 @@ const CanvasLibraryView = ({
         const segmentId = segment.itemId;
         const nodeData = {
           id: segmentId,
-          type: 'segmentNode',
+          type: segment.type === 'start' ? 'startNode' : segment.type === 'end' ? 'endNode' : 'segmentNode',
           data: {
             type: segment.type,
             title: segment.title,
@@ -873,15 +1017,16 @@ const CanvasLibraryView = ({
             itemId: segment.itemId,
             headerIndex: segment.headerIndex,
             subItems: segment.subItems || [],
-            connectedItems: segment.connectedItems || []
+            connectedItems: segment.connectedItems || [],
+            isSystemNode: segment.isSystemNode || false
           },
           position: { x: 0, y: 0 }
         };
         rfNodes.push(nodeData);
         addGNode(segmentId, 420, 120);
         
-        // Criar edges automáticas para ItemNodes conectados
-        if (segment.connectedItems && segment.connectedItems.length > 0) {
+        // Criar edges automáticas para ItemNodes conectados (apenas para segments normais)
+        if (segment.type !== 'start' && segment.type !== 'end' && segment.connectedItems && segment.connectedItems.length > 0) {
           
           // 1. Conecta o SegmentNode ao primeiro ItemNode
           const firstItem = segment.connectedItems[0];
@@ -956,6 +1101,60 @@ const CanvasLibraryView = ({
         }
       }
     });
+
+    // NOVA LÓGICA: Criar conexões automáticas com nodes de início e fim
+    const startNodeId = 'segment-start';
+    const endNodeId = 'segment-end';
+    
+    // Conectar o node de início ao primeiro segment (se houver)
+    const firstSegmentKey = Object.keys(segments).find(key => 
+      segments[key].type !== 'start' && segments[key].type !== 'end'
+    );
+    
+    if (firstSegmentKey && segments[firstSegmentKey]) {
+      const firstSegment = segments[firstSegmentKey];
+      const edgeId = `edge-${startNodeId}-${firstSegment.itemId}`;
+      const edge = {
+        id: edgeId,
+        source: startNodeId,
+        target: firstSegment.itemId,
+        sourceHandle: 'start-output',
+        targetHandle: 'segment-input',
+        type: 'custom',
+        data: { 
+          connectionType: 'start-to-segment',
+          onDelete: onEdgeDelete
+        },
+        style: { strokeWidth: 2 }
+      };
+      
+      rfEdges.push(edge);
+    }
+    
+    // Conectar o último segment ao node de fim (se houver)
+    const lastSegmentKey = Object.keys(segments).find(key => 
+      segments[key].type !== 'start' && segments[key].type !== 'end'
+    );
+    
+    if (lastSegmentKey && segments[lastSegmentKey]) {
+      const lastSegment = segments[lastSegmentKey];
+      const edgeId = `edge-${lastSegment.itemId}-${endNodeId}`;
+      const edge = {
+        id: edgeId,
+        source: lastSegment.itemId,
+        target: endNodeId,
+        sourceHandle: 'segment-output',
+        targetHandle: 'end-input',
+        type: 'custom',
+        data: { 
+          connectionType: 'segment-to-end',
+          onDelete: onEdgeDelete
+        },
+        style: { strokeWidth: 2 }
+      };
+      
+      rfEdges.push(edge);
+    }
 
       // Exibir todos os nós quando nenhuma tag estiver selecionada (visualização inicial completa)
   const tagsToRender = Object.keys(hierarchy.categories || []); // Sempre mostrar todas as categorias
@@ -1088,6 +1287,25 @@ const CanvasLibraryView = ({
       }
     });
 
+    // ADICIONAR: Posicionar node de início no topo
+    const startNode = rfNodes.find(n => n.id === 'segment-start');
+    if (startNode) {
+      const positionedStart = { 
+        ...startNode, 
+        position: { x: startX, y: -segmentHeight - marginY } // Acima de tudo
+      };
+      withPositions.unshift(positionedStart); // Adiciona no início do array
+    }
+    
+    // ADICIONAR: Posicionar node de fim na base
+    const endNode = rfNodes.find(n => n.id === 'segment-end');
+    if (endNode) {
+      const positionedEnd = { 
+        ...endNode, 
+        position: { x: startX, y: currentY } // Após todos os outros
+      };
+      withPositions.push(positionedEnd);
+    }
 
 
     // Adicionar ItemNodes independentes que não estão conectados a segments
@@ -1155,6 +1373,14 @@ const CanvasLibraryView = ({
       connectionType = 'segment-to-item';
     } else if (params.sourceHandle === 'data-output' && params.targetHandle === 'data-input') {
       connectionType = 'item-to-item';
+    } else if (params.sourceHandle === 'start-output' && params.targetHandle === 'segment-input') {
+      connectionType = 'start-to-segment';
+    } else if (params.sourceHandle === 'start-output' && params.targetHandle === 'data-input') {
+      connectionType = 'start-to-item';
+    } else if (params.sourceHandle === 'segment-output' && params.targetHandle === 'end-input') {
+      connectionType = 'segment-to-end';
+    } else if (params.sourceHandle === 'data-output' && params.targetHandle === 'end-input') {
+      connectionType = 'item-to-end';
     }
     
     const newEdge = addEdge(
@@ -1544,6 +1770,25 @@ const CanvasLibraryView = ({
         /* Popup hover opções */
         .canvas-library-view .popup-menu button:hover {
           background-color: var(--bg-tertiary) !important;
+        }
+        
+        /* Estilos para handles dos nodes de início e fim */
+        .canvas-library-view .start-connection-handle {
+          transition: all 0.2s ease;
+        }
+        
+        .canvas-library-view .start-connection-handle:hover {
+          transform: scale(1.2);
+          box-shadow: 0 0 8px rgba(5, 150, 105, 0.6);
+        }
+        
+        .canvas-library-view .end-connection-handle {
+          transition: all 0.2s ease;
+        }
+        
+        .canvas-library-view .end-connection-handle:hover {
+          transform: scale(1.2);
+          box-shadow: 0 0 8px rgba(124, 58, 237, 0.6);
         }
       `}</style>
 
