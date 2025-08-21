@@ -21,103 +21,114 @@ const NewsReaderPanel = ({ item, onClose }) => {
   const [title, setTitle] = useState(item?.title || 'Sem título');
   const [markdown, setMarkdown] = useState('');
   const [selectedButton, setSelectedButton] = useState('blog'); // Estado para controlar botão selecionado
-  const [linkedinData, setLinkedinData] = useState(null); // Estado para dados do LinkedIn
-  const [isLoadingLinkedin, setIsLoadingLinkedin] = useState(false); // Estado de carregamento
-  const [webhookTriggered, setWebhookTriggered] = useState(false); // Estado para controlar se webhook foi disparado
-  const [webhookMarkdown, setWebhookMarkdown] = useState(''); // Estado para conteúdo markdown do webhook
+  const [linkedinContent, setLinkedinContent] = useState('');
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [hasContent, setHasContent] = useState(false);
+  const [isCheckingExisting, setIsCheckingExisting] = useState(false);
   const editorRef = useRef(null);
 
   useEffect(() => {
     setTitle(item?.title || 'Sem título');
     setMarkdown(extractFinalTextMarkdown(item));
-    setSelectedButton('blog'); // Reset para blog post quando mudar o item
-    setLinkedinData(null); // Reset dos dados do LinkedIn
-    setWebhookTriggered(false); // Reset do estado do webhook
-    setWebhookMarkdown(''); // Reset do conteúdo markdown do webhook
+    setSelectedButton('blog');
+    setLinkedinContent('');
+    setHasContent(false);
+    setIsGenerating(false);
+    setIsCheckingExisting(false);
   }, [item]);
 
-  // Função para buscar dados do LinkedIn
-  const fetchLinkedinData = async () => {
-    const searchId = item?.id;
+  useEffect(() => {
+    if (['linkedin-enxuto', 'linkedin-informativo', 'instagram'].includes(selectedButton)) {
+      checkExistingContent();
+    }
+  }, [selectedButton, item?.id]);
+
+  const handleGenerateLinkedinPost = async () => {
+    if (!item?.id || isGenerating) return;
     
-    if (!searchId) return;
+    const typeMap = {
+      'linkedin-enxuto': 'short-li',
+      'linkedin-informativo': 'long-li',
+      'instagram': 'insta-default'
+    };
+    
+    const fieldMap = {
+      'linkedin-enxuto': 'Post_linkedin_curto',
+      'linkedin-informativo': 'post_linkedin_longo',
+      'instagram': 'post_instagram'
+    };
+    
+    const webhookType = typeMap[selectedButton];
+    const fieldName = fieldMap[selectedButton];
+    
+    if (!webhookType || !fieldName) return;
     
     try {
-      setIsLoadingLinkedin(true);
+      setIsGenerating(true);
       
-      // 1. Buscar no banco
-      const data = await fetchLinaNewsById(searchId);
-      setLinkedinData(data);
-      
-      // 2. Se não achar conteúdo, dispara webhook e faz polling
-      if (!data?.Post_linkedin_curto) {
-        console.log('🚀 Conteúdo não encontrado, disparando webhook...');
-        
-        // Disparar webhook
-        await triggerLinkedinWebhook(searchId, '');
-        toast.success('Webhook disparado! Aguardando resposta...');
-        
-        // Fazer polling para verificar quando o conteúdo estiver pronto
-        startPollingForContent(searchId);
-      } else {
-        console.log('✅ Conteúdo encontrado no banco');
-        setWebhookMarkdown(data.Post_linkedin_curto);
-      }
-      
-    } catch (error) {
-      console.error('❌ Erro:', error);
-      toast.error('Erro ao buscar dados');
-    } finally {
-      setIsLoadingLinkedin(false);
-    }
-  };
-
-  // Função para fazer polling e verificar quando o conteúdo estiver pronto
-  const startPollingForContent = async (searchId) => {
-    let attempts = 0;
-    const maxAttempts = 30; // 30 tentativas = 30 segundos
-    
-    const poll = async () => {
-      if (attempts >= maxAttempts) {
-        toast.error('Timeout: Webhook não respondeu em 30 segundos');
+      // 1. Verificar se já existe conteúdo na coluna específica
+      const existingData = await fetchLinaNewsById(item.id);
+      if (existingData?.[fieldName]?.trim()) {
+        setLinkedinContent(existingData[fieldName]);
+        setHasContent(true);
+        toast.success(`Conteúdo carregado da coluna ${fieldName} do banco de dados`);
+        console.log(`✅ Conteúdo existente carregado da coluna ${fieldName}:`, existingData[fieldName]);
         return;
       }
       
-      try {
-        console.log(`🔄 Polling tentativa ${attempts + 1}/${maxAttempts}...`);
-        
-        // Buscar novamente no banco
-        const updatedData = await fetchLinaNewsById(searchId);
-        
-        if (updatedData?.Post_linkedin_curto) {
-          console.log('✅ Conteúdo recebido do webhook!');
-          setLinkedinData(updatedData);
-          setWebhookMarkdown(updatedData.Post_linkedin_curto);
-          toast.success('Conteúdo recebido do N8N!');
-          return; // Para o polling
-        }
-        
-        // Se ainda não tem conteúdo, continua polling
-        attempts++;
-        setTimeout(poll, 1000); // Espera 1 segundo antes da próxima tentativa
-        
-      } catch (error) {
-        console.error('❌ Erro no polling:', error);
-        attempts++;
-        setTimeout(poll, 1000);
+      // 2. Disparar webhook e aguardar resposta
+      const result = await triggerLinkedinWebhook(item.id, webhookType);
+      
+      // 3. Exibir resultado
+      if (result.success && result.content) {
+        setLinkedinContent(result.content);
+        setHasContent(true);
+        toast.success('Conteúdo gerado com sucesso!');
+      } else {
+        throw new Error('Resposta inválida do N8N');
       }
-    };
-    
-    // Inicia o polling
-    poll();
+      
+    } catch (error) {
+      console.error('Erro ao gerar post:', error);
+      toast.error('Erro ao gerar conteúdo: ' + error.message);
+    } finally {
+      setIsGenerating(false);
+    }
   };
 
-  // Buscar dados do LinkedIn quando o botão for selecionado
-  useEffect(() => {
-    if (selectedButton === 'linkedin-enxuto' && item?.id) {
-      fetchLinkedinData();
+  const checkExistingContent = async () => {
+    if (!item?.id) return;
+    
+    const typeMap = {
+      'linkedin-enxuto': 'Post_linkedin_curto',
+      'linkedin-informativo': 'post_linkedin_longo',
+      'instagram': 'post_instagram'
+    };
+    
+    const fieldName = typeMap[selectedButton];
+    if (!fieldName) return;
+    
+    try {
+      setIsCheckingExisting(true);
+      const existingData = await fetchLinaNewsById(item.id);
+      
+      // Verificar se existe conteúdo na coluna específica do banco
+      if (existingData?.[fieldName]?.trim()) {
+        setLinkedinContent(existingData[fieldName]);
+        setHasContent(true);
+        console.log(`✅ Conteúdo encontrado na coluna ${fieldName}:`, existingData[fieldName]);
+      } else {
+        setHasContent(false);
+        setLinkedinContent('');
+        console.log(`❌ Nenhum conteúdo encontrado na coluna ${fieldName}`);
+      }
+    } catch (error) {
+      console.error('Erro ao verificar conteúdo existente:', error);
+      setHasContent(false);
+    } finally {
+      setIsCheckingExisting(false);
     }
-  }, [selectedButton, item?.id]);
+  };
 
   // Função para renderizar conteúdo baseado no botão selecionado
   const renderContent = () => {
@@ -165,7 +176,7 @@ const NewsReaderPanel = ({ item, onClose }) => {
       case 'linkedin-enxuto':
         return (
           <div style={{ height: '45vh', display: 'flex', flexDirection: 'column' }}>
-            {isLoadingLinkedin ? (
+            {isCheckingExisting ? (
               <div style={{
                 display: 'flex',
                 alignItems: 'center',
@@ -175,9 +186,154 @@ const NewsReaderPanel = ({ item, onClose }) => {
                 fontFamily: 'Inter',
                 fontSize: '16px'
               }}>
-                Carregando dados do LinkedIn...
+                Verificando conteúdo existente...
               </div>
-            ) : (linkedinData?.Post_linkedin_curto || webhookMarkdown) ? (
+            ) : !hasContent ? (
+              <div style={{
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                height: '100%',
+                gap: '20px'
+              }}>
+                <div style={{
+                  color: 'var(--text-secondary)',
+                  fontFamily: 'Inter',
+                  fontSize: '16px',
+                  textAlign: 'center',
+                  maxWidth: '300px'
+                }}>
+                  Gere um post enxuto para LinkedIn usando IA da LINA
+                </div>
+                
+                <button
+                  onClick={handleGenerateLinkedinPost}
+                  disabled={isGenerating}
+                  style={{
+                    padding: '12px 24px',
+                    backgroundColor: isGenerating ? '#666' : '#10b981',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '8px',
+                    fontSize: '16px',
+                    fontWeight: '600',
+                    cursor: isGenerating ? 'not-allowed' : 'pointer',
+                    transition: 'all 0.2s ease',
+                    minWidth: '150px'
+                  }}
+                >
+                  {isGenerating ? 'Gerando...' : 'Gerar com LINA'}
+                </button>
+              </div>
+            ) : (
+              <div style={{
+                backgroundColor: 'var(--bg-secondary)',
+                border: '1px solid var(--border-primary)',
+                borderRadius: '8px',
+                padding: '20px',
+                height: '100%',
+                overflow: 'auto'
+              }}>
+                <div style={{
+                  color: 'var(--text-primary)',
+                  fontFamily: 'Inter',
+                  fontWeight: '600',
+                  fontSize: '18px',
+                  marginBottom: '16px',
+                  borderBottom: '1px solid var(--border-primary)',
+                  paddingBottom: '12px',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center'
+                }}>
+                  <span>LinkedIn Post (enxuto)</span>
+                  <button
+                    onClick={() => {
+                      setHasContent(false);
+                      setLinkedinContent('');
+                    }}
+                    style={{
+                      padding: '4px 8px',
+                      fontSize: '12px',
+                      backgroundColor: 'transparent',
+                      border: '1px solid var(--border-primary)',
+                      color: 'var(--text-secondary)',
+                      borderRadius: '4px',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    Gerar Novo
+                  </button>
+                </div>
+                <div style={{
+                  color: 'var(--text-primary)',
+                  fontFamily: 'Inter',
+                  fontSize: '16px',
+                  lineHeight: '1.6',
+                  whiteSpace: 'pre-wrap'
+                }}>
+                  {linkedinContent}
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      
+      case 'linkedin-informativo':
+        return (
+          <div style={{ height: '45vh', display: 'flex', flexDirection: 'column' }}>
+            {isCheckingExisting ? (
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                height: '100%',
+                color: 'var(--text-secondary)',
+                fontFamily: 'Inter',
+                fontSize: '16px'
+              }}>
+                Verificando conteúdo existente...
+              </div>
+            ) : !hasContent ? (
+              <div style={{
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                height: '100%',
+                gap: '20px'
+              }}>
+                <div style={{
+                  color: 'var(--text-secondary)',
+                  fontFamily: 'Inter',
+                  fontSize: '16px',
+                  textAlign: 'center',
+                  maxWidth: '300px'
+                }}>
+                  Gere um post informativo para LinkedIn usando IA da LINA
+                </div>
+                
+                <button
+                  onClick={handleGenerateLinkedinPost}
+                  disabled={isGenerating}
+                  style={{
+                    padding: '12px 24px',
+                    backgroundColor: isGenerating ? '#666' : '#0077b5',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '8px',
+                    fontSize: '16px',
+                    fontWeight: '600',
+                    cursor: isGenerating ? 'not-allowed' : 'pointer',
+                    transition: 'all 0.2s ease',
+                    minWidth: '150px'
+                  }}
+                >
+                  {isGenerating ? 'Gerando...' : 'Gerar com LINA'}
+                </button>
+              </div>
+            ) : (
               <div style={{
                 backgroundColor: 'var(--bg-secondary)',
                 border: '1px solid var(--border-primary)',
@@ -193,19 +349,29 @@ const NewsReaderPanel = ({ item, onClose }) => {
                   fontSize: '18px',
                   marginBottom: '16px',
                   borderBottom: '1px solid var(--border-primary)',
-                  paddingBottom: '12px'
+                  paddingBottom: '12px',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center'
                 }}>
-                  LinkedIn Post (enxuto)
-                  {webhookMarkdown && (
-                    <span style={{
-                      marginLeft: '8px',
-                      fontSize: '14px',
-                      color: '#10b981',
-                      fontWeight: '500'
-                    }}>
-                      • Gerado pelo N8N
-                    </span>
-                  )}
+                  <span>LinkedIn Post (informativo)</span>
+                  <button
+                    onClick={() => {
+                      setHasContent(false);
+                      setLinkedinContent('');
+                    }}
+                    style={{
+                      padding: '4px 8px',
+                      fontSize: '12px',
+                      backgroundColor: 'transparent',
+                      border: '1px solid var(--border-primary)',
+                      color: 'var(--text-secondary)',
+                      borderRadius: '4px',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    Gerar Novo
+                  </button>
                 </div>
                 <div style={{
                   color: 'var(--text-primary)',
@@ -214,10 +380,17 @@ const NewsReaderPanel = ({ item, onClose }) => {
                   lineHeight: 1.6,
                   whiteSpace: 'pre-wrap'
                 }}>
-                  {webhookMarkdown || linkedinData.Post_linkedin_curto}
+                  {linkedinContent}
                 </div>
               </div>
-            ) : (
+            )}
+          </div>
+        );
+      
+      case 'instagram':
+        return (
+          <div style={{ height: '45vh', display: 'flex', flexDirection: 'column' }}>
+            {isCheckingExisting ? (
               <div style={{
                 display: 'flex',
                 alignItems: 'center',
@@ -225,46 +398,99 @@ const NewsReaderPanel = ({ item, onClose }) => {
                 height: '100%',
                 color: 'var(--text-secondary)',
                 fontFamily: 'Inter',
-                fontSize: '16px',
-                textAlign: 'center',
-                padding: '20px'
+                fontSize: '16px'
               }}>
-                {linkedinData || webhookMarkdown ? 
-                  'Nenhum conteúdo do LinkedIn encontrado para esta notícia.' : 
-                  'Clique para carregar os dados do LinkedIn e gerar conteúdo via N8N.'
-                }
+                Verificando conteúdo existente...
+              </div>
+            ) : !hasContent ? (
+              <div style={{
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                height: '100%',
+                gap: '20px'
+              }}>
+                <div style={{
+                  color: 'var(--text-secondary)',
+                  fontFamily: 'Inter',
+                  fontSize: '16px',
+                  textAlign: 'center',
+                  maxWidth: '300px'
+                }}>
+                  Gere um post para Instagram usando IA da LINA
+                </div>
+                
+                <button
+                  onClick={handleGenerateLinkedinPost}
+                  disabled={isGenerating}
+                  style={{
+                    padding: '12px 24px',
+                    backgroundColor: isGenerating ? '#666' : '#E4405F',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '8px',
+                    fontSize: '16px',
+                    fontWeight: '600',
+                    cursor: isGenerating ? 'not-allowed' : 'pointer',
+                    transition: 'all 0.2s ease',
+                    minWidth: '150px'
+                  }}
+                >
+                  {isGenerating ? 'Gerando...' : 'Gerar com LINA'}
+                </button>
+              </div>
+            ) : (
+              <div style={{
+                backgroundColor: 'var(--bg-secondary)',
+                border: '1px solid var(--border-primary)',
+                borderRadius: '8px',
+                padding: '20px',
+                height: '100%',
+                overflow: 'auto'
+              }}>
+                <div style={{
+                  color: 'var(--text-primary)',
+                  fontFamily: 'Inter',
+                  fontWeight: 600,
+                  fontSize: '18px',
+                  marginBottom: '16px',
+                  borderBottom: '1px solid var(--border-primary)',
+                  paddingBottom: '12px',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center'
+                }}>
+                  <span>Instagram Post</span>
+                  <button
+                    onClick={() => {
+                      setHasContent(false);
+                      setLinkedinContent('');
+                    }}
+                    style={{
+                      padding: '4px 8px',
+                      fontSize: '12px',
+                      backgroundColor: 'transparent',
+                      border: '1px solid var(--border-primary)',
+                      color: 'var(--text-secondary)',
+                      borderRadius: '4px',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    Gerar Novo
+                  </button>
+                </div>
+                <div style={{
+                  color: 'var(--text-primary)',
+                  fontFamily: 'Inter',
+                  fontSize: '16px',
+                  lineHeight: 1.6,
+                  whiteSpace: 'pre-wrap'
+                }}>
+                  {linkedinContent}
+                </div>
               </div>
             )}
-          </div>
-        );
-      
-      case 'linkedin-informativo':
-        return (
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            height: '45vh',
-            color: 'var(--text-secondary)',
-            fontFamily: 'Inter',
-            fontSize: '16px'
-          }}>
-            Conteúdo do LinkedIn Post (informativo) será implementado em breve...
-          </div>
-        );
-      
-      case 'instagram':
-        return (
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            height: '45vh',
-            color: 'var(--text-secondary)',
-            fontFamily: 'Inter',
-            fontSize: '16px'
-          }}>
-            Conteúdo do Instagram Post será implementado em breve...
           </div>
         );
       
@@ -404,19 +630,6 @@ const NewsReaderPanel = ({ item, onClose }) => {
                   }}
                 >
                   LinkedIn Post (enxuto)
-                  {webhookTriggered && (
-                    <div style={{
-                      position: 'absolute',
-                      top: '-4px',
-                      right: '-4px',
-                      width: '12px',
-                      height: '12px',
-                      backgroundColor: '#10b981',
-                      borderRadius: '50%',
-                      border: '2px solid var(--bg-secondary)',
-                      animation: 'pulse 2s infinite'
-                    }} />
-                  )}
                 </button>
 
                 {/* Botão LinkedIn Post (informativo) */}

@@ -259,6 +259,8 @@ export const fetchLinaNewsById = async (newsId) => {
 
     console.log('✅ Dados retornados da tabela lina_news:', data);
     console.log('🔍 Coluna Post_linkedin_curto:', data?.Post_linkedin_curto);
+    console.log('🔍 Coluna post_linkedin_longo:', data?.post_linkedin_longo);
+    console.log('🔍 Coluna post_instagram:', data?.post_instagram);
     
     return data;
   } catch (error) {
@@ -498,31 +500,9 @@ export const fetchCompletedNewsFromLinaNews = async (page = 0, limit = 50) => {
   return { data: enrichedData, error, count };
 };
 
-/**
- * Dispara webhook para o N8N quando usuário clica em LinkedIn Post enxuto
- * @param {string|number} newsId - O ID da notícia
- * @param {string} currentContent - Conteúdo atual da coluna Post_linkedin_curto (se existir)
- * @returns {Promise<{success: boolean, markdownContent?: string, alreadyExists?: boolean}>} - Resultado com conteúdo markdown
- */
-export const triggerLinkedinWebhook = async (newsId, currentContent = '') => {
+export const triggerLinkedinWebhook = async (newsId, type = 'short-li') => {
   try {
-    console.log('🚀 Verificando se precisa disparar webhook para N8N...');
-    console.log('🆔 ID da notícia:', newsId);
-    console.log('📝 Conteúdo atual recebido:', currentContent);
-    console.log('📝 Conteúdo após trim:', currentContent.trim());
-    
-    // Verificar se já existe conteúdo na coluna Post_linkedin_curto
-    if (currentContent && currentContent.trim() !== '') {
-      console.log('✅ Conteúdo já existe, não é necessário disparar webhook');
-      return { 
-        success: true, 
-        alreadyExists: true, 
-        markdownContent: currentContent,
-        message: 'Conteúdo já existe na base de dados'
-      };
-    }
-    
-    console.log('🚀 Conteúdo não existe, disparando webhook para N8N...');
+    console.log('🚀 Disparando webhook para N8N com ID:', newsId, 'Type:', type);
     
     const response = await fetch('https://n8n.gevia.co/webhook/eb81e398-5b78-41af-9b89-2a74b0625d76', {
       method: 'POST',
@@ -530,51 +510,82 @@ export const triggerLinkedinWebhook = async (newsId, currentContent = '') => {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        id: newsId
+        id: newsId,
+        type: type
       })
     });
 
-    if (!response.ok) {
-      throw new Error(`Erro HTTP: ${response.status}`);
+    // Tentar ler o body mesmo se status for 500
+    let result;
+    const contentType = response.headers.get('content-type');
+    
+    try {
+      if (contentType && contentType.includes('application/json')) {
+        result = await response.json();
+      } else {
+        result = await response.text();
+      }
+    } catch (parseError) {
+      console.error('❌ Erro ao parsear resposta:', parseError);
+      throw new Error(`Erro ao processar resposta do N8N: ${response.status}`);
     }
 
-    const result = await response.json();
-    console.log('✅ Webhook disparado com sucesso:', result);
-    
-    // Extrair o conteúdo markdown da resposta
-    // O N8N retorna um JSON com a chave "Post_linkedin_curto"
-    let markdownContent = '';
-    
-    if (typeof result === 'string') {
-      // Se a resposta for diretamente uma string
-      markdownContent = result;
-    } else if (result && typeof result === 'object') {
-      // Processar o formato específico do N8N
-      if (result.Post_linkedin_curto) {
-        // Extrair o conteúdo da chave Post_linkedin_curto
-        markdownContent = result.Post_linkedin_curto;
-        
-        // Converter quebras de linha \n para quebras de linha reais
-        markdownContent = markdownContent.replace(/\\n/g, '\n');
-        
-        // Processar hashtags para formato markdown
-        markdownContent = markdownContent.replace(/#(\w+)/g, '**#$1**');
-        
-        console.log('📝 Conteúdo processado do N8N:', markdownContent);
-      } else {
-        // Fallback para outros formatos
-        markdownContent = result.content || result.text || result.markdown || result.message || JSON.stringify(result);
-      }
+    console.log('📦 Resposta recebida (status ' + response.status + '):', result);
+    console.log('🔍 Tipo da resposta:', typeof result);
+    console.log('🔍 Propriedades da resposta:', result ? Object.keys(result) : 'null/undefined');
+    if (result && typeof result === 'object') {
+      console.log('🔍 Propriedade "content":', result.content);
+      console.log('🔍 Propriedade "Post_linkedin_curto":', result.Post_linkedin_curto);
+      console.log('🔍 Propriedade "post_linkedin_longo":', result.post_linkedin_longo);
+      console.log('🔍 Propriedade "post_instagram":', result.post_instagram);
     }
     
-    return { 
-      success: true, 
-      data: result,
-      markdownContent 
-    };
+    // Extrair conteúdo baseado no tipo
+    let content = '';
+    if (result && typeof result === 'object') {
+      // Primeiro, tentar extrair da propriedade 'content' (resposta direta do N8N)
+      if (result.content && typeof result.content === 'string') {
+        content = result.content.replace(/\\n/g, '\n');
+        console.log('✅ Conteúdo extraído da propriedade "content":', content.substring(0, 100) + '...');
+      } else {
+        // Fallback: tentar extrair baseado no tipo específico
+        const fieldMap = {
+          'short-li': 'Post_linkedin_curto',
+          'long-li': 'post_linkedin_longo', 
+          'insta-default': 'post_instagram'
+        };
+        
+        const fieldName = fieldMap[type];
+        if (result[fieldName]) {
+          content = result[fieldName].replace(/\\n/g, '\n');
+          console.log(`✅ Conteúdo extraído da propriedade "${fieldName}":`, content.substring(0, 100) + '...');
+        }
+      }
+    } else if (typeof result === 'string' && result.trim()) {
+      content = result;
+      console.log('✅ Conteúdo extraído como string:', content.substring(0, 100) + '...');
+    }
+    
+    console.log('🔍 Conteúdo extraído final:', content);
+    console.log('🔍 Conteúdo após trim:', content.trim());
+    console.log('🔍 Tamanho do conteúdo:', content.trim().length);
+    
+    if (content.trim()) {
+      console.log('✅ Conteúdo extraído com sucesso (ignorando status ' + response.status + ')');
+      return { 
+        success: true, 
+        content: content.trim()
+      };
+    }
+    
+    if (!response.ok) {
+      throw new Error(`Erro HTTP: ${response.status} - ${response.statusText}`);
+    }
+    
+    throw new Error('Resposta do N8N não contém conteúdo válido. Conteúdo extraído: ' + JSON.stringify(content));
     
   } catch (error) {
-    console.error('❌ Erro ao disparar webhook:', error);
-    throw new Error(`Falha ao disparar webhook: ${error.message}`);
+    console.error('❌ Erro no webhook:', error);
+    throw new Error(`Falha no webhook: ${error.message}`);
   }
 };
