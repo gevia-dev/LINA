@@ -161,12 +161,10 @@ export const insertTextAtPosition = (editor, insertionInfo, newText) => {
  * @param {Object} connectionParams - Parâmetros da conexão
  * @param {Array} nodes - Array atual de nodes
  * @param {Array} edges - Array atual de edges
- * @param {Object} editorRef - Referência do editor
  * @param {Map} referenceMapping - Mapeamento de títulos para marcadores [n]
- * @param {Function} onReferenceUpdate - Callback para atualizar referenceMapping
- * @returns {Object} Resultado da operação
+ * @returns {Object} Resultado da operação com informações de inserção
  */
-export const handleCanvasConnection = async (connectionParams, nodes, edges, editorRef, referenceMapping = null, onReferenceUpdate = null, onReindexing = null) => {
+export const handleCanvasConnection = async (connectionParams, nodes, edges, referenceMapping = null) => {
   const { source, target } = connectionParams;
   
   console.log('🔍 === DEBUG INSERÇÃO ===');
@@ -381,44 +379,60 @@ export const handleCanvasConnection = async (connectionParams, nodes, edges, edi
   console.log('🎯 SearchText final:', searchText);
   console.log('🎯 Posição final:', insertionInfo.position);
   
-  // Inserir no editor usando o método do BlockNoteEditor
-  if (editorRef.current && editorRef.current.insertTextAtPosition) {
-    console.log('✅ Editor disponível, chamando insertTextAtPosition');
-    try {
-      // CORREÇÃO: Usar parâmetros originais para inserção entre marcadores
-      const finalPosition = insertionInfo.position;
-      const finalSearchText = searchText;
-      
-      console.log('🚀 Chamando insertTextAtPosition com:', {
-        searchText: finalSearchText,
-        textToInsert,
-        position: finalPosition
-      });
-      
-      const success = await editorRef.current.insertTextAtPosition(
-        finalSearchText,
-        textToInsert,
-        finalPosition,
-        (marker, _) => onReferenceUpdate?.(marker, nodeToInsert.data.title),
-        onReindexing
-      );
-      
-      console.log('📊 Resultado da inserção:', success);
-      
-      if (success) {
-        const message = 'Texto inserido com sucesso entre marcadores';
-        console.log('✅ Inserção bem-sucedida:', message);
-        return { success: true, message };
-      } else {
-        console.log('❌ Falha na inserção');
-        return { success: false, error: 'Falha na inserção' };
-      }
-    } catch (error) {
-      console.log('❌ Erro na inserção:', error.message);
-      return { success: false, error: error.message };
+  // NOVA LÓGICA: Retornar informações de inserção ao invés de executar
+  const insertionData = {
+    success: true,
+    message: 'Informações de inserção preparadas',
+    reason: 'ready_for_insertion',
+    insertionInfo: {
+      textToInsert,
+      position: insertionInfo.position,
+      searchText,
+      nodeTitle: nodeToInsert.data.title,
+      nodeId: nodeToInsertId
     }
-  } else {
-    console.log('❌ Editor não disponível');
-    return { success: false, error: 'Editor não disponível' };
+  };
+  
+  console.log('✅ Retornando informações de inserção:', insertionData);
+  return insertionData;
+};
+
+/**
+ * Função helper para encontrar o índice do bloco de referência no documentModel
+ * @param {Array} documentModel - Array do modelo de documento
+ * @param {string} searchText - Texto a ser procurado
+ * @returns {Object} Informações sobre o bloco encontrado
+ */
+export const findReferenceBlockIndex = (documentModel, searchText) => {
+  if (!documentModel || !Array.isArray(documentModel) || !searchText) {
+    return null;
   }
+  
+  // Procurar por texto que contenha o searchText
+  for (let i = 0; i < documentModel.length; i++) {
+    const block = documentModel[i];
+    if (block.textContent && block.textContent.includes(searchText)) {
+      return {
+        index: i,
+        block: block,
+        found: true
+      };
+    }
+  }
+  
+  return { found: false, index: -1 };
+};
+
+/**
+ * Função helper para criar um novo bloco de conteúdo
+ * @param {string} textContent - Texto do novo bloco
+ * @param {Array} sourceQuoteIds - IDs das quotes de origem
+ * @returns {Object} Novo bloco do documento
+ */
+export const createNewBlock = (textContent, sourceQuoteIds = []) => {
+  return {
+    id: `block_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+    sourceQuoteIds,
+    textContent
+  };
 };

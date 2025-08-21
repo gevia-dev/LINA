@@ -449,29 +449,18 @@ const ItemNode = React.memo(({ data }) => {
       onMouseEnter={() => { 
         setIsHovered(true);
 
-        // Disparar evento customizado para grifar texto no editor
-        const event = new CustomEvent('canvas-item-hover', { 
-          detail: { 
-            itemId: data?.itemId, 
-            title: data?.title, 
-            phrase: data?.phrase,
-            action: 'enter'
-          } 
-        });
-        window.dispatchEvent(event);
+        // NOVO: Usar o sistema de highlighting via onHighlightIds
+        if (data?.onHighlightIds && typeof data.onHighlightIds === 'function') {
+          data.onHighlightIds([data.title]); // Passar o título da frase para highlighting
+        }
       }}
       onMouseLeave={() => { 
         setIsHovered(false);
-        // Disparar evento customizado para remover grifo do texto no editor
-        const event = new CustomEvent('canvas-item-hover', { 
-          detail: { 
-            itemId: data?.itemId, 
-            title: data?.title, 
-            phrase: data?.phrase,
-            action: 'leave'
-          } 
-        });
-        window.dispatchEvent(event);
+        
+        // NOVO: Limpar highlighting
+        if (data?.onHighlightIds && typeof data.onHighlightIds === 'function') {
+          data.onHighlightIds([]); // Limpar highlighting
+        }
       }}
       style={{
         backgroundColor: isHovered ? '#1a1a1a' : '#1212127a',
@@ -648,33 +637,20 @@ const normalizeCoreQuotes = (core) => {
 };
 
 // Build Category (by categoria_funcional) -> Key (parent::child) -> Items
+
 const buildHierarchy = (normalized) => {
   if (!normalized) return { categories: {}, segments: {} };
   const categories = {};
   const segments = {};
   
-  // Busca por quotes_map nos dados para criar nodes de segmentação dinâmicos
+  // Lógica para segments (headers, início, fim) permanece a mesma...
   let quotesMap = null;
-  
-  
-  // Tenta encontrar quotes_map em diferentes locais possíveis
   if (normalized.quotes_map) {
-    // Se quotes_map é uma string JSON, faz o parse
-    if (typeof normalized.quotes_map === 'string') {
-      try {
-        quotesMap = JSON.parse(normalized.quotes_map);
-      } catch (e) {
-        quotesMap = null;
-      }
-    } else {
-      quotesMap = normalized.quotes_map;
-    }
+    quotesMap = typeof normalized.quotes_map === 'string' ? JSON.parse(normalized.quotes_map) : normalized.quotes_map;
   } else if (normalized.core_quotes?.quotes_map) {
     quotesMap = normalized.core_quotes.quotes_map;
   }
   
-  // Se encontrou quotes_map, cria nodes de segmentação baseados nos headers
-
   if (quotesMap && typeof quotesMap === 'object' && Object.keys(quotesMap).length > 0) {
     Object.keys(quotesMap).forEach((header, index) => {
       const segmentId = `segment-header-${index}`;
@@ -685,66 +661,35 @@ const buildHierarchy = (normalized) => {
         itemId: segmentId,
         headerIndex: index,
         subItems: quotesMap[header] || [],
-        // Adiciona informações para conexão automática
-        connectedItems: [], // Será preenchido depois
-        headerTitle: header // Título exato para matching
+        connectedItems: [],
+        headerTitle: header
       };
     });
   } else {
-
-    // Fallback para nodes de segmentação padrão se não houver quotes_map
-  segments.summary = {
-    type: 'summary',
-    title: 'Introdução',
-    content: '',
-    itemId: 'segment-summary'
-  };
-  segments.body = {
-    type: 'body',
-    title: 'Corpo',
-    content: '',
-    itemId: 'segment-body'
-  };
-  segments.conclusion = {
-    type: 'conclusion',
-    title: 'Conclusão',
-    content: '',
-    itemId: 'segment-conclusion'
-  };
+    segments.summary = { type: 'summary', title: 'Introdução', content: '', itemId: 'segment-summary' };
+    segments.body = { type: 'body', title: 'Corpo', content: '', itemId: 'segment-body' };
+    segments.conclusion = { type: 'conclusion', title: 'Conclusão', content: '', itemId: 'segment-conclusion' };
   }
   
-  // ADICIONAR: Nodes de início e fim sempre presentes
-  segments.start = {
-    type: 'start',
-    title: 'Início do Texto',
-    content: '',
-    itemId: 'segment-start',
-    headerIndex: -1, // Antes de todos os outros
-    isSystemNode: true
-  };
-  
-  segments.end = {
-    type: 'end',
-    title: 'Fim do Texto',
-    content: '',
-    itemId: 'segment-end',
-    headerIndex: 999, // Depois de todos os outros
-    isSystemNode: true
-  };
+  segments.start = { type: 'start', title: 'Início do Texto', content: '', itemId: 'segment-start', headerIndex: -1, isSystemNode: true };
+  segments.end = { type: 'end', title: 'Fim do Texto', content: '', itemId: 'segment-end', headerIndex: 999, isSystemNode: true };
 
-  
   Object.entries(normalized).forEach(([parentKey, childObj]) => {
-    // Pula quotes_map pois já foi processado acima
-    if (parentKey === 'quotes_map') return;
-
-    // Verifica se childObj é um objeto válido para processar
-    if (!childObj || typeof childObj !== 'object') return;
+    if (parentKey === 'quotes_map' || !childObj || typeof childObj !== 'object') return;
   
     Object.entries(childObj).forEach(([childKey, list]) => {
       if (!Array.isArray(list)) return;
       const categoryKey = `${parentKey}::${childKey}`;
       list.forEach((item, index) => {
-        const tag = String(item?.categoria_funcional || 'Sem_Tag');
+        
+        // ====================== CORREÇÃO DEFINITIVA AQUI ======================
+        // Esta lógica garante que a 'tag' NUNCA será uma string vazia.
+        let tag = 'Sem_Tag'; // Começa com um padrão seguro.
+        if (item && typeof item.categoria_funcional === 'string' && item.categoria_funcional.trim() !== '') {
+          tag = item.categoria_funcional.trim();
+        }
+        // ====================================================================
+
         if (!categories[tag]) categories[tag] = {};
         if (!categories[tag][categoryKey]) categories[tag][categoryKey] = [];
         const nodeItem = {
@@ -759,55 +704,25 @@ const buildHierarchy = (normalized) => {
     });
   });
 
-  
-  // FASE 2: Conectar automaticamente ItemNodes aos SegmentNodes baseado no título das frases
-  if (quotesMap && typeof quotesMap === 'object' && Object.keys(quotesMap).length > 0) {
-    
-    // Criar mapa de títulos para busca eficiente e precisa
+  // A lógica de conectar ItemNodes aos SegmentNodes permanece a mesma...
+  if (quotesMap && typeof quotesMap === 'object') {
     const titleToItemMap = new Map();
-    Object.entries(categories).forEach(([tag, categoryData]) => {
-      Object.entries(categoryData).forEach(([categoryKey, items]) => {
-        items.forEach((item) => {
-          // A premissa é que os títulos são únicos
-          titleToItemMap.set(item.title, {
-            ...item,
-            tag,
-            categoryKey: `${tag}::${categoryKey}`
-          });
-        });
-      });
-    });
-    
-    
-    // Para cada segment, encontrar os ItemNodes que pertencem a ele
-    Object.entries(segments).forEach(([segmentKey, segment]) => {
-      if (segment.type === 'header' && segment.subItems && segment.subItems.length > 0) {
-        
-        // Para cada sub-item do segment, procurar ItemNodes com título correspondente
-        segment.subItems.forEach((subItemTitle, subItemIndex) => {
-          // Busca direta e muito mais rápida/segura no Mapa
+    Object.values(categories).forEach(catData => 
+      Object.values(catData).forEach(items => 
+        items.forEach(item => titleToItemMap.set(item.title, item))
+      )
+    );
+    Object.values(segments).forEach(segment => {
+      if (segment.type === 'header' && segment.subItems) {
+        segment.subItems.forEach((subItemTitle) => {
           const itemNode = titleToItemMap.get(subItemTitle);
-          
           if (itemNode) {
-            const foundItem = {
-              ...itemNode,
-              segmentKey,
-              subItemIndex,
-              connectionOrder: subItemIndex,
-              categoryKey: itemNode.categoryKey
-            };
-            
-            if (!segment.connectedItems) segment.connectedItems = [];
-            segment.connectedItems.push(foundItem);
-          } else {
-            console.log(`[DEBUG] buildHierarchy - ⚠️ ItemNode não encontrado para: "${subItemTitle}"`);
+            segment.connectedItems.push(itemNode);
           }
         });
-        
       }
     });
   }
-  
   
   return { categories, segments };
 };
@@ -824,10 +739,9 @@ const CanvasLibraryView = ({
   enableSidebarToggle = false, 
   initialSidebarCollapsed = false, 
   transparentSidebar = false,
-  editorRef = null,
   referenceMapping = null,
-  onReferenceUpdate = null,
-  onReindexing = null
+  onHighlightIds = null,
+  onDeclarativeInsertion = null
 }) => {
   const [nodes, setNodes] = useState([]);
   const [edges, setEdges] = useState([]);
@@ -851,13 +765,23 @@ const CanvasLibraryView = ({
   const textSync = useSimplifiedTextSync({
     nodes,
     edges,
-    editorRef,
-    referenceMapping,
-    onReferenceUpdate: onReferenceUpdate,
-    onReindexing: onReindexing
+    referenceMapping
   });
   
   useEffect(() => { onAddToNotionSectionRef.current = onAddToNotionSection; }, [onAddToNotionSection]);
+
+  // NOVO: useEffect para monitorar inserções declarativas pendentes
+  useEffect(() => {
+    if (textSync.pendingInsertion && onDeclarativeInsertion) {
+      console.log('📝 Inserção declarativa pendente detectada no CanvasLibraryView:', textSync.pendingInsertion);
+      
+      // Processar a inserção via callback
+      onDeclarativeInsertion(textSync.pendingInsertion);
+      
+      // Limpar a inserção pendente
+      textSync.processPendingInsertion();
+    }
+  }, [textSync.pendingInsertion, onDeclarativeInsertion, textSync.processPendingInsertion]);
 
 
   const blockAutoCenter = useCallback(() => {
@@ -1208,6 +1132,8 @@ const CanvasLibraryView = ({
                     if (typeof fn === 'function') { fn(sectionId, payload); }
                   } catch {}
                 },
+                // NOVO: Função para highlighting dinâmico
+                onHighlightIds: onHighlightIds,
               },
               position: { x: 0, y: 0 }
             });
@@ -1845,16 +1771,17 @@ const CanvasLibraryView = ({
             <div className={`${compact ? 'px-2 pb-2' : 'px-3 pb-3'} overflow-auto`} style={{ flex: 1 }}>
               <div className="text-[11px] uppercase tracking-wide mb-2 opacity-70" style={{ color: 'var(--text-secondary)' }}>Categorias</div>
               {allTags.length > 0 ? (
-                allTags.map((t) => {
+                allTags.map((t, index) => { // Adicione "index" aqui
                   const base = categoryColorFor(t);
                   const pastel = toPastelColor(base);
                   const { available, total, inCanvas } = getCategoryButtonStyle(t);
                   const hasAvailable = available > 0;
                   const canInteract = hasAvailable || inCanvas;
-                  
+                  console.log(`${t}-${index}`)
                   return (
+                
                     <motion.button
-                      key={t}
+                      key={`${t}-${index}`} // Use o nome da tag E o índice para uma chave 100% única
                       onClick={() => handleCategoryClick(t)}
                       disabled={!canInteract}
                       className={`w-full flex items-center gap-2 ${compact ? 'px-2 py-1.5' : 'px-3 py-2'} rounded text-left mb-1`}

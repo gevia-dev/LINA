@@ -162,3 +162,115 @@ export const mapCleanToOriginalIndex = (originalText, cleanIndex) => {
   }
   return originalPos;
 };
+
+/**
+ * Converte o documentModel para formato JSON do ProseMirror
+ * @param {Array} documentModel - Array de blocos do modelo de documento
+ * @returns {Object} - JSON compatível com ProseMirror/BlockNote
+ */
+export const convertDocumentModelToProseMirrorJSON = (documentModel) => {
+  if (!Array.isArray(documentModel) || documentModel.length === 0) {
+    // Retornar documento vazio se não houver modelo
+    return {
+      type: "doc",
+      content: [
+        {
+          type: "paragraph",
+          content: [
+            {
+              type: "text",
+              text: ""
+            }
+          ]
+        }
+      ]
+    };
+  }
+
+  const content = [];
+  
+  // Processar cada bloco do documentModel
+  documentModel.forEach((block, index) => {
+    // Se o bloco tem sourceQuoteIds, aplicar referenceMark
+    if (block.sourceQuoteIds && block.sourceQuoteIds.length > 0) {
+      // Bloco com referências - aplicar referenceMark
+      content.push({
+        type: "paragraph",
+        content: [
+          {
+            type: "text",
+            text: block.textContent,
+            marks: [
+              {
+                type: "referenceMark",
+                attrs: {
+                  sourceQuoteIds: block.sourceQuoteIds
+                }
+              }
+            ]
+          }
+        ]
+      });
+    } else {
+      // Bloco de texto normal sem referências
+      content.push({
+        type: "paragraph",
+        content: [
+          {
+            type: "text",
+            text: block.textContent
+          }
+        ]
+      });
+    }
+  });
+
+  // Estrutura final do documento ProseMirror
+  return {
+    type: "doc",
+    content: content
+  };
+};
+
+/**
+ * Converte o documentModel para formato de blocos BlockNote
+ * @param {Array} documentModel - Array de blocos do modelo de documento
+ * @returns {Array} - Array de blocos compatível com BlockNote
+ */
+export const convertDocumentModelToBlockNoteBlocks = (documentModel) => {
+  if (!Array.isArray(documentModel) || documentModel.length === 0) {
+    return [{ type: "paragraph", content: [] }];
+  }
+
+  return documentModel.map((block) => {
+    // Se o bloco tem sourceQuoteIds, criamos um LINK com atributos customizados
+    if (block.sourceQuoteIds && block.sourceQuoteIds.length > 0) {
+      return {
+        type: "paragraph",
+        content: [
+          {
+            type: "text",
+            text: block.textContent,
+            styles: {}, // Garantimos que não há outros estilos conflitantes
+            marks: [
+              {
+                type: "link",
+                attrs: {
+                  href: "#", // Um href dummy, não faz nada
+                  // A mágica está aqui: injetamos nossos IDs como um data-attribute
+                  "data-source-ids": block.sourceQuoteIds.join(" "),
+                },
+              },
+            ],
+          },
+        ],
+      };
+    } else {
+      // Bloco de texto normal
+      return {
+        type: "paragraph",
+        content: [{ type: "text", text: block.textContent }],
+      };
+    }
+  });
+};

@@ -15,5 +15,20 @@ export default defineConfig({
   },
   optimizeDeps: {
     include: ['@blocknote/react', '@blocknote/core']
-  }
+  },
+  resolve: {
+    dedupe: [
+      '@blocknote/core',
+      '@blocknote/react',
+      '@tiptap/core',
+      '@tiptap/pm',
+      'prosemirror-model',
+      'prosemirror-view',
+      'prosemirror-state',
+      'prosemirror-commands',
+      'prosemirror-transform',
+      'prosemirror-keymap',
+      'prosemirror-schema-list',
+    ],
+  },
 });

@@ -11,10 +11,7 @@ import { handleCanvasConnection } from './textInsertionHelpers';
 export const useSimplifiedTextSync = ({ 
   nodes = [], 
   edges = [], 
-  editorRef = null,
-  referenceMapping = null,
-  onReferenceUpdate = null,
-  onReindexing = null
+  referenceMapping = null
 }) => {
   // Estado da sincronização
   const [isActive, setIsActive] = useState(true);
@@ -175,8 +172,8 @@ export const useSimplifiedTextSync = ({
         return { success: true, hash, result: { reason: 'already_processed' } };
       }
       
-      // Processar via helper principal
-      const result = await handleCanvasConnection(edge, nodes, edges, editorRef, referenceMapping, onReferenceUpdate, onReindexing);
+      // NOVA LÓGICA: Processar via helper principal (sem editorRef)
+      const result = await handleCanvasConnection(edge, nodes, edges, referenceMapping);
       
       if (result.success) {
         // Se está aguardando segunda conexão, registrar no histórico para monitoramento
@@ -199,6 +196,30 @@ export const useSimplifiedTextSync = ({
           console.log('🛑 Texto já inserido, marcando como processado:', result.textHash);
           setLastProcessedEdges(prev => new Set([...prev, hash]));
           return { success: true, hash, result, reason: 'text_already_inserted' };
+        }
+        
+        // NOVA LÓGICA: Se está pronto para inserção, retornar informações para o componente pai
+        if (result.reason === 'ready_for_insertion') {
+          console.log('✅ Conexão pronta para inserção declarativa:', result.insertionInfo);
+          
+          // Marcar como processada
+          setLastProcessedEdges(prev => new Set([...prev, hash]));
+          
+          // Registrar no histórico
+          connectionHistoryRef.current.set(hash, {
+            ...connectionData,
+            result,
+            processedAt: Date.now()
+          });
+          
+          // Retornar informações de inserção para o componente pai processar
+          return { 
+            success: true, 
+            hash, 
+            result, 
+            readyForInsertion: true,
+            insertionData: result.insertionInfo
+          };
         }
         
         // Marcar como processada apenas se não estiver aguardando
@@ -224,7 +245,7 @@ export const useSimplifiedTextSync = ({
     } catch (error) {
       return { success: false, error: error.message };
     }
-  }, [nodes, edges, editorRef, referenceMapping, onReferenceUpdate, lastProcessedEdges]);
+  }, [nodes, edges, referenceMapping, lastProcessedEdges]);
 
   /**
    * Processa fila de conexões pendentes
@@ -242,6 +263,12 @@ export const useSimplifiedTextSync = ({
         if (!isActive) break; // Parar se hook foi desativado
 
         const result = await processConnection(connectionData);
+        
+        // NOVA LÓGICA: Verificar se há inserção pendente
+        if (result.readyForInsertion) {
+          console.log('📝 Inserção pendente detectada na fila:', result.insertionData);
+          setPendingInsertion(result.insertionData);
+        }
         
         // Aguardar um pouco entre processamentos para não sobrecarregar
         if (currentQueue.length > 1) {
@@ -334,6 +361,9 @@ export const useSimplifiedTextSync = ({
 
   }, [edges, nodes, isActive, detectNewConnections, processNewConnections, isInitialized, checkWaitingConnections, processConnection]);
 
+  // Estado para armazenar informações de inserção pendente
+  const [pendingInsertion, setPendingInsertion] = useState(null);
+
   /**
    * Efeito para processar fila quando disponível
    */
@@ -342,6 +372,16 @@ export const useSimplifiedTextSync = ({
       processQueue();
     }
   }, [processingQueue, isProcessing, processQueue]);
+
+  /**
+   * Efeito para processar inserções pendentes
+   */
+  useEffect(() => {
+    if (pendingInsertion) {
+      console.log('📝 Inserção pendente detectada:', pendingInsertion);
+      // O componente pai deve processar esta inserção
+    }
+  }, [pendingInsertion]);
 
   /**
    * Limpeza ao desmontar
@@ -367,6 +407,11 @@ export const useSimplifiedTextSync = ({
         timestamp: Date.now()
       });
       
+      // Verificar se há inserção pendente
+      if (result.readyForInsertion) {
+        setPendingInsertion(result.insertionData);
+      }
+      
       return result;
     } catch (error) {
       console.error('❌ Erro no processamento manual:', error);
@@ -382,6 +427,7 @@ export const useSimplifiedTextSync = ({
     setLastProcessedEdges(new Set());
     connectionHistoryRef.current.clear();
     setProcessingQueue([]);
+    setPendingInsertion(null);
   }, []);
 
   /**
@@ -414,17 +460,28 @@ export const useSimplifiedTextSync = ({
     };
   }, [isActive, isProcessing, processingQueue.length, lastProcessedEdges]);
 
+  /**
+   * Função para processar inserção pendente
+   */
+  const processPendingInsertion = useCallback(() => {
+    const insertion = pendingInsertion;
+    setPendingInsertion(null);
+    return insertion;
+  }, [pendingInsertion]);
+
   return {
     // Estado
     isActive,
     isProcessing,
     queueLength: processingQueue.length,
+    pendingInsertion,
     
     // Funções de controle
     toggleSync,
     processConnectionManually,
     clearConnectionHistory,
     getSyncStats,
+    processPendingInsertion,
     
     // Debug
     lastProcessedEdges: Array.from(lastProcessedEdges),

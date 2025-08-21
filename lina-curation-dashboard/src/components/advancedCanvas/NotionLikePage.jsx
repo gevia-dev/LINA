@@ -4,7 +4,9 @@ import { FileText, Save, X, Layers as LayersIcon, Quote as QuoteIcon, Braces as 
 import CanvasLibraryView from './CanvasLibraryView';
 import BlockNoteEditor from './BlockNoteEditor';
 import MainSidebar from '../MainSidebar';
-import { cleanText, mapCleanToOriginalIndex } from '../../utils/textHelpers';
+import { cleanText, mapCleanToOriginalIndex, convertDocumentModelToProseMirrorJSON, convertDocumentModelToBlockNoteBlocks } from '../../utils/textHelpers';
+import { handleCanvasConnection, findReferenceBlockIndex, createNewBlock } from '../../utils/textInsertionHelpers';
+import DynamicHighlightStyle from './DynamicHighlightStyle';
 
 
 
@@ -47,6 +49,20 @@ const referenceMarkerStyles = `
     padding: 1px 3px;
     transition: all 0.3s ease;
   }
+
+  /* NOVO: Estilos para highlighting dinâmico via Decorations */
+  .ProseMirror .reference-highlighted {
+    background-color: rgba(34, 197, 94, 0.3) !important;
+    border-radius: 3px !important;
+    padding: 1px 2px !important;
+    transition: all 0.2s ease !important;
+    box-shadow: 0 0 0 1px rgba(34, 197, 94, 0.2) !important;
+  }
+
+  .ProseMirror .reference-highlighted:hover {
+    background-color: rgba(34, 197, 94, 0.4) !important;
+    box-shadow: 0 0 0 1px rgba(34, 197, 94, 0.3) !important;
+  }
 `;
 
 const SECTION_TITLES = {
@@ -88,6 +104,144 @@ const NotionLikePage = ({
   // Estado para armazenar o mapeamento entre marcadores e títulos
   const [referenceMapping, setReferenceMapping] = useState(new Map());
 
+  // NOVO: Estado para o modelo de dados estruturado do documento
+  const [documentModel, setDocumentModel] = useState([]);
+
+  // NOVO: Estado para controlar quais IDs estão atualmente destacados
+  const [highlightedIds, setHighlightedIds] = useState([]);
+
+
+
+  // NOVO: Função para processar inserções declarativas no documentModel
+  const processDeclarativeInsertion = useCallback(async (insertionInfo) => {
+    try {
+      console.log('📝 Processando inserção declarativa:', insertionInfo);
+      
+      if (!insertionInfo || !insertionInfo.textToInsert) {
+        console.warn('⚠️ Informações de inserção inválidas');
+        return false;
+      }
+
+      const { textToInsert, position, searchText, nodeTitle } = insertionInfo;
+      
+      // Encontrar o índice do bloco de referência no documentModel
+      let referenceIndex = -1;
+      let insertIndex = -1;
+      
+      if (searchText && position !== 'end') {
+        const referenceBlock = findReferenceBlockIndex(documentModel, searchText);
+        if (referenceBlock && referenceBlock.found) {
+          referenceIndex = referenceBlock.index;
+          
+          // Calcular índice de inserção baseado na posição
+          if (position === 'after') {
+            insertIndex = referenceIndex + 1;
+          } else if (position === 'before') {
+            insertIndex = referenceIndex;
+          }
+        }
+      }
+      
+      // Se não encontrou referência ou é inserção no final
+      if (insertIndex === -1) {
+        insertIndex = documentModel.length;
+      }
+      
+      // Criar novo bloco de conteúdo
+      const newBlock = createNewBlock(textToInsert, [nodeTitle]);
+      
+      // Usar Array.prototype.splice() para inserir o novo bloco
+      const newDocumentModel = [...documentModel];
+      newDocumentModel.splice(insertIndex, 0, newBlock);
+      
+      console.log('✅ Novo documentModel criado:', {
+        originalLength: documentModel.length,
+        newLength: newDocumentModel.length,
+        insertIndex,
+        newBlockId: newBlock.id
+      });
+      
+      // Atualizar o estado do documentModel
+      setDocumentModel(newDocumentModel);
+      
+      return true;
+      
+    } catch (error) {
+      console.error('❌ Erro ao processar inserção declarativa:', error);
+      return false;
+    }
+  }, [documentModel]);
+
+  // Debug: Monitorar mudanças no documentModel
+  useEffect(() => {
+    if (documentModel.length > 0) {
+      console.log('📊 DocumentModel atualizado:', {
+        blockCount: documentModel.length,
+        blocks: documentModel.map(block => ({
+          id: block.id,
+          sourceQuoteIds: block.sourceQuoteIds,
+          textContentPreview: block.textContent.substring(0, 50) + '...'
+        }))
+      });
+    }
+  }, [documentModel]);
+
+  // NOVO: useEffect para atualizar o editor quando documentModel mudar
+  useEffect(() => {
+    if (!editorRef.current || !documentModel.length) return;
+    
+    try {
+      console.log('🔄 Atualizando editor com novo documentModel...');
+      
+      // Converter documentModel para ProseMirror JSON
+      const proseMirrorJSON = convertDocumentModelToProseMirrorJSON(documentModel);
+      
+      // Atualizar o editor usando replaceBlocks ou método similar
+      if (editorRef.current.editor && editorRef.current.editor.replaceBlocks) {
+        // Converter para blocos BlockNote
+        const blockNoteBlocks = convertDocumentModelToBlockNoteBlocks(documentModel);
+        
+        // Substituir blocos no editor
+        editorRef.current.editor.replaceBlocks(
+          editorRef.current.editor.topLevelBlocks,
+          blockNoteBlocks
+        );
+        
+        console.log('✅ Editor atualizado com sucesso via replaceBlocks');
+      } else {
+        console.warn('⚠️ Método replaceBlocks não disponível no editor');
+      }
+
+    } catch (error) {
+      console.error('❌ Erro ao atualizar editor:', error);
+    }
+  }, [documentModel, convertDocumentModelToProseMirrorJSON, convertDocumentModelToBlockNoteBlocks]);
+
+  // Função helper para converter documentModel de volta para texto
+  const documentModelToText = useCallback((model = documentModel) => {
+    return model.map(block => block.textContent).join(' ');
+  }, [documentModel]);
+
+  // Função helper para converter documentModel para blocos BlockNote
+  const documentModelToBlockNoteBlocks = useCallback((model = documentModel) => {
+    return convertDocumentModelToBlockNoteBlocks(model);
+  }, [documentModel]);
+
+  // Função helper para converter documentModel para JSON ProseMirror
+  const documentModelToProseMirrorJSON = useCallback((model = documentModel) => {
+    return convertDocumentModelToProseMirrorJSON(model);
+  }, [documentModel]);
+
+  // ===== RENDERIZADOR DOCUMENTMODEL -> PROSEMIRROR JSON =====
+  // 
+  // Agora temos três formas de converter o documentModel:
+  // 1. documentModelToText() - Para texto simples (compatibilidade)
+  // 2. documentModelToBlockNoteBlocks() - Para blocos BlockNote (recomendado)
+  // 3. documentModelToProseMirrorJSON() - Para JSON ProseMirror puro
+  //
+  // O BlockNoteEditor também expõe o método convertDocumentModelToBlocks()
+  // que pode ser chamado via editorRef.current.convertDocumentModelToBlocks()
+
   // NOVO: Função para atualizar o referenceMapping (sistema de sessão)
   const updateReferenceMapping = useCallback((marker, title) => {
     try {
@@ -105,145 +259,6 @@ const NotionLikePage = ({
       console.error('❌ Erro ao atualizar referenceMapping:', error);
     }
   }, []);
-
-  // Função aprimorada para atualizar referenceMapping com ReindexingMap
-  const updateReferenceMappingWithReindexing = useCallback((reindexingMap) => {
-    try {
-      console.log('🔄 Atualizando referenceMapping com ReindexingMap');
-      console.log(`📊 Processando ${reindexingMap.length} mudanças de marcadores`);
-
-      setReferenceMapping(prevMapping => {
-        const newMapping = new Map(prevMapping);
-        const changes = [];
-        const errors = [];
-
-        // Processar cada mudança no reindexingMap
-        reindexingMap.forEach((mapping, index) => {
-          const { oldMarker, newMarker, oldNumber, newNumber } = mapping;
-
-          console.log(`🔄 [${index + 1}/${reindexingMap.length}] Processando: ${oldMarker} -> ${newMarker}`);
-
-          try {
-            // Encontrar título associado ao marcador antigo
-            const associatedTitle = newMapping.get(oldMarker);
-
-            if (associatedTitle) {
-              // Remover mapeamentos antigos
-              newMapping.delete(oldMarker);
-              newMapping.delete(associatedTitle);
-
-              // Adicionar novos mapeamentos bidirecionais
-              newMapping.set(newMarker, associatedTitle);
-              newMapping.set(associatedTitle, newMarker);
-
-              changes.push({
-                title: associatedTitle,
-                oldMarker,
-                newMarker,
-                oldNumber,
-                newNumber,
-                action: 'updated'
-              });
-
-              console.log(`✅ Mapeamento atualizado: "${associatedTitle}" ${oldMarker} -> ${newMarker}`);
-
-            } else {
-              // Marcador não tem título associado - pode ser um novo marcador
-              console.log(`ℹ️ Marcador ${oldMarker} não tem título associado (pode ser novo marcador)`);
-
-              changes.push({
-                title: null,
-                oldMarker,
-                newMarker,
-                oldNumber,
-                newNumber,
-                action: 'no_title'
-              });
-            }
-
-          } catch (mappingError) {
-            console.error(`❌ Erro ao processar mapeamento ${oldMarker} -> ${newMarker}:`, mappingError);
-            errors.push({
-              oldMarker,
-              newMarker,
-              error: mappingError.message
-            });
-          }
-        });
-
-        // Log detalhado das mudanças
-        console.log(`📊 Resumo das mudanças no referenceMapping:`);
-        console.log(`  - Total processado: ${reindexingMap.length}`);
-        console.log(`  - Atualizações bem-sucedidas: ${changes.filter(c => c.action === 'updated').length}`);
-        console.log(`  - Marcadores sem título: ${changes.filter(c => c.action === 'no_title').length}`);
-        console.log(`  - Erros: ${errors.length}`);
-        console.log(`  - Tamanho final do mapping: ${newMapping.size / 2} referências`);
-
-        // Log detalhado de cada mudança
-        changes.forEach((change, index) => {
-          if (change.action === 'updated') {
-            console.log(`  ${index + 1}. "${change.title}" [${change.oldNumber}] -> [${change.newNumber}]`);
-          } else if (change.action === 'no_title') {
-            console.log(`  ${index + 1}. Marcador órfão [${change.oldNumber}] -> [${change.newNumber}]`);
-          }
-        });
-
-        // Log de erros se houver
-        if (errors.length > 0) {
-          console.error('❌ Erros durante atualização do referenceMapping:');
-          errors.forEach((error, index) => {
-            console.error(`  ${index + 1}. ${error.oldMarker} -> ${error.newMarker}: ${error.error}`);
-          });
-        }
-
-        return newMapping;
-      });
-
-      console.log('✅ ReferenceMapping atualizado com sucesso após reindexação');
-
-    } catch (error) {
-      console.error('❌ Erro crítico ao atualizar referenceMapping com reindexação:', error);
-    }
-  }, []);
-
-  // Callback para processar notificações de reindexação
-  const handleMarkerReindexing = useCallback((reindexingMap) => {
-    try {
-      console.log('📢 Recebida notificação de reindexação de marcadores');
-      console.log(`📊 ReindexingMap recebido:`, reindexingMap);
-
-      if (!reindexingMap || !Array.isArray(reindexingMap)) {
-        console.error('❌ ReindexingMap inválido recebido:', reindexingMap);
-        return;
-      }
-
-      if (reindexingMap.length === 0) {
-        console.log('ℹ️ ReindexingMap vazio - nenhuma ação necessária');
-        return;
-      }
-
-      console.log(`🔄 Processando reindexação de ${reindexingMap.length} marcadores`);
-
-      // Log detalhado do que será processado
-      console.log('📋 Detalhes da reindexação:');
-      reindexingMap.forEach((mapping, index) => {
-        const { oldMarker, newMarker, oldNumber, newNumber, isNewMarker, isExistingMarker } = mapping;
-        const type = isNewMarker ? 'NOVO' : isExistingMarker ? 'EXISTENTE' : 'DESCONHECIDO';
-        console.log(`  ${index + 1}. [${type}] ${oldMarker} -> ${newMarker} (${oldNumber} -> ${newNumber})`);
-      });
-
-      // Atualizar referenceMapping usando a função especializada
-      updateReferenceMappingWithReindexing(reindexingMap);
-
-      // Log de conclusão
-      console.log('✅ Processamento de reindexação concluído');
-      console.log('🔗 ReferenceMapping sincronizado com novos marcadores');
-
-    } catch (error) {
-      console.error('❌ Erro ao processar notificação de reindexação:', error);
-      console.error('📊 ReindexingMap que causou erro:', reindexingMap);
-    }
-  }, [updateReferenceMappingWithReindexing]);
 
   const EDITOR_MIN_PX = 480;
   const LIB_MIN_PX = 360;
@@ -620,33 +635,67 @@ const NotionLikePage = ({
     };
   }, []);
 
-  // Função CORRIGIDA para processar o texto mantendo mapeamento das referências
+  // Função REFATORADA para processar o texto e gerar modelo de dados estruturado
   const processFinalText = useCallback((text) => {
-    if (!text || typeof text !== 'string') return { processedText: text, mapping: new Map() };
+    if (!text || typeof text !== 'string') return { documentModel: [], mapping: new Map() };
 
     // Regex para encontrar trechos ///<texto>///
     const regex = /\/\/\/<([^>]+)>\/\/\//g;
-    let processedText = text;
-    let referenceNumber = 1;
+    const documentModel = [];
     const mapping = new Map();
+    let lastIndex = 0;
+    let match;
 
-    // Substituir cada trecho marcado por um marcador visual simples E guardar o mapeamento
-    processedText = processedText.replace(regex, (fullMatch, content) => {
-      const marker = `[${referenceNumber}]`;
+    // Processar cada trecho marcado para criar o modelo estruturado
+    while ((match = regex.exec(text)) !== null) {
+      const fullMatch = match[0];
+      const content = match[1];
+      const matchIndex = match.index;
+      
+      // Adicionar texto antes da tag (se houver)
+      if (matchIndex > lastIndex) {
+        const textBefore = text.substring(lastIndex, matchIndex).trim();
+        if (textBefore) {
+          documentModel.push({
+            id: `text_${documentModel.length}`,
+            sourceQuoteIds: [],
+            textContent: textBefore
+          });
+        }
+      }
 
-      // IMPORTANTE: Guardar o mapeamento entre o marcador e o conteúdo original
-      mapping.set(marker, content.trim());
-      mapping.set(content.trim(), marker); // Mapeamento bidirecional
+      // Adicionar o bloco marcado com suas referências
+      const blockId = `block_${documentModel.length}`;
+      documentModel.push({
+        id: blockId,
+        sourceQuoteIds: [content.trim()], // IDs das quotes de origem
+        textContent: fullMatch // Manter a tag original para referência
+      });
 
-      console.log(`📍 Mapeamento criado: ${marker} <-> "${content.trim()}"`);
+      // Atualizar mapeamento (mantendo compatibilidade com sistema existente)
+      mapping.set(blockId, content.trim());
+      mapping.set(content.trim(), blockId);
 
-      referenceNumber++;
-      return marker;
-    });
+      console.log(`📍 Bloco criado: ${blockId} <-> "${content.trim()}"`);
 
-    console.log(`🗺️ Mapeamento total criado com ${mapping.size / 2} referências`);
+      lastIndex = matchIndex + fullMatch.length;
+    }
 
-    return { processedText, mapping };
+    // Adicionar texto restante após a última tag (se houver)
+    if (lastIndex < text.length) {
+      const remainingText = text.substring(lastIndex).trim();
+      if (remainingText) {
+        documentModel.push({
+          id: `text_${documentModel.length}`,
+          sourceQuoteIds: [],
+          textContent: remainingText
+        });
+      }
+    }
+
+    console.log(`🗺️ Modelo de documento criado com ${documentModel.length} blocos`);
+
+    return { documentModel, mapping };
   }, []);
 
 
@@ -666,7 +715,16 @@ const NotionLikePage = ({
 
     // Primeira inicialização
     if (!isSessionInitialized && newsData?.final_text) {
-      const { processedText, mapping } = processFinalText(newsData.final_text.trim());
+      const { documentModel, mapping } = processFinalText(newsData.final_text.trim());
+
+      // Atualizar o modelo de documento
+      setDocumentModel(documentModel);
+      
+      // Converter modelo para blocos BlockNote (nova abordagem)
+      const blockNoteBlocks = documentModelToBlockNoteBlocks(documentModel);
+      
+      // Converter modelo para texto processado (mantendo compatibilidade temporária)
+      const processedText = documentModelToText(documentModel);
 
       // Congelar imediatamente
       setSessionContent(processedText);
@@ -674,12 +732,13 @@ const NotionLikePage = ({
       setEditorFrozen(true);
       setReferenceMapping(mapping);
 
-      console.log('🔒 Editor inicializado e congelado');
+      console.log('🔒 Editor inicializado e congelado com modelo estruturado');
+      console.log('📊 Blocos BlockNote gerados:', blockNoteBlocks.length);
       return processedText;
     }
 
     return sessionContent || `# Editor carregando...`;
-  }, [editorFrozen, sessionContent, isSessionInitialized, newsData?.final_text, processFinalText, lastMarkdown]);
+  }, [editorFrozen, sessionContent, isSessionInitialized, newsData?.final_text, processFinalText, lastMarkdown, documentModel, documentModelToText, documentModelToBlockNoteBlocks]);
 
   const sectionMarkdownMap = useMemo(() => {
     // Usar editorContent para processar seções (mas apenas se não for a mensagem de fallback)
@@ -1051,7 +1110,17 @@ const NotionLikePage = ({
 
   return (
     <AnimatePresence>
-      <motion.div className="fixed inset-0 z-50 flex items-center justify-center" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+      {/* Adicione uma chave estática aqui */}
+      <DynamicHighlightStyle key="dynamic-style-injector" highlightedIds={highlightedIds} />
+      
+      {/* E adicione uma chave estática aqui */}
+      <motion.div 
+        key="main-editor-layout"
+        className="fixed inset-0 z-50 flex items-center justify-center" 
+        initial={{ opacity: 0 }} 
+        animate={{ opacity: 1 }} 
+        exit={{ opacity: 0 }}
+      >
         <motion.div className="absolute inset-0 bg-black bg-opacity-50 backdrop-blur-sm" onClick={onClose} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} />
         <motion.div
           className="relative w-full h-full flex"
@@ -1309,16 +1378,14 @@ const NotionLikePage = ({
                 <div className="overflow-hidden flex flex-col" style={{ width: `${Math.round(splitRatio * 100)}%`, minWidth: EDITOR_MIN_PX, backgroundColor: '#000' }}>
                   <div className="flex-1 min-h-0 flex flex-col" style={{ height: '100%' }}>
                     <DropZone sectionId={filteredSection || activeSection} className="flex-1 min-h-0">
-                      <BlockNoteEditor
-                        key="editor-frozen" // KEY fixo - nunca muda
-                        ref={editorRef}
-                        initialContent={displayContent}
-                        onChange={handleEditorChange}
-                        onScroll={filteredSection ? undefined : handleScrollSync}
-                        onCanvasItemDragStart={(payload) => { try { onCanvasItemDragStart?.(payload); } catch { } }}
-                        onReferenceUpdate={updateReferenceMapping}
-                        onReindexing={handleMarkerReindexing}
-                      />
+                                             <BlockNoteEditor
+                         key="editor-frozen" // KEY fixo - nunca muda
+                         ref={editorRef}
+                         initialContent={displayContent}
+                         onChange={handleEditorChange}
+                         onScroll={filteredSection ? undefined : handleScrollSync}
+                         onCanvasItemDragStart={(payload) => { try { onCanvasItemDragStart?.(payload); } catch { } }}
+                       />
                     </DropZone>
                   </div>
                 </div>
@@ -1339,8 +1406,8 @@ const NotionLikePage = ({
                     onAddToNotionSection={(sectionId, payload) => handleContentAdd(payload, sectionId)}
                     editorRef={editorRef}
                     referenceMapping={referenceMapping}
-                    onReferenceUpdate={updateReferenceMapping}
-                    onReindexing={handleMarkerReindexing}
+                    onHighlightIds={setHighlightedIds}
+                    onDeclarativeInsertion={processDeclarativeInsertion}
                   />
                 </div>
               </div>
