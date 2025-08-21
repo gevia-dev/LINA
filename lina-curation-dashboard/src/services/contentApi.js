@@ -238,6 +238,36 @@ export const setLinaNewsPublished = async (linaNewsId, isPublished = true) => {
 };
 
 /**
+ * Busca dados específicos de uma notícia na tabela lina_news pelo news_id.
+ * @param {string} newsId - O ID da notícia na tabela "Controle Geral" (news_id).
+ */
+export const fetchLinaNewsById = async (newsId) => {
+  try {
+    console.log('🔍 Buscando dados da tabela lina_news para ID:', newsId);
+    
+    // Buscar diretamente na tabela lina_news usando o ID
+    const { data, error } = await supabase
+      .from('lina_news')
+      .select('id, title, created_at, final_text, "Post_linkedin_curto", post_linkedin_longo, post_instagram')
+      .eq('id', newsId)
+      .single();
+
+    if (error) {
+      console.error('❌ Error fetching lina_news by ID:', error);
+      throw new Error(error.message);
+    }
+
+    console.log('✅ Dados retornados da tabela lina_news:', data);
+    console.log('🔍 Coluna Post_linkedin_curto:', data?.Post_linkedin_curto);
+    
+    return data;
+  } catch (error) {
+    console.error('❌ Erro inesperado em fetchLinaNewsById:', error);
+    throw error;
+  }
+};
+
+/**
  * Busca a hierarquia dos tópicos e eventos da Lina.
  */
 export const fetchLinaHierarchy = async () => {
@@ -466,4 +496,85 @@ export const fetchCompletedNewsFromLinaNews = async (page = 0, limit = 50) => {
   })) || [];
 
   return { data: enrichedData, error, count };
+};
+
+/**
+ * Dispara webhook para o N8N quando usuário clica em LinkedIn Post enxuto
+ * @param {string|number} newsId - O ID da notícia
+ * @param {string} currentContent - Conteúdo atual da coluna Post_linkedin_curto (se existir)
+ * @returns {Promise<{success: boolean, markdownContent?: string, alreadyExists?: boolean}>} - Resultado com conteúdo markdown
+ */
+export const triggerLinkedinWebhook = async (newsId, currentContent = '') => {
+  try {
+    console.log('🚀 Verificando se precisa disparar webhook para N8N...');
+    console.log('🆔 ID da notícia:', newsId);
+    console.log('📝 Conteúdo atual recebido:', currentContent);
+    console.log('📝 Conteúdo após trim:', currentContent.trim());
+    
+    // Verificar se já existe conteúdo na coluna Post_linkedin_curto
+    if (currentContent && currentContent.trim() !== '') {
+      console.log('✅ Conteúdo já existe, não é necessário disparar webhook');
+      return { 
+        success: true, 
+        alreadyExists: true, 
+        markdownContent: currentContent,
+        message: 'Conteúdo já existe na base de dados'
+      };
+    }
+    
+    console.log('🚀 Conteúdo não existe, disparando webhook para N8N...');
+    
+    const response = await fetch('https://n8n.gevia.co/webhook/eb81e398-5b78-41af-9b89-2a74b0625d76', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        id: newsId
+      })
+    });
+
+    if (!response.ok) {
+      throw new Error(`Erro HTTP: ${response.status}`);
+    }
+
+    const result = await response.json();
+    console.log('✅ Webhook disparado com sucesso:', result);
+    
+    // Extrair o conteúdo markdown da resposta
+    // O N8N retorna um JSON com a chave "Post_linkedin_curto"
+    let markdownContent = '';
+    
+    if (typeof result === 'string') {
+      // Se a resposta for diretamente uma string
+      markdownContent = result;
+    } else if (result && typeof result === 'object') {
+      // Processar o formato específico do N8N
+      if (result.Post_linkedin_curto) {
+        // Extrair o conteúdo da chave Post_linkedin_curto
+        markdownContent = result.Post_linkedin_curto;
+        
+        // Converter quebras de linha \n para quebras de linha reais
+        markdownContent = markdownContent.replace(/\\n/g, '\n');
+        
+        // Processar hashtags para formato markdown
+        markdownContent = markdownContent.replace(/#(\w+)/g, '**#$1**');
+        
+        console.log('📝 Conteúdo processado do N8N:', markdownContent);
+      } else {
+        // Fallback para outros formatos
+        markdownContent = result.content || result.text || result.markdown || result.message || JSON.stringify(result);
+      }
+    }
+    
+    return { 
+      success: true, 
+      data: result,
+      markdownContent 
+    };
+    
+  } catch (error) {
+    console.error('❌ Erro ao disparar webhook:', error);
+    throw new Error(`Falha ao disparar webhook: ${error.message}`);
+  }
 };
