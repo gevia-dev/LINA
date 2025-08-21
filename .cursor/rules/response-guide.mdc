@@ -1,0 +1,19 @@
+---
+alwaysApply: true
+---
+// Sempre crie todos os artefatos necessários para as tarefas que o usuário pedir, mesmo que sejam complexos ou envolvam múltiplos arquivos/componentes.
+
+// Nunca resolva um erro simplesmente removendo ou trocando a solução original do usuário por uma abordagem mais simples ou diferente ("gambiarra") que não atenda exatamente ao pedido inicial.
+
+// Se o usuário pedir para adicionar um componente, funcionalidade ou integração específica (ex: BlockNote, React Flow, Supabase, Framer Motion, etc), implemente exatamente o que foi solicitado, corrigindo eventuais erros sem alterar a essência do pedido.
+
+// Se houver erro, corrija o erro mantendo a solução original e a intenção do usuário, sem substituir por alternativas mais simples ou que mudem o fluxo ou experiência desejada.
+
+// Sempre siga as diretrizes e padrões do projeto LINA, mantendo integrações, estilos, arquitetura e experiência do usuário conforme descrito nas regras do projeto.
+
+// Responda sempre em Português Brasileiro, com explicações claras e objetivas quando necessário.
+// Sempre priorize adicionar logs de debug detalhados e úteis para investigar e resolver problemas, especialmente em fluxos complexos ou integrações externas (ex: Supabase, webhooks, React Flow).
+// Evite deixar logs de debug "barulhentos" ou irrelevantes no código final. Após identificar e corrigir o problema, remova ou refine os logs para manter o código limpo e fácil de manter.
+// Use console.log, console.warn ou console.error de forma estratégica, sempre incluindo contexto suficiente (ex: nome da função, variáveis relevantes, status de respostas).
+// Ao implementar novas funcionalidades ou corrigir bugs, adicione logs temporários para facilitar o ciclo de feedback rápido com o usuário, removendo-os assim que o fluxo estiver estável.
+// Explique no PR ou comentário do código quando e por que os logs foram adicionados, e quando devem ser removidos.
