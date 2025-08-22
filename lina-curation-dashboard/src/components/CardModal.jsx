@@ -215,7 +215,7 @@ const CardModal = ({ isOpen, onClose, cardData, onSave, allCards = [], currentCa
                     initial={{ opacity: 0, scale: 0.8 }}
                     animate={{ opacity: 1, scale: 1 }}
                     onClick={handleReset}
-                    className="p-2 rounded-lg bg-[#2A2A2A] text-[#A0A0A0] hover:text-[#E0E0E0] hover:bg-[#333333] transition-all duration-200"
+                    className="p-2 rounded-lg bg-[rgba(42,42,42,0.3)] text-[#A0A0A0] hover:text-[#E0E0E0] hover:bg-[#333333] transition-all duration-200"
                     title="Resetar alterações"
                   >
                     <RotateCcw size={18} />
@@ -224,7 +224,7 @@ const CardModal = ({ isOpen, onClose, cardData, onSave, allCards = [], currentCa
                 
                 <button
                   onClick={handleClose}
-                  className="p-2 rounded-lg bg-[#2A2A2A] text-[#A0A0A0] hover:text-[#E0E0E0] hover:bg-[#333333] transition-all duration-200"
+                  className="p-2 rounded-lg bg-[rgba(42,42,42,0.3)] text-[#A0A0A0] hover:text-[#E0E0E0] hover:bg-[#333333] transition-all duration-200"
                 >
                   <X size={18} />
                 </button>
@@ -342,7 +342,7 @@ const CardModal = ({ isOpen, onClose, cardData, onSave, allCards = [], currentCa
             <div className="flex items-center justify-end gap-3 p-6 border-t border-[#333333] bg-[#1A1A1A]">
               <button
                 onClick={handleClose}
-                className="px-4 py-2 rounded-lg bg-[#2A2A2A] text-[#A0A0A0] hover:text-[#E0E0E0] hover:bg-[#333333] transition-all duration-200 text-sm font-medium"
+                className="px-4 py-2 rounded-lg bg-[rgba(42,42,42,0.3)] text-[#A0A0A0] hover:text-[#E0E0E0] hover:bg-[#333333] transition-all duration-200 text-sm font-medium"
               >
                 Cancelar
               </button>
@@ -353,7 +353,7 @@ const CardModal = ({ isOpen, onClose, cardData, onSave, allCards = [], currentCa
                 className={`px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 flex items-center gap-2 ${
                   hasChanges
                     ? 'bg-[#2BB24C] text-white hover:bg-[#25A043]'
-                    : 'bg-[#2A2A2A] text-[#666666] cursor-not-allowed'
+                    : 'bg-[rgba(42,42,42,0.3)] text-[#666666] cursor-not-allowed'
                 }`}
                 whileHover={hasChanges ? { scale: 1.02 } : {}}
                 whileTap={hasChanges ? { scale: 0.98 } : {}}

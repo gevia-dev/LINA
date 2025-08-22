@@ -65,7 +65,7 @@ const LazyImage = ({
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#2A2A2A',
+    backgroundColor: 'rgba(42,42,42,0.3)',
     transition: 'opacity 0.3s ease',
     ...style
   };
@@ -96,7 +96,7 @@ const LazyImage = ({
               left: 0,
               right: 0,
               bottom: 0,
-              background: 'linear-gradient(90deg, #2A2A2A 25%, #333333 50%, #2A2A2A 75%)',
+              background: 'linear-gradient(90deg, rgba(42,42,42,0.3) 25%, #333333 50%, rgba(42,42,42,0.3) 75%)',
               backgroundSize: '200px 100%',
               animation: 'shimmer 1.5s infinite linear',
               borderRadius: 'inherit'

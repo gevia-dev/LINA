@@ -41,7 +41,7 @@
   /* === BACKGROUNDS === */
   --bg-primary: #121212;        /* Background principal - preto escuro */
   --bg-secondary: #1E1E1E;      /* Background secundário - cards, painéis */
-  --bg-tertiary: #2A2A2A;       /* Background terciário - elementos destacados */
+  --bg-tertiary: rgba(42,42,42,0.3);       /* Background terciário - elementos destacados */
   --bg-overlay: rgba(0, 0, 0, 0.15); /* Overlay translúcido */
 
   /* === BORDAS E DIVISORES === */
@@ -60,6 +60,12 @@
   --status-warning: #F59E0B;    /* Amarelo - warning */
   --status-info: #3B82F6;       /* Azul - informação */
   --status-neutral: #6B7280;    /* Cinza - neutro */
+
+  /* === CORES DAS PLATAFORMAS === */
+  --linkedin-primary: #0077B5;
+  --linkedin-primary-hover: #005885;
+  --instagram-primary: #E4405F;
+  --instagram-primary-hover: #C13584;
 
   /* === TRANSPARÊNCIAS PARA STATUS === */
   --status-success-bg: #10B98120;

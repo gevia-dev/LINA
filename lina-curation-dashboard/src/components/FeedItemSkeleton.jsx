@@ -17,7 +17,7 @@ const FeedItemSkeleton = () => {
   `;
 
   const shimmerStyle = {
-    background: 'linear-gradient(90deg, #2A2A2A 25%, #333333 50%, #2A2A2A 75%)',
+    background: 'linear-gradient(90deg, rgba(42,42,42,0.3) 25%, #333333 50%, rgba(42,42,42,0.3) 75%)',
     backgroundSize: '200px 100%',
     animation: 'shimmer 1.5s infinite linear',
     borderRadius: '4px'

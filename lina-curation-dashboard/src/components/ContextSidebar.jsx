@@ -360,7 +360,21 @@ const ContextSidebar = ({
                                       className="group"
                                     >
                                       <div
-                                        className="p-4 rounded-lg bg-[#1A1A1A] border border-[#333333] relative overflow-hidden hover:border-[#2BB24C50] transition-all duration-200 cursor-pointer"
+                                        className="p-4 rounded-lg bg-[#1A1A1A] border border-[#333333] relative overflow-hidden hover:border-[#2BB24C50] transition-all duration-200 cursor-grab active:cursor-grabbing"
+                                        draggable={true}
+                                        onDragStart={(e) => {
+                                          e.dataTransfer.setData('text/plain', phrase);
+                                          e.dataTransfer.setData('application/json', JSON.stringify({
+                                            content: phrase,
+                                            title: title,
+                                            category: categoryKey,
+                                            type: 'micro'
+                                          }));
+                                          e.currentTarget.style.opacity = '0.5';
+                                        }}
+                                        onDragEnd={(e) => {
+                                          e.currentTarget.style.opacity = '1';
+                                        }}
                                         onDoubleClick={() => handleCardClick(phrase, 'micro', null, categoryKey, index)}
                                       >
                                         {/* Botão de expandir/recolher subtexto */}

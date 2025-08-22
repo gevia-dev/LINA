@@ -26,7 +26,7 @@ const Section = ({ label, children }) => (
       marginBottom: 14,
     }}>{label}</div>
     <div style={{
-      backgroundColor: '#2A2A2A',
+      backgroundColor: 'rgba(42,42,42,0.3)',
       border: '1px solid #333333',
       borderRadius: 12,
       padding: 24,
@@ -63,15 +63,16 @@ const EntitiesModal = ({ isOpen, onClose, entitiesList, initialIndex = 0 }) => {
   return (
     <div style={{
       position: 'fixed',
-      inset: 0,
-      background: 'rgba(0,0,0,0.08)',
-      backdropFilter: 'blur(4px)',
-      WebkitBackdropFilter: 'blur(4px)',
-      zIndex: 2000,
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      backgroundColor: 'rgba(42,42,42,0.3)',
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
-      padding: 16,
+      zIndex: 1000,
+      padding: '20px'
     }}
     onClick={onClose}
     >
@@ -138,7 +139,7 @@ const EntitiesModal = ({ isOpen, onClose, entitiesList, initialIndex = 0 }) => {
                   onClick={() => setSelectedIndex(idx)}
                   style={{
                     ...chipBaseStyle,
-                    backgroundColor: isSelected ? '#333333' : '#2A2A2A',
+                    backgroundColor: isSelected ? '#333333' : 'rgba(42,42,42,0.3)',
                     borderColor: isSelected ? '#666666' : '#333333',
                     transform: isSelected ? 'scale(1.06)' : 'scale(1)',
                     boxShadow: isSelected ? '0 6px 16px rgba(0,0,0,0.35)' : 'none',

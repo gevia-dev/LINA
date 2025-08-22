@@ -61,7 +61,7 @@ const DetailsSidebar = ({ selectedItem }) => {
   }
 
   // Função para renderizar seções com estilo consistente
-  const DetailSection = ({ label, children, hasBackground = false }) => (
+  const DetailSection = ({ label, children, hasBackground = false, onClick = null }) => (
     <div style={{ marginBottom: '24px' }}>
       <h3 
         style={{ 
@@ -76,6 +76,7 @@ const DetailsSidebar = ({ selectedItem }) => {
         {label}
       </h3>
       <div 
+        onClick={onClick}
         style={{ 
           color: 'var(--text-primary)',
           fontFamily: 'Inter',
@@ -83,12 +84,29 @@ const DetailsSidebar = ({ selectedItem }) => {
           fontWeight: '400',
           lineHeight: '1.8',
           ...(hasBackground && {
-            backgroundColor: '#2A2A2A',
+            backgroundColor: 'rgba(42,42,42,0.3)',
             border: '1px solid #333333',
             borderRadius: '6px',
-            padding: '20px'
+            padding: '14px',
+            transition: 'all 0.18s ease',
+            cursor: onClick ? 'pointer' : 'default'
           })
         }}
+        {...(hasBackground && onClick && {
+          title: "Clique para ver exemplos de citações deste bloco",
+          onMouseEnter: (e) => {
+            e.target.style.backgroundColor = '#3A3A3A';
+            e.target.style.borderColor = '#666666';
+            e.target.style.transform = 'translateY(-2px) scale(1.02)';
+            e.target.style.boxShadow = '0 8px 25px rgba(0, 0, 0, 0.3)';
+          },
+          onMouseLeave: (e) => {
+            e.target.style.backgroundColor = 'rgba(42,42,42,0.3)';
+            e.target.style.borderColor = '#333333';
+            e.target.style.transform = 'translateY(0) scale(1)';
+            e.target.style.boxShadow = 'none';
+          }
+        })}
       >
         {children}
       </div>
@@ -112,7 +130,7 @@ const DetailsSidebar = ({ selectedItem }) => {
             key={index}
             style={{
               padding: '10px 12px',
-              backgroundColor: '#2A2A2A',
+              backgroundColor: 'rgba(42,42,42,0.3)',
               border: '1px solid #444444',
               borderRadius: '10px',
               fontSize: '13px',
@@ -131,11 +149,13 @@ const DetailsSidebar = ({ selectedItem }) => {
               e.target.style.backgroundColor = '#3A3A3A';
               e.target.style.borderColor = '#666666';
               e.target.style.transform = 'translateY(-2px) scale(1.03)';
+              e.target.style.boxShadow = '0 8px 25px rgba(0, 0, 0, 0.3)';
             }}
             onMouseLeave={(e) => {
-              e.target.style.backgroundColor = '#2A2A2A';
+              e.target.style.backgroundColor = 'rgba(42,42,42,0.3)';
               e.target.style.borderColor = '#444444';
               e.target.style.transform = 'translateY(0) scale(1)';
+              e.target.style.boxShadow = 'none';
             }}
             onClick={() => onEntityClick && onEntityClick(index)}
           >
@@ -268,27 +288,21 @@ const DetailsSidebar = ({ selectedItem }) => {
             {/* ESQUERDA - Topline Summary */}
             <div>
               {wellnessData?.wellness_focus?.topline_summary && (
-                <DetailSection label="O que aconteceu?" hasBackground={true}>
-                  <div
-                    onClick={() => {
-                      // filtrar core_quotes categoria funcional: Fato_Central
-                      try {
-                        const bucket = coreQuotes?.search_quotes || {};
-                        const allLists = Object.values(bucket).flat();
-                        const filtered = allLists.filter((item) => item?. categoria_funcional === 'Fato_Central');
-                        setQuotesForSection(filtered || []);
-                        setQuotesModalTitle('O que aconteceu? • Fato Central');
-                        setIsQuotesModalOpen(true);
-                      } catch (e) {
-                        setQuotesForSection([]);
-                        setIsQuotesModalOpen(true);
-                      }
-                    }}
-                    style={{ cursor: 'pointer' }}
-                    title="Clique para ver exemplos de citações deste bloco"
-                  >
-                    {wellnessData.wellness_focus.topline_summary}
-                  </div>
+                <DetailSection label="O que aconteceu?" hasBackground={true} onClick={() => {
+                  // filtrar core_quotes categoria funcional: Fato_Central
+                  try {
+                    const bucket = coreQuotes?.search_quotes || {};
+                    const allLists = Object.values(bucket).flat();
+                    const filtered = allLists.filter((item) => item?. categoria_funcional === 'Fato_Central');
+                    setQuotesForSection(filtered || []);
+                    setQuotesModalTitle('O que aconteceu? • Fato Central');
+                    setIsQuotesModalOpen(true);
+                  } catch (e) {
+                    setQuotesForSection([]);
+                    setIsQuotesModalOpen(true);
+                  }
+                }}>
+                  {wellnessData.wellness_focus.topline_summary}
                 </DetailSection>
               )}
             </div>
@@ -377,33 +391,27 @@ const DetailsSidebar = ({ selectedItem }) => {
             {/* ESQUERDA - Relevância de Mercado */}
             <div>
               {wellnessData?.relevance_market_trends?.relevancia_mercado && (
-                <DetailSection label="Por que isso importa?" hasBackground={true}>
-                  <div
-                    onClick={() => {
-                      try {
-                        const bucket = coreQuotes?.search_quotes || {};
-                        const allLists = Object.values(bucket).flat();
-                        const filtered = allLists.filter((item) => item?.categoria_funcional === 'Causas_Motivacoes');
-                        setQuotesForSection(filtered || []);
-                        setQuotesModalTitle('Por que isso importa? • Causas e Motivações');
-                        setIsQuotesModalOpen(true);
-                      } catch (e) {
-                        setQuotesForSection([]);
-                        setIsQuotesModalOpen(true);
-                      }
-                    }}
-                    style={{ cursor: 'pointer' }}
-                    title="Clique para ver exemplos de citações deste bloco"
-                  >
-                    {wellnessData.relevance_market_trends.relevancia_mercado}
-                  </div>
+                <DetailSection label="Por que isso importa?" hasBackground={true} onClick={() => {
+                  try {
+                    const bucket = coreQuotes?.search_quotes || {};
+                    const allLists = Object.values(bucket).flat();
+                    const filtered = allLists.filter((item) => item?.categoria_funcional === 'Causas_Motivacoes');
+                    setQuotesForSection(filtered || []);
+                    setQuotesModalTitle('Por que isso importa? • Causas e Motivações');
+                    setIsQuotesModalOpen(true);
+                  } catch (e) {
+                    setQuotesForSection([]);
+                    setIsQuotesModalOpen(true);
+                  }
+                }}>
+                  {wellnessData.relevance_market_trends.relevancia_mercado}
                 </DetailSection>
               )}
             </div>
             
             {/* DIREITA - Entities Data (ocupa metade do espaço) */}
             <div>
-              <DetailSection label="Entidades identificadas">
+              <DetailSection label="Entidades identificadas" hasBackground={false}>
                 {renderWellnessEntities(entityNames, openEntitiesModalAt)}
               </DetailSection>
             </div>
@@ -419,26 +427,20 @@ const DetailsSidebar = ({ selectedItem }) => {
             {/* ESQUERDA - Motivo / Consequência */}
             <div>
               {structuredData?.motivo_ou_consequencia && (
-                <DetailSection label="Motivo / Consequência" hasBackground={true}>
-                  <div
-                    onClick={() => {
-                      try {
-                        const bucket = coreQuotes?.search_quotes || {};
-                        const allLists = Object.values(bucket).flat();
-                        const filtered = allLists.filter((item) => item?.categoria_funcional === 'Impactos_Consequencias');
-                        setQuotesForSection(filtered || []);
-                        setQuotesModalTitle('Motivo / Consequência • Impactos e Consequências');
-                        setIsQuotesModalOpen(true);
-                      } catch (e) {
-                        setQuotesForSection([]);
-                        setIsQuotesModalOpen(true);
-                      }
-                    }}
-                    style={{ cursor: 'pointer' }}
-                    title="Clique para ver exemplos de citações deste bloco"
-                  >
-                    {structuredData.motivo_ou_consequencia}
-                  </div>
+                <DetailSection label="Motivo / Consequência" hasBackground={true} onClick={() => {
+                  try {
+                    const bucket = coreQuotes?.search_quotes || {};
+                    const allLists = Object.values(bucket).flat();
+                    const filtered = allLists.filter((item) => item?.categoria_funcional === 'Impactos_Consequencias');
+                    setQuotesForSection(filtered || []);
+                    setQuotesModalTitle('Motivo / Consequência • Impactos e Consequências');
+                    setIsQuotesModalOpen(true);
+                  } catch (e) {
+                    setQuotesForSection([]);
+                    setIsQuotesModalOpen(true);
+                  }
+                }}>
+                  {structuredData.motivo_ou_consequencia}
                 </DetailSection>
               )}
             </div>
@@ -446,26 +448,20 @@ const DetailsSidebar = ({ selectedItem }) => {
             {/* MEIO - Possiveis oportunidades */}
             <div>
               {wellnessData?.metadata?.oportunidades_identificadas && (
-                <DetailSection label="Possiveis oportunidades" hasBackground={true}>
-                  <div
-                    onClick={() => {
-                      try {
-                        const bucket = coreQuotes?.search_quotes || {};
-                        const allLists = Object.values(bucket).flat();
-                        const filtered = allLists.filter((item) => item?.categoria_funcional === 'Desafios_Oportunidades');
-                        setQuotesForSection(filtered || []);
-                        setQuotesModalTitle('Possiveis oportunidades • Desafios e Oportunidades');
-                        setIsQuotesModalOpen(true);
-                      } catch (e) {
-                        setQuotesForSection([]);
-                        setIsQuotesModalOpen(true);
-                      }
-                    }}
-                    style={{ cursor: 'pointer' }}
-                    title="Clique para ver exemplos de citações deste bloco"
-                  >
-                    {wellnessData.metadata.oportunidades_identificadas}
-                  </div>
+                <DetailSection label="Possiveis oportunidades" hasBackground={true} onClick={() => {
+                  try {
+                    const bucket = coreQuotes?.search_quotes || {};
+                    const allLists = Object.values(bucket).flat();
+                    const filtered = allLists.filter((item) => item?.categoria_funcional === 'Desafios_Oportunidades');
+                    setQuotesForSection(filtered || []);
+                    setQuotesModalTitle('Possiveis oportunidades • Desafios e Oportunidades');
+                    setIsQuotesModalOpen(true);
+                  } catch (e) {
+                    setQuotesForSection([]);
+                    setIsQuotesModalOpen(true);
+                  }
+                }}>
+                  {wellnessData.metadata.oportunidades_identificadas}
                 </DetailSection>
               )}
             </div>
@@ -473,26 +469,20 @@ const DetailsSidebar = ({ selectedItem }) => {
             {/* DIREITA - Impacto Futuro */}
             <div>
               {wellnessData?.relevance_market_trends?.impacto_futuro && (
-                <DetailSection label="Impacto futuro" hasBackground={true}>
-                  <div
-                    onClick={() => {
-                      try {
-                        const bucket = coreQuotes?.search_quotes || {};
-                        const allLists = Object.values(bucket).flat();
-                        const filtered = allLists.filter((item) => item?.categoria_funcional === 'Projecoes_Futuro');
-                        setQuotesForSection(filtered || []);
-                        setQuotesModalTitle('Impacto futuro • Projeções de Futuro');
-                        setIsQuotesModalOpen(true);
-                      } catch (e) {
-                        setQuotesForSection([]);
-                        setIsQuotesModalOpen(true);
-                      }
-                    }}
-                    style={{ cursor: 'pointer' }}
-                    title="Clique para ver exemplos de citações deste bloco"
-                  >
-                    {wellnessData.relevance_market_trends.impacto_futuro}
-                  </div>
+                <DetailSection label="Impacto futuro" hasBackground={true} onClick={() => {
+                  try {
+                    const bucket = coreQuotes?.search_quotes || {};
+                    const allLists = Object.values(bucket).flat();
+                    const filtered = allLists.filter((item) => item?.categoria_funcional === 'Projecoes_Futuro');
+                    setQuotesForSection(filtered || []);
+                    setQuotesModalTitle('Impacto futuro • Projeções de Futuro');
+                    setIsQuotesModalOpen(true);
+                  } catch (e) {
+                    setQuotesForSection([]);
+                    setIsQuotesModalOpen(true);
+                  }
+                }}>
+                  {wellnessData.relevance_market_trends.impacto_futuro}
                 </DetailSection>
               )}
             </div>
@@ -523,7 +513,7 @@ const DetailsSidebar = ({ selectedItem }) => {
             style={{
               flex: 1,
               padding: '14px 20px',
-              backgroundColor: '#2A2A2A',
+              backgroundColor: 'rgba(42,42,42,0.3)',
               color: '#E0E0E0',
               border: '1px solid #333333',
               borderRadius: '8px',
@@ -540,12 +530,14 @@ const DetailsSidebar = ({ selectedItem }) => {
             onMouseEnter={(e) => {
               e.target.style.backgroundColor = '#333333';
               e.target.style.borderColor = '#666666';
-              e.target.style.transform = 'translateY(-1px)';
+              e.target.style.transform = 'translateY(-1px) scale(1.02)';
+              e.target.style.boxShadow = '0 6px 20px rgba(0, 0, 0, 0.3)';
             }}
             onMouseLeave={(e) => {
-              e.target.style.backgroundColor = '#2A2A2A';
+              e.target.style.backgroundColor = 'rgba(42,42,42,0.3)';
               e.target.style.borderColor = '#333333';
-              e.target.style.transform = 'translateY(0)';
+              e.target.style.transform = 'translateY(0) scale(1)';
+              e.target.style.boxShadow = 'none';
             }}
           >
             Ler
@@ -558,7 +550,7 @@ const DetailsSidebar = ({ selectedItem }) => {
             style={{
               flex: 1,
               padding: '14px 20px',
-              backgroundColor: isLoading ? '#666666' : '#2A2A2A',
+              backgroundColor: isLoading ? '#666666' : 'rgba(42,42,42,0.3)',
               color: '#E0E0E0',
               border: isLoading ? '1px solid #666666' : '1px solid var(--primary-green-transparent)',
               borderRadius: '8px',
@@ -577,14 +569,16 @@ const DetailsSidebar = ({ selectedItem }) => {
               if (!isLoading) {
                 e.target.style.backgroundColor = '#333333';
                 e.target.style.borderColor = 'var(--primary-green)';
-                e.target.style.transform = 'translateY(-1px)';
+                e.target.style.transform = 'translateY(-1px) scale(1.02)';
+                e.target.style.boxShadow = '0 6px 20px rgba(0, 0, 0, 0.3)';
               }
             }}
             onMouseLeave={(e) => {
               if (!isLoading) {
-                e.target.style.backgroundColor = '#2A2A2A';
+                e.target.style.backgroundColor = 'rgba(42,42,42,0.3)';
                 e.target.style.borderColor = 'var(--primary-green-transparent)';
-                e.target.style.transform = 'translateY(0)';
+                e.target.style.transform = 'translateY(0) scale(1)';
+                e.target.style.boxShadow = 'none';
               }
             }}
           >
