@@ -1,13 +1,8 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Sparkles } from 'lucide-react';
-import { fetchLinaNewsByNewsId } from '../services/contentApi';
 import EntitiesModal from './EntitiesModal';
 import CoreQuotesModal from './CoreQuotesModal';
 
 const DetailsSidebar = ({ selectedItem }) => {
-  const navigate = useNavigate();
-  const [isLoading, setIsLoading] = useState(false);
   const [isEntitiesModalOpen, setIsEntitiesModalOpen] = useState(false);
   const [entitiesModalIndex, setEntitiesModalIndex] = useState(0);
   const [isQuotesModalOpen, setIsQuotesModalOpen] = useState(false);
@@ -22,39 +17,7 @@ const DetailsSidebar = ({ selectedItem }) => {
     setQuotesForSection([]);
   }, [selectedItem?.id]);
 
-  const handleCreateNews = async () => {
-    if (!selectedItem?.id) return;
-    
-    setIsLoading(true);
-    try {
-      // Se já temos o lina_news_id (quando vem do filtro), usar diretamente
-      if (selectedItem.lina_news_id) {
-        navigate(`/content-type/${selectedItem.lina_news_id}`);
-        return;
-      }
-      // Quando o item já é da tabela lina_news, navegar usando o próprio id
-      if (Object.prototype.hasOwnProperty.call(selectedItem, 'news_id')) {
-        navigate(`/content-type/${selectedItem.id}`);
-        return;
-      }
-      
-      // Caso contrário, buscar na tabela lina_news usando o news_id
-      const linaNews = await fetchLinaNewsByNewsId(selectedItem.id);
-      
-      if (linaNews?.id) {
-        // Redirecionar para a página de seleção de tipo de conteúdo
-        navigate(`/content-type/${linaNews.id}`);
-      } else {
-        console.error('Notícia não encontrada na tabela lina_news');
-        alert('Esta notícia ainda não foi processada para a lina_news. Tente novamente mais tarde.');
-      }
-    } catch (error) {
-      console.error('Erro ao buscar notícia:', error);
-      alert('Erro ao buscar notícia na lina_news. Esta notícia pode não ter sido processada ainda.');
-    } finally {
-      setIsLoading(false);
-    }
-  };
+
 
   if (!selectedItem) {
     return null;
@@ -491,7 +454,7 @@ const DetailsSidebar = ({ selectedItem }) => {
         </div>
       </div>
 
-      {/* Barra Sticky - Botões Ler e Criar */}
+      {/* Barra Sticky - Botão Ler */}
       <div style={{
         position: 'sticky',
         bottom: 0,
@@ -541,49 +504,6 @@ const DetailsSidebar = ({ selectedItem }) => {
             }}
           >
             Ler
-          </button>
-
-          {/* Botão Criar */}
-          <button
-            onClick={handleCreateNews}
-            disabled={isLoading}
-            style={{
-              flex: 1,
-              padding: '14px 20px',
-              backgroundColor: isLoading ? '#666666' : 'rgba(42,42,42,0.3)',
-              color: '#E0E0E0',
-              border: isLoading ? '1px solid #666666' : '1px solid var(--primary-green-transparent)',
-              borderRadius: '8px',
-              fontFamily: 'Inter',
-              fontSize: '14px',
-              fontWeight: '500',
-              cursor: isLoading ? 'not-allowed' : 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: '8px',
-              transition: 'all 0.2s ease',
-              opacity: isLoading ? 0.7 : 1
-            }}
-            onMouseEnter={(e) => {
-              if (!isLoading) {
-                e.target.style.backgroundColor = '#333333';
-                e.target.style.borderColor = 'var(--primary-green)';
-                e.target.style.transform = 'translateY(-1px) scale(1.02)';
-                e.target.style.boxShadow = '0 6px 20px rgba(0, 0, 0, 0.3)';
-              }
-            }}
-            onMouseLeave={(e) => {
-              if (!isLoading) {
-                e.target.style.backgroundColor = 'rgba(42,42,42,0.3)';
-                e.target.style.borderColor = 'var(--primary-green-transparent)';
-                e.target.style.transform = 'translateY(0) scale(1)';
-                e.target.style.boxShadow = 'none';
-              }
-            }}
-          >
-            <Sparkles size={16} />
-            {isLoading ? 'Buscando...' : 'Criar'}
           </button>
         </div>
       </div>
