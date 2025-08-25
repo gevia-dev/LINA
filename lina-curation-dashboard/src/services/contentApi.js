@@ -75,14 +75,14 @@ export const updateNewsStatus = async (id, status) => {
 };
 
 /**
- * Busca uma notícia na tabela lina_news pelo news_id.
- * @param {string} newsId - O ID da notícia da tabela "Controle Geral".
+ * Busca uma notícia na tabela lina_news pelo ID.
+ * @param {string} newsId - O ID da notícia na tabela lina_news.
  */
 export const fetchLinaNewsByNewsId = async (newsId) => {
   const { data, error } = await supabase
     .from('lina_news')
     .select('id')
-    .eq('news_id', newsId)
+    .eq('id', newsId)
     .single();
 
   if (error) {
@@ -102,10 +102,10 @@ export const fetchNewsFromLinaNews = async (page = 0, limit = 50) => {
   const from = page * limit;
   const to = from + limit - 1;
 
-  // Busca primeiro os news_ids e ids da lina_news
+  // Busca primeiro os IDs da lina_news
   const { data: linaNewsData, error: linaError } = await supabase
     .from('lina_news')
-    .select('id, news_id')
+    .select('id')
     .range(from, to);
 
   if (linaError) {
@@ -117,14 +117,14 @@ export const fetchNewsFromLinaNews = async (page = 0, limit = 50) => {
     return { data: [], error: null, count: 0 };
   }
 
-  // Cria um mapa para relacionar news_id com lina_news_id
+  // Cria um mapa para relacionar id com lina_news_id
   const linaNewsMap = {};
   linaNewsData.forEach(item => {
-    linaNewsMap[item.news_id] = item.id;
+    linaNewsMap[item.id] = item.id;
   });
 
   // Extrai os IDs
-  const newsIds = linaNewsData.map(item => item.news_id);
+  const newsIds = linaNewsData.map(item => item.id);
 
   // Busca as notícias correspondentes na tabela Controle Geral
   const { data, error, count } = await supabase
@@ -163,7 +163,7 @@ export const fetchLinaNews = async (page = 0, limit = 50, { completed = false } 
   try {
     const { data, error, count } = await supabase
       .from('lina_news')
-      .select('id, created_at, title, link, structured_summary, final_text, original_full_content, macro_tag, sub_tag, category, news_id, isPublished, wellness_data, entities_data, core_quotes', { count: 'exact' })
+      .select('id, created_at, title, link, structured_summary, final_text, original_full_content, macro_tag, sub_tag, category, isPublished, wellness_data, entities_data, core_quotes', { count: 'exact' })
       .eq('isPublished', completed)
       .order('created_at', { ascending: false })
       .range(from, to);
@@ -185,7 +185,7 @@ export const fetchLinaNews = async (page = 0, limit = 50, { completed = false } 
 
     let query = supabase
       .from('lina_news')
-      .select('id, created_at, title, link, structured_summary, final_text, original_full_content, macro_tag, sub_tag, category, news_id, wellness_data, entities_data, core_quotes', { count: 'exact' })
+      .select('id, created_at, title, link, structured_summary, final_text, original_full_content, macro_tag, sub_tag, category, wellness_data, entities_data, core_quotes', { count: 'exact' })
       .order('created_at', { ascending: false })
       .range(from, to);
 
@@ -238,8 +238,8 @@ export const setLinaNewsPublished = async (linaNewsId, isPublished = true) => {
 };
 
 /**
- * Busca dados específicos de uma notícia na tabela lina_news pelo news_id.
- * @param {string} newsId - O ID da notícia na tabela "Controle Geral" (news_id).
+ * Busca dados específicos de uma notícia na tabela lina_news pelo ID.
+ * @param {string} newsId - O ID da notícia na tabela lina_news.
  */
 export const fetchLinaNewsById = async (newsId) => {
   try {
@@ -452,10 +452,10 @@ export const fetchCompletedNewsFromLinaNews = async (page = 0, limit = 50) => {
   const from = page * limit;
   const to = from + limit - 1;
 
-  // Busca primeiro os news_ids e ids da lina_news
+  // Busca primeiro os IDs da lina_news
   const { data: linaNewsData, error: linaError } = await supabase
     .from('lina_news')
-    .select('id, news_id')
+    .select('id')
     .range(from, to);
 
   if (linaError) {
@@ -467,14 +467,14 @@ export const fetchCompletedNewsFromLinaNews = async (page = 0, limit = 50) => {
     return { data: [], error: null, count: 0 };
   }
 
-  // Cria um mapa para relacionar news_id com lina_news_id
+  // Cria um mapa para relacionar id com lina_news_id
   const linaNewsMap = {};
   linaNewsData.forEach(item => {
-    linaNewsMap[item.news_id] = item.id;
+    linaNewsMap[item.id] = item.id;
   });
 
   // Extrai os IDs
-  const newsIds = linaNewsData.map(item => item.news_id);
+  const newsIds = linaNewsData.map(item => item.id);
 
   // Busca as notícias correspondentes na tabela Controle Geral (apenas concluídas)
   const { data, error, count } = await supabase

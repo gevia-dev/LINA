@@ -16,7 +16,15 @@ console.log('🔍 NewsReaderPanel - Configurações do marked aplicadas:', marke
 
 // Converte um texto simples em blocos básicos para o BlockNote
 function extractFinalTextMarkdown(item) {
-  if (!item) return '';
+  console.log('🔍 NewsReaderPanel - extractFinalTextMarkdown - Item recebido:', item);
+  console.log('🔍 NewsReaderPanel - extractFinalTextMarkdown - Tipo do item:', typeof item);
+  console.log('🔍 NewsReaderPanel - extractFinalTextMarkdown - Propriedades do item:', item ? Object.keys(item) : 'null');
+  
+  if (!item) {
+    console.log('🔍 NewsReaderPanel - extractFinalTextMarkdown - Item é null/undefined');
+    return '';
+  }
+  
   if (typeof item.final_text === 'string') {
     console.log('🔍 NewsReaderPanel - final_text original:', item.final_text);
     // Correção inteligente de markdown: adiciona espaço após hashtags de headings
@@ -24,6 +32,8 @@ function extractFinalTextMarkdown(item) {
     console.log('🔍 NewsReaderPanel - final_text corrigido:', correctedMarkdown);
     return correctedMarkdown;
   }
+  
+  console.log('🔍 NewsReaderPanel - extractFinalTextMarkdown - final_text não é string ou não existe:', item.final_text);
   return '';
 }
 
@@ -194,6 +204,11 @@ const EmptyState = React.memo(({ icon: Icon, title, description, buttonText, onA
 EmptyState.displayName = 'EmptyState';
 
 const NewsReaderPanel = ({ item, onClose }) => {
+  // Log para debug da estrutura do item
+  console.log('🔍 NewsReaderPanel - Item recebido:', item);
+  console.log('🔍 NewsReaderPanel - Item ID:', item?.id);
+  console.log('🔍 NewsReaderPanel - Item estrutura:', item ? Object.keys(item) : 'null');
+  
   const [title, setTitle] = useState(item?.title || 'Sem título');
   const [markdown, setMarkdown] = useState('');
   const [selectedButton, setSelectedButton] = useState('blog');
@@ -248,8 +263,33 @@ const NewsReaderPanel = ({ item, onClose }) => {
   }, []);
 
   useEffect(() => {
-    setTitle(item?.title || 'Sem título');
-    setMarkdown(extractFinalTextMarkdown(item));
+    console.log('🔍 NewsReaderPanel - useEffect - Item mudou:', item);
+    
+    if (item?.id) {
+      // Se temos um ID, buscar os dados completos da tabela lina_news
+      const loadItemData = async () => {
+        try {
+          console.log('🔍 NewsReaderPanel - Carregando dados completos para ID:', item.id);
+          const fullData = await fetchLinaNewsById(item.id);
+          console.log('🔍 NewsReaderPanel - Dados completos carregados:', fullData);
+          
+          setTitle(fullData?.title || item?.title || 'Sem título');
+          setMarkdown(extractFinalTextMarkdown(fullData));
+        } catch (error) {
+          console.error('🔍 NewsReaderPanel - Erro ao carregar dados completos:', error);
+          // Fallback para dados básicos do item
+          setTitle(item?.title || 'Sem título');
+          setMarkdown(extractFinalTextMarkdown(item));
+        }
+      };
+      
+      loadItemData();
+    } else {
+      // Fallback para dados básicos do item
+      setTitle(item?.title || 'Sem título');
+      setMarkdown(extractFinalTextMarkdown(item));
+    }
+    
     setSelectedButton('blog');
     setLinkedinContent('');
     setHasContent(false);
@@ -358,9 +398,17 @@ const NewsReaderPanel = ({ item, onClose }) => {
   }, [onClose]);
 
   const handleEditToggle = useCallback((editing) => {
+    console.log('🔍 NewsReaderPanel - handleEditToggle - Mudando para modo:', editing ? 'edição' : 'visualização');
+    console.log('🔍 NewsReaderPanel - handleEditToggle - Item atual:', item);
+    console.log('🔍 NewsReaderPanel - handleEditToggle - Markdown atual:', markdown);
+    console.log('🔍 NewsReaderPanel - handleEditToggle - LinkedIn content atual:', linkedinContent);
+    
     setIsEditing(editing);
     setShowContextLibrary(editing); // Mostra a biblioteca quando estiver editando
-  }, []);
+    
+    console.log('🔍 NewsReaderPanel - handleEditToggle - Estado atualizado - isEditing:', editing);
+    console.log('🔍 NewsReaderPanel - handleEditToggle - Estado atualizado - showContextLibrary:', editing);
+  }, [item, markdown, linkedinContent]);
 
   // Função para renderizar conteúdo baseado no botão selecionado
   const renderContent = useCallback(() => {
@@ -390,9 +438,14 @@ const NewsReaderPanel = ({ item, onClose }) => {
                 isEditing={isEditing}
                 onEditToggle={handleEditToggle}
                 onSave={async (newContent) => {
+                  console.log('🔍 NewsReaderPanel - onSave Blog - Conteúdo recebido:', newContent);
+                  console.log('🔍 NewsReaderPanel - onSave Blog - Conteúdo anterior:', markdown);
+                  
                   setMarkdown(newContent);
                   toast.success('Blog post salvo com sucesso!');
                   console.log('✅ Blog post salvo:', newContent);
+                  
+                  console.log('🔍 NewsReaderPanel - onSave Blog - Estado atualizado - markdown:', newContent);
                 }}
                 onCancel={() => {
                   setIsEditing(false);
@@ -439,9 +492,14 @@ const NewsReaderPanel = ({ item, onClose }) => {
                   isEditing={isEditing}
                   onEditToggle={handleEditToggle}
                   onSave={async (newContent) => {
+                    console.log('🔍 NewsReaderPanel - onSave LinkedIn Enxuto - Conteúdo recebido:', newContent);
+                    console.log('🔍 NewsReaderPanel - onSave LinkedIn Enxuto - Conteúdo anterior:', linkedinContent);
+                    
                     setLinkedinContent(newContent);
                     toast.success('Post LinkedIn enxuto salvo com sucesso!');
                     console.log('✅ Post LinkedIn enxuto salvo:', newContent);
+                    
+                    console.log('🔍 NewsReaderPanel - onSave LinkedIn Enxuto - Estado atualizado - linkedinContent:', newContent);
                   }}
                   onCancel={() => {
                            setIsEditing(false);
@@ -708,18 +766,27 @@ const NewsReaderPanel = ({ item, onClose }) => {
                     boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
                     flexShrink: 0,
                     height: '100%',
-                    transition: 'width 0.3s ease-in-out'
+                    transition: 'width 0.3s ease-in-out',
+                    overflow: 'hidden',
+                    position: 'relative'
                   }}
                 >
                   {showContextLibrary ? (
                     /* Biblioteca de Contexto - ContextSidebar integrado */
-                    <div style={{
-                      width: '100%',
-                      height: '100%',
-                      borderRadius: '8px',
-                      overflow: 'hidden'
-                    }}>
+                    <div 
+                      className="context-sidebar-scroll"
+                      style={{
+                        width: '100%',
+                        height: '100%',
+                        borderRadius: '8px',
+                        overflow: 'auto',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        paddingBottom: '20px'
+                      }}
+                    >
                       <ContextSidebar
+                        key={`context-sidebar-${item?.id || 'default'}`}
                         newsData={item}
                         selectedBlock={null}
                         onTransferItem={(itemId, content) => {
@@ -1194,6 +1261,37 @@ const NewsReaderPanel = ({ item, onClose }) => {
         
         ::-webkit-scrollbar-thumb:hover {
           background: var(--border-secondary);
+        }
+        
+        /* Scroll específico para a barra lateral de contexto */
+        .context-sidebar-scroll {
+          scrollbar-width: thin;
+          scrollbar-color: var(--border-primary) var(--bg-secondary);
+          scroll-behavior: smooth;
+        }
+        
+        .context-sidebar-scroll::-webkit-scrollbar {
+          width: 8px;
+        }
+        
+        .context-sidebar-scroll::-webkit-scrollbar-track {
+          background: var(--bg-secondary);
+          border-radius: 4px;
+          margin: 4px 0;
+        }
+        
+        .context-sidebar-scroll::-webkit-scrollbar-thumb {
+          background: var(--border-primary);
+          border-radius: 4px;
+          border: 1px solid var(--bg-secondary);
+        }
+        
+        .context-sidebar-scroll::-webkit-scrollbar-thumb:hover {
+          background: var(--border-secondary);
+        }
+        
+        .context-sidebar-scroll::-webkit-scrollbar-corner {
+          background: var(--bg-secondary);
         }
       `}</style>
     </>

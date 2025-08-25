@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Database, ChevronDown, ChevronUp, ArrowRight } from 'lucide-react';
+import { Database, ChevronDown, ChevronUp } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 const ContextSidebar = ({ 
@@ -96,12 +96,7 @@ const ContextSidebar = ({
     }));
   };
 
-  // Função para transferir item
-  const handleTransferItem = (itemId, content) => {
-    if (onTransferItem) {
-      onTransferItem(itemId, content);
-    }
-  };
+
 
   // Pré-parse do core_quotes
 
@@ -397,28 +392,10 @@ const ContextSidebar = ({
                                           </button>
                                         )}
                                         
-                                        {/* Botão de transferência */}
-                                        <motion.button
-                                          onClick={(e) => {
-                                            e.stopPropagation();
-                                            handleTransferItem(itemId, phrase);
-                                          }}
-                                          className="absolute bottom-3 right-3 p-2 rounded-full border text-[#A0A0A0] opacity-0 group-hover:opacity-100 transition-all duration-300 hover:scale-110 z-10"
-                                          style={{
-                                            borderColor: 'var(--primary-green-transparent)',
-                                            backgroundColor: 'transparent'
-                                          }}
-                                          whileHover={{ scale: 1.1, backgroundColor: 'var(--primary-green)', color: 'white' }}
-                                          whileTap={{ scale: 0.95 }}
-                                          initial={{ scale: 0.8 }}
-                                          animate={{ scale: 1 }}
-                                          transition={{ duration: 0.2 }}
-                                        >
-                                          <ArrowRight size={16} />
-                                        </motion.button>
+
                                         
                                         {/* Conteúdo do card */}
-                                        <div className="pr-12">
+                                        <div className="pr-4">
                                           <div className="flex items-center justify-between gap-3 mb-1">
                                             <p className="text-[#E0E0E0] text-sm font-semibold leading-snug">{title}</p>
                                             {tag && (
